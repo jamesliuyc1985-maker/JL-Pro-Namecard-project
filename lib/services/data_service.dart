@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:uuid/uuid.dart';
 import '../models/contact.dart';
 import '../models/deal.dart';
@@ -12,7 +11,6 @@ import '../models/factory.dart';
 
 class DataService {
   static const _uuid = Uuid();
-  late FirebaseFirestore _db;
 
   List<Contact> _contactsCache = [];
   List<Deal> _dealsCache = [];
@@ -32,19 +30,12 @@ class DataService {
   TeamMember? getTeamMember(String id) {
     try { return _teamCache.firstWhere((m) => m.id == id); } catch (_) { return null; }
   }
-  Future<void> addTeamMember(TeamMember member) async {
-    _teamCache.add(member);
-    await _db.collection('team_members').doc(member.id).set(member.toJson());
-  }
+  Future<void> addTeamMember(TeamMember member) async { _teamCache.add(member); }
   Future<void> updateTeamMember(TeamMember member) async {
     final idx = _teamCache.indexWhere((m) => m.id == member.id);
     if (idx >= 0) _teamCache[idx] = member;
-    await _db.collection('team_members').doc(member.id).set(member.toJson());
   }
-  Future<void> deleteTeamMember(String id) async {
-    _teamCache.removeWhere((m) => m.id == id);
-    await _db.collection('team_members').doc(id).delete();
-  }
+  Future<void> deleteTeamMember(String id) async { _teamCache.removeWhere((m) => m.id == id); }
 
   // ========== Task CRUD ==========
   List<Task> getAllTasks() => List.from(_taskCache);
@@ -52,19 +43,12 @@ class DataService {
       _taskCache.where((t) => t.assigneeId == assigneeId).toList();
   List<Task> getTasksByDate(DateTime date) =>
       _taskCache.where((t) => t.dueDate.year == date.year && t.dueDate.month == date.month && t.dueDate.day == date.day).toList();
-  Future<void> addTask(Task task) async {
-    _taskCache.add(task);
-    await _db.collection('tasks').doc(task.id).set(task.toJson());
-  }
+  Future<void> addTask(Task task) async { _taskCache.add(task); }
   Future<void> updateTask(Task task) async {
     final idx = _taskCache.indexWhere((t) => t.id == task.id);
     if (idx >= 0) _taskCache[idx] = task;
-    await _db.collection('tasks').doc(task.id).set(task.toJson());
   }
-  Future<void> deleteTask(String id) async {
-    _taskCache.removeWhere((t) => t.id == id);
-    await _db.collection('tasks').doc(id).delete();
-  }
+  Future<void> deleteTask(String id) async { _taskCache.removeWhere((t) => t.id == id); }
 
   // ========== Contact Assignment CRUD ==========
   List<ContactAssignment> getAllAssignments() => List.from(_assignmentCache);
@@ -72,38 +56,24 @@ class DataService {
       _assignmentCache.where((a) => a.contactId == contactId).toList();
   List<ContactAssignment> getAssignmentsByMember(String memberId) =>
       _assignmentCache.where((a) => a.memberId == memberId).toList();
-  Future<void> addAssignment(ContactAssignment assignment) async {
-    _assignmentCache.add(assignment);
-    await _db.collection('assignments').doc(assignment.id).set(assignment.toJson());
-  }
+  Future<void> addAssignment(ContactAssignment assignment) async { _assignmentCache.add(assignment); }
   Future<void> updateAssignment(ContactAssignment assignment) async {
     final idx = _assignmentCache.indexWhere((a) => a.id == assignment.id);
     if (idx >= 0) _assignmentCache[idx] = assignment;
-    await _db.collection('assignments').doc(assignment.id).set(assignment.toJson());
   }
-  Future<void> deleteAssignment(String id) async {
-    _assignmentCache.removeWhere((a) => a.id == id);
-    await _db.collection('assignments').doc(id).delete();
-  }
+  Future<void> deleteAssignment(String id) async { _assignmentCache.removeWhere((a) => a.id == id); }
 
   // ========== Factory CRUD ==========
   List<ProductionFactory> getAllFactories() => List.from(_factoryCache);
   ProductionFactory? getFactory(String id) {
     try { return _factoryCache.firstWhere((f) => f.id == id); } catch (_) { return null; }
   }
-  Future<void> addFactory(ProductionFactory factory) async {
-    _factoryCache.add(factory);
-    await _db.collection('factories').doc(factory.id).set(factory.toJson());
-  }
+  Future<void> addFactory(ProductionFactory factory) async { _factoryCache.add(factory); }
   Future<void> updateFactory(ProductionFactory factory) async {
     final idx = _factoryCache.indexWhere((f) => f.id == factory.id);
     if (idx >= 0) _factoryCache[idx] = factory;
-    await _db.collection('factories').doc(factory.id).set(factory.toJson());
   }
-  Future<void> deleteFactory(String id) async {
-    _factoryCache.removeWhere((f) => f.id == id);
-    await _db.collection('factories').doc(id).delete();
-  }
+  Future<void> deleteFactory(String id) async { _factoryCache.removeWhere((f) => f.id == id); }
 
   // ========== ProductionOrder CRUD ==========
   List<ProductionOrder> getAllProductionOrders() => List.from(_productionCache);
@@ -118,19 +88,12 @@ class DataService {
       _productionCache.where((p) => p.status == status).toList();
   List<ProductionOrder> getActiveProductions() =>
       _productionCache.where((p) => ProductionStatus.activeStatuses.contains(p.status)).toList();
-  Future<void> addProductionOrder(ProductionOrder order) async {
-    _productionCache.add(order);
-    await _db.collection('production_orders').doc(order.id).set(order.toJson());
-  }
+  Future<void> addProductionOrder(ProductionOrder order) async { _productionCache.add(order); }
   Future<void> updateProductionOrder(ProductionOrder order) async {
     final idx = _productionCache.indexWhere((p) => p.id == order.id);
     if (idx >= 0) _productionCache[idx] = order;
-    await _db.collection('production_orders').doc(order.id).set(order.toJson());
   }
-  Future<void> deleteProductionOrder(String id) async {
-    _productionCache.removeWhere((p) => p.id == id);
-    await _db.collection('production_orders').doc(id).delete();
-  }
+  Future<void> deleteProductionOrder(String id) async { _productionCache.removeWhere((p) => p.id == id); }
 
   // ========== Completed Tasks History ==========
   List<Task> getCompletedTasks() =>
@@ -148,155 +111,15 @@ class DataService {
 
   // ========== Init ==========
   Future<void> init() async {
-    _db = FirebaseFirestore.instance;
-    await _refreshAllCaches();
+    _productsCache = _builtInProducts();
+    _factoryCache.addAll(_builtInFactories());
+    _teamCache.addAll(_builtInTeam());
+    _contactsCache = _builtInContacts();
+    _dealsCache = _builtInDeals();
   }
 
-  Future<void> _refreshAllCaches() async {
-    await Future.wait([
-      _refreshContacts(),
-      _refreshDeals(),
-      _refreshInteractions(),
-      _refreshRelations(),
-      _refreshProducts(),
-      _refreshOrders(),
-      _refreshTeamMembers(),
-      _refreshTasks(),
-      _refreshAssignments(),
-      _refreshFactories(),
-      _refreshProductionOrders(),
-      _refreshInventory(),
-    ]);
-  }
-
-  Future<void> _refreshContacts() async {
-    try {
-      final snap = await _db.collection('contacts').get();
-      _contactsCache = snap.docs.map((d) => _contactFromDb(d.data())).toList();
-      _contactsCache.sort((a, b) => b.lastContactedAt.compareTo(a.lastContactedAt));
-    } catch (_) {}
-  }
-
-  Future<void> _refreshDeals() async {
-    try {
-      final snap = await _db.collection('deals').get();
-      _dealsCache = snap.docs.map((d) => _dealFromDb(d.data())).toList();
-      _dealsCache.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    } catch (_) {}
-  }
-
-  Future<void> _refreshInteractions() async {
-    try {
-      final snap = await _db.collection('interactions').get();
-      _interactionsCache = snap.docs.map((d) => _interactionFromDb(d.data())).toList();
-      _interactionsCache.sort((a, b) => b.date.compareTo(a.date));
-    } catch (_) {}
-  }
-
-  Future<void> _refreshRelations() async {
-    try {
-      final snap = await _db.collection('relations').get();
-      _relationsCache = snap.docs.map((d) => _relationFromDb(d.data())).toList();
-    } catch (_) {}
-  }
-
-  Future<void> _refreshProducts() async {
-    try {
-      final snap = await _db.collection('products').get();
-      if (snap.docs.isNotEmpty) {
-        _productsCache = snap.docs.map((d) => Product.fromJson(d.data())).toList();
-      } else {
-        _productsCache = _builtInProducts();
-        // Save built-in products to Firestore
-        for (final p in _productsCache) {
-          await _db.collection('products').doc(p.id).set(p.toJson());
-        }
-      }
-    } catch (_) {
-      if (_productsCache.isEmpty) _productsCache = _builtInProducts();
-    }
-    if (_factoryCache.isEmpty) {
-      try {
-        final snap = await _db.collection('factories').get();
-        if (snap.docs.isNotEmpty) {
-          _factoryCache.addAll(snap.docs.map((d) {
-            final data = d.data();
-            return ProductionFactory(
-              id: data['id'] as String? ?? d.id,
-              name: data['name'] as String? ?? '',
-              nameJa: data['nameJa'] as String? ?? '',
-              address: data['address'] as String? ?? '',
-              representative: data['representative'] as String? ?? '',
-              description: data['description'] as String? ?? '',
-              certifications: List<String>.from(data['certifications'] ?? []),
-              capabilities: List<String>.from(data['capabilities'] ?? []),
-              phone: data['phone'] as String? ?? '',
-              email: data['email'] as String? ?? '',
-              isActive: data['isActive'] as bool? ?? true,
-            );
-          }));
-        } else {
-          _factoryCache.addAll(_builtInFactories());
-          for (final f in _factoryCache) {
-            await _db.collection('factories').doc(f.id).set(f.toJson());
-          }
-        }
-      } catch (_) {
-        if (_factoryCache.isEmpty) _factoryCache.addAll(_builtInFactories());
-      }
-    }
-  }
-
-  Future<void> _refreshOrders() async {
-    try {
-      final snap = await _db.collection('sales_orders').get();
-      _ordersCache = snap.docs.map((d) => SalesOrder.fromJson(d.data())).toList();
-      _ordersCache.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    } catch (_) {}
-  }
-
-  Future<void> _refreshTeamMembers() async {
-    try {
-      final snap = await _db.collection('team_members').get();
-      _teamCache.clear();
-      _teamCache.addAll(snap.docs.map((d) => TeamMember.fromJson(d.data())));
-    } catch (_) {}
-  }
-
-  Future<void> _refreshTasks() async {
-    try {
-      final snap = await _db.collection('tasks').get();
-      _taskCache.clear();
-      _taskCache.addAll(snap.docs.map((d) => Task.fromJson(d.data())));
-    } catch (_) {}
-  }
-
-  Future<void> _refreshAssignments() async {
-    try {
-      final snap = await _db.collection('assignments').get();
-      _assignmentCache.clear();
-      _assignmentCache.addAll(snap.docs.map((d) => ContactAssignment.fromJson(d.data())));
-    } catch (_) {}
-  }
-
-  Future<void> _refreshFactories() async {
-    // Handled in _refreshProducts
-  }
-
-  Future<void> _refreshProductionOrders() async {
-    try {
-      final snap = await _db.collection('production_orders').get();
-      _productionCache.clear();
-      _productionCache.addAll(snap.docs.map((d) => ProductionOrder.fromJson(d.data())));
-    } catch (_) {}
-  }
-
-  Future<void> _refreshInventory() async {
-    try {
-      final snap = await _db.collection('inventory').get();
-      _inventoryCache.clear();
-      _inventoryCache.addAll(snap.docs.map((d) => InventoryRecord.fromJson(d.data())));
-    } catch (_) {}
+  Future<void> syncFromCloud() async {
+    // No-op in local mode
   }
 
   // ========== Contact CRUD ==========
@@ -305,23 +128,12 @@ class DataService {
     try { return _contactsCache.firstWhere((c) => c.id == id); } catch (_) { return null; }
   }
   Future<void> saveContact(Contact contact) async {
-    await _db.collection('contacts').doc(contact.id).set(_contactToDb(contact));
     final idx = _contactsCache.indexWhere((c) => c.id == contact.id);
     if (idx >= 0) { _contactsCache[idx] = contact; } else { _contactsCache.add(contact); }
   }
   Future<void> deleteContact(String id) async {
-    await _db.collection('contacts').doc(id).delete();
     _contactsCache.removeWhere((c) => c.id == id);
-    // Clean up related data
-    final interactions = _interactionsCache.where((i) => i.contactId == id).toList();
-    for (final i in interactions) {
-      await _db.collection('interactions').doc(i.id).delete();
-    }
     _interactionsCache.removeWhere((i) => i.contactId == id);
-    final relations = _relationsCache.where((r) => r.fromContactId == id || r.toContactId == id).toList();
-    for (final r in relations) {
-      await _db.collection('relations').doc(r.id).delete();
-    }
     _relationsCache.removeWhere((r) => r.fromContactId == id || r.toContactId == id);
   }
 
@@ -330,42 +142,30 @@ class DataService {
   List<ContactRelation> getRelationsForContact(String contactId) =>
       _relationsCache.where((r) => r.fromContactId == contactId || r.toContactId == contactId).toList();
   Future<void> saveRelation(ContactRelation relation) async {
-    await _db.collection('relations').doc(relation.id).set(_relationToDb(relation));
     final idx = _relationsCache.indexWhere((r) => r.id == relation.id);
     if (idx >= 0) { _relationsCache[idx] = relation; } else { _relationsCache.add(relation); }
   }
-  Future<void> deleteRelation(String id) async {
-    await _db.collection('relations').doc(id).delete();
-    _relationsCache.removeWhere((r) => r.id == id);
-  }
+  Future<void> deleteRelation(String id) async { _relationsCache.removeWhere((r) => r.id == id); }
 
   // ========== Deal CRUD ==========
   List<Deal> getAllDeals() => List.from(_dealsCache);
   List<Deal> getDealsByStage(DealStage stage) => _dealsCache.where((d) => d.stage == stage).toList();
   List<Deal> getDealsByContact(String contactId) => _dealsCache.where((d) => d.contactId == contactId).toList();
   Future<void> saveDeal(Deal deal) async {
-    await _db.collection('deals').doc(deal.id).set(_dealToDb(deal));
     final idx = _dealsCache.indexWhere((d) => d.id == deal.id);
     if (idx >= 0) { _dealsCache[idx] = deal; } else { _dealsCache.add(deal); }
   }
-  Future<void> deleteDeal(String id) async {
-    await _db.collection('deals').doc(id).delete();
-    _dealsCache.removeWhere((d) => d.id == id);
-  }
+  Future<void> deleteDeal(String id) async { _dealsCache.removeWhere((d) => d.id == id); }
 
   // ========== Interaction CRUD ==========
   List<Interaction> getAllInteractions() => List.from(_interactionsCache);
   List<Interaction> getInteractionsByContact(String contactId) =>
       _interactionsCache.where((i) => i.contactId == contactId).toList();
   Future<void> saveInteraction(Interaction interaction) async {
-    await _db.collection('interactions').doc(interaction.id).set(_interactionToDb(interaction));
     final idx = _interactionsCache.indexWhere((i) => i.id == interaction.id);
     if (idx >= 0) { _interactionsCache[idx] = interaction; } else { _interactionsCache.add(interaction); }
   }
-  Future<void> deleteInteraction(String id) async {
-    await _db.collection('interactions').doc(id).delete();
-    _interactionsCache.removeWhere((i) => i.id == id);
-  }
+  Future<void> deleteInteraction(String id) async { _interactionsCache.removeWhere((i) => i.id == id); }
 
   // ========== Product CRUD ==========
   List<Product> getAllProducts() => List.from(_productsCache);
@@ -374,40 +174,26 @@ class DataService {
     try { return _productsCache.firstWhere((p) => p.id == id); } catch (_) { return null; }
   }
   Future<void> saveProduct(Product product) async {
-    await _db.collection('products').doc(product.id).set(product.toJson());
     final idx = _productsCache.indexWhere((p) => p.id == product.id);
     if (idx >= 0) { _productsCache[idx] = product; } else { _productsCache.add(product); }
   }
-  Future<void> deleteProduct(String id) async {
-    await _db.collection('products').doc(id).delete();
-    _productsCache.removeWhere((p) => p.id == id);
-  }
+  Future<void> deleteProduct(String id) async { _productsCache.removeWhere((p) => p.id == id); }
 
   // ========== Sales Order CRUD ==========
   List<SalesOrder> getAllOrders() => List.from(_ordersCache);
   List<SalesOrder> getOrdersByContact(String contactId) => _ordersCache.where((o) => o.contactId == contactId).toList();
   Future<void> saveOrder(SalesOrder order) async {
-    await _db.collection('sales_orders').doc(order.id).set(order.toJson());
     final idx = _ordersCache.indexWhere((o) => o.id == order.id);
     if (idx >= 0) { _ordersCache[idx] = order; } else { _ordersCache.add(order); }
   }
-  Future<void> deleteOrder(String id) async {
-    await _db.collection('sales_orders').doc(id).delete();
-    _ordersCache.removeWhere((o) => o.id == id);
-  }
+  Future<void> deleteOrder(String id) async { _ordersCache.removeWhere((o) => o.id == id); }
 
   // ========== Inventory CRUD ==========
   List<InventoryRecord> getAllInventory() => List.from(_inventoryCache);
   List<InventoryRecord> getInventoryByProduct(String productId) =>
       _inventoryCache.where((r) => r.productId == productId).toList();
-  Future<void> addInventoryRecord(InventoryRecord record) async {
-    _inventoryCache.add(record);
-    await _db.collection('inventory').doc(record.id).set(record.toJson());
-  }
-  Future<void> deleteInventoryRecord(String id) async {
-    _inventoryCache.removeWhere((r) => r.id == id);
-    await _db.collection('inventory').doc(id).delete();
-  }
+  Future<void> addInventoryRecord(InventoryRecord record) async { _inventoryCache.add(record); }
+  Future<void> deleteInventoryRecord(String id) async { _inventoryCache.removeWhere((r) => r.id == id); }
 
   List<InventoryStock> getInventoryStocks() {
     final stockMap = <String, InventoryStock>{};
@@ -463,37 +249,36 @@ class DataService {
   }
 
   String generateId() => _uuid.v4();
-  Future<void> syncFromCloud() async => await _refreshAllCaches();
 
   // ========== Built-in Product Catalog ==========
   List<Product> _builtInProducts() => [
     Product(id: 'prod-exo-001', code: 'NS-EX0-001', name: '\u5916\u6ccc\u4f53\u539f\u6db2 300\u5104', nameJa: '\u30a8\u30af\u30bd\u30bd\u30fc\u30e0\u539f\u6db2 300\u5104\u5358\u4f4d', category: 'exosome',
-      description: '\u9ad8\u7d14\u5ea6\u5916\u6ccc\u4f53\u539f\u6db2\uff0c\u542b300\u5104\u5358\u4f4d\u5916\u6ccc\u4f53\u7c92\u5b50\u3002\u9069\u7528\u4e8e\u808c\u819a\u518d\u751f\u3001\u6297\u8001\u5316\u6cbb\u7642\u3002\u63a1\u7528\u5148\u9032\u7684\u8d85\u96e2\u5fc3\u5206\u96e2\u6280\u8853\uff0c\u78ba\u4fdd\u9ad8\u7d14\u5ea6\u548c\u9ad8\u6d3b\u6027\u3002',
+      description: '\u9ad8\u7d14\u5ea6\u5916\u6ccc\u4f53\u539f\u6db2\uff0c\u542b300\u5104\u5358\u4f4d\u5916\u6ccc\u4f53\u7c92\u5b50\u3002\u9069\u7528\u4e8e\u808c\u819a\u518d\u751f\u3001\u6297\u8001\u5316\u6cbb\u7597\u3002',
       specification: '300\u5104\u5358\u4f4d/\u74f6', unitsPerBox: 5, agentPrice: 30000, clinicPrice: 40000, retailPrice: 100000,
       agentTotalPrice: 150000, clinicTotalPrice: 200000, retailTotalPrice: 500000,
       storageMethod: '2-8\u00b0C \u51b7\u85cf\u4fdd\u5b58', shelfLife: '2\u5e74', usage: '\u9759\u8108\u6ce8\u5c04/\u70b9\u6ef4/\u5c40\u90e8\u6ce8\u5c04', notes: '\u4ee3\u7406\u6298\u625830%\u3001\u8bca\u6240\u6298\u625840%'),
     Product(id: 'prod-exo-002', code: 'NS-EX0-002', name: '\u5916\u6ccc\u4f53\u539f\u6db2 500\u5104', nameJa: '\u30a8\u30af\u30bd\u30bd\u30fc\u30e0\u539f\u6db2 500\u5104\u5358\u4f4d', category: 'exosome',
-      description: '\u9ad8\u6fc3\u5ea6\u5916\u6ccc\u4f53\u539f\u6db2\uff0c\u542b500\u5104\u5358\u4f4d\u5916\u6ccc\u4f53\u7c92\u5b50\u3002\u66f4\u9ad8\u6d53\u5ea6\u914d\u65b9\uff0c\u9069\u7528\u4e8e\u6df1\u5c64\u808c\u819a\u4fee\u5fa9\u548c\u518d\u751f\u91ab\u7642\u3002',
+      description: '\u9ad8\u6fc3\u5ea6\u5916\u6ccc\u4f53\u539f\u6db2\uff0c\u542b500\u5104\u5358\u4f4d\u5916\u6ccc\u4f53\u7c92\u5b50\u3002',
       specification: '500\u5104\u5358\u4f4d/\u74f6', unitsPerBox: 5, agentPrice: 45000, clinicPrice: 60000, retailPrice: 150000,
       agentTotalPrice: 225000, clinicTotalPrice: 300000, retailTotalPrice: 750000,
       storageMethod: '2-8\u00b0C \u51b7\u85cf\u4fdd\u5b58', shelfLife: '2\u5e74', usage: '\u9759\u8108\u6ce8\u5c04/\u70b9\u6ef4/\u5c40\u90e8\u6ce8\u5c04', notes: '\u4ee3\u7406\u6298\u625830%\u3001\u8bca\u6240\u6298\u625840%'),
     Product(id: 'prod-exo-003', code: 'NS-EX0-003', name: '\u5916\u6ccc\u4f53\u539f\u6db2 1000\u5104', nameJa: '\u30a8\u30af\u30bd\u30bd\u30fc\u30e0\u539f\u6db2 1000\u5104\u5358\u4f4d', category: 'exosome',
-      description: '\u8d85\u9ad8\u6fc3\u5ea6\u5916\u6ccc\u4f53\u539f\u6db2\uff0c\u542b1000\u5104\u5358\u4f4d\u5916\u6ccc\u4f53\u7c92\u5b50\u3002\u9802\u7d1a\u914d\u65b9\uff0c\u5c08\u696d\u91ab\u7642\u6a5f\u69cb\u9996\u9078\u3002',
+      description: '\u8d85\u9ad8\u6fc3\u5ea6\u5916\u6ccc\u4f53\u539f\u6db2\uff0c\u542b1000\u5104\u5358\u4f4d\u5916\u6ccc\u4f53\u7c92\u5b50\u3002\u9802\u7d1a\u914d\u65b9\u3002',
       specification: '1000\u5104\u5358\u4f4d/\u74f6', unitsPerBox: 5, agentPrice: 105000, clinicPrice: 140000, retailPrice: 350000,
       agentTotalPrice: 525000, clinicTotalPrice: 700000, retailTotalPrice: 1750000,
       storageMethod: '2-8\u00b0C \u51b7\u85cf\u4fdd\u5b58', shelfLife: '2\u5e74', usage: '\u9759\u8108\u6ce8\u5c04/\u70b9\u6ef4/\u5c40\u90e8\u6ce8\u5c04', notes: '\u4ee3\u7406\u6298\u625830%\u3001\u8bca\u6240\u6298\u625840%'),
     Product(id: 'prod-nad-001', code: 'NS-NAD-001', name: 'NAD+ \u6ce8\u5c04\u6db2 250mg', nameJa: 'NAD+ \u6ce8\u5c04\u6db2 250mg', category: 'nad',
-      description: '\u9ad8\u7d14\u5ea6NAD+\u6ce8\u5c04\u6db2\uff0c\u6bcf\u74f6\u542b250mg NAD+\u3002\u4fc3\u9032\u7d30\u80de\u80fd\u91cf\u4ee3\u8b1d\uff0c\u6297\u8870\u8001\u6838\u5fc3\u6210\u5206\u3002',
+      description: '\u9ad8\u7d14\u5ea6NAD+\u6ce8\u5c04\u6db2\uff0c\u6bcf\u74f6\u542b250mg NAD+\u3002\u4fc3\u9032\u7d30\u80de\u80fd\u91cf\u4ee3\u8b1d\u3002',
       specification: '250mg/\u74f6', unitsPerBox: 5, agentPrice: 12000, clinicPrice: 16000, retailPrice: 40000,
       agentTotalPrice: 60000, clinicTotalPrice: 80000, retailTotalPrice: 200000,
       storageMethod: '2-8\u00b0C \u51b7\u85cf\u4fdd\u5b58', shelfLife: '2\u5e74', usage: '\u9759\u8108\u6ce8\u5c04/\u70b9\u6ef4', notes: '\u4ee3\u7406\u6298\u625830%\u3001\u8bca\u6240\u6298\u625840%'),
     Product(id: 'prod-nmn-001', code: 'NS-NMN-001', name: 'NMN \u70b9\u9f3b/\u5438\u5165', nameJa: 'NMN \u70b9\u9f3b\u30fb\u5438\u5165', category: 'nmn',
-      description: 'NMN\u70b9\u9f3b/\u5438\u5165\u5236\u5242\u3002\u901a\u904e\u9f3b\u8154/\u5438\u5165\u65b9\u5f0f\u76f4\u63a5\u5438\u6536\uff0c\u751f\u7269\u5229\u7528\u5ea6\u9ad8\u3002\u9069\u7528\u4e8e\u65e5\u5e38\u4fdd\u5065\u548c\u6297\u8870\u8001\u3002',
+      description: 'NMN\u70b9\u9f3b/\u5438\u5165\u5236\u5242\u3002\u751f\u7269\u5229\u7528\u5ea6\u9ad8\u3002',
       specification: '\u70b9\u9f3b/\u5438\u5165\u578b', unitsPerBox: 1, agentPrice: 22000, clinicPrice: 32000, retailPrice: 60000,
       agentTotalPrice: 22000, clinicTotalPrice: 32000, retailTotalPrice: 60000,
       storageMethod: '\u5e38\u6e29\u4fdd\u5b58', shelfLife: '2\u5e74', usage: '\u70b9\u9f3b/\u5438\u5165\u4f7f\u7528', notes: 'NMN 700mg\u914d\u5408'),
     Product(id: 'prod-nmn-002', code: 'NS-NMN-002', name: 'NMN \u80f6\u56ca', nameJa: 'NMN \u30ab\u30d7\u30bb\u30eb', category: 'nmn',
-      description: 'NMN\u53e3\u670d\u80f6\u56ca\u3002\u6bcf\u7c92\u542b\u9ad8\u7d14\u5ea6NMN\uff0c\u65b9\u4fbf\u65e5\u5e38\u670d\u7528\u3002\u652f\u6301NAD+\u6c34\u5e73\u63d0\u5347\uff0c\u4fc3\u9032\u7d30\u80de\u4fee\u5fa9\u548c\u80fd\u91cf\u4ee3\u8b1d\u3002',
+      description: 'NMN\u53e3\u670d\u80f6\u56ca\u3002\u6bcf\u7c92\u542b\u9ad8\u7d14\u5ea6NMN\u3002',
       specification: '\u80f6\u56ca\u578b', unitsPerBox: 1, agentPrice: 9000, clinicPrice: 12000, retailPrice: 30000,
       agentTotalPrice: 9000, clinicTotalPrice: 12000, retailTotalPrice: 30000,
       storageMethod: '\u5e38\u6e29\u4fdd\u5b58', shelfLife: '2\u5e74', usage: '\u6bcf\u65e51-2\u7c92\uff0c\u53e3\u670d'),
@@ -517,70 +302,111 @@ class DataService {
     ),
   ];
 
-  // ========== DB <-> Model Converters ==========
-  Contact _contactFromDb(Map<String, dynamic> db) => Contact(
-    id: db['id'] as String? ?? '', name: db['name'] as String? ?? '', nameReading: db['name_reading'] as String? ?? '',
-    company: db['company'] as String? ?? '', position: db['position'] as String? ?? '',
-    phone: db['phone'] as String? ?? '', email: db['email'] as String? ?? '', address: db['address'] as String? ?? '',
-    industry: Industry.values.firstWhere((e) => e.name == db['industry'], orElse: () => Industry.other),
-    strength: RelationshipStrength.values.firstWhere((e) => e.name == db['strength'], orElse: () => RelationshipStrength.cool),
-    myRelation: MyRelationType.values.firstWhere((e) => e.name == db['my_relation'], orElse: () => MyRelationType.other),
-    notes: db['notes'] as String? ?? '', referredBy: db['referred_by'] as String? ?? '',
-    createdAt: DateTime.tryParse(db['created_at'] ?? '') ?? DateTime.now(),
-    lastContactedAt: DateTime.tryParse(db['last_contacted_at'] ?? '') ?? DateTime.now(),
-    tags: (db['tags'] is List) ? List<String>.from(db['tags']) : [], avatarUrl: db['avatar_url'] as String?,
-    businessCategory: db['business_category'] as String?,
-  );
+  // ========== Built-in Team ==========
+  List<TeamMember> _builtInTeam() => [
+    TeamMember(id: 'member-001', name: 'James Liu', role: 'admin', email: 'james@dealnavigator.com'),
+    TeamMember(id: 'member-002', name: '\u7530\u4e2d\u592a\u90ce', role: 'manager', email: 'tanaka@dealnavigator.com'),
+    TeamMember(id: 'member-003', name: '\u738b\u5c0f\u660e', role: 'member', email: 'xiaoming@dealnavigator.com'),
+  ];
 
-  Map<String, dynamic> _contactToDb(Contact c) => {
-    'id': c.id, 'name': c.name, 'name_reading': c.nameReading, 'company': c.company, 'position': c.position,
-    'phone': c.phone, 'email': c.email, 'address': c.address, 'industry': c.industry.name, 'strength': c.strength.name,
-    'my_relation': c.myRelation.name, 'notes': c.notes, 'referred_by': c.referredBy,
-    'created_at': c.createdAt.toIso8601String(), 'last_contacted_at': c.lastContactedAt.toIso8601String(),
-    'tags': c.tags, 'avatar_url': c.avatarUrl, 'business_category': c.businessCategory,
-  };
+  // ========== Built-in Contacts ==========
+  List<Contact> _builtInContacts() {
+    final now = DateTime.now();
+    return [
+      Contact(id: 'c-001', name: '\u5f20\u4f1f', company: '\u4e0a\u6d77\u6cf0\u5eb7\u533b\u7f8e', position: '\u603b\u7ecf\u7406',
+        phone: '+86-138-0000-1001', email: 'zhangwei@taikang.com', address: '\u4e0a\u6d77\u5e02\u9759\u5b89\u533a',
+        industry: Industry.healthcare, strength: RelationshipStrength.hot, myRelation: MyRelationType.agent,
+        notes: '\u534e\u4e1c\u533a\u603b\u4ee3\u7406\uff0c\u6708\u91c7\u8d2d\u91cf\u7a33\u5b9a', tags: ['VIP', '\u4ee3\u7406'],
+        createdAt: now.subtract(const Duration(days: 400)), lastContactedAt: now.subtract(const Duration(days: 1)),
+        businessCategory: 'agent'),
+      Contact(id: 'c-002', name: 'Dr. \u7530\u4e2d\u7f8e\u54b2', nameReading: '\u305f\u306a\u304b \u307f\u3055\u304d', company: '\u516d\u672c\u6728\u30b9\u30ad\u30f3\u30af\u30ea\u30cb\u30c3\u30af', position: '\u9662\u957f',
+        phone: '+81-3-5555-0001', email: 'misaki@roppongi-skin.jp', address: '\u6771\u4eac\u90fd\u6e2f\u533a\u516d\u672c\u67283-1-1',
+        industry: Industry.healthcare, strength: RelationshipStrength.hot, myRelation: MyRelationType.clinic,
+        notes: '\u6708\u91c7\u8d2d\u5916\u6ccc\u4f53\u6ce8\u5c04\u6db220\u652f', tags: ['\u8bca\u6240', '\u4e1c\u4eac', 'VIP'],
+        createdAt: now.subtract(const Duration(days: 380)), lastContactedAt: now.subtract(const Duration(hours: 6)),
+        businessCategory: 'clinic'),
+      Contact(id: 'c-003', name: '\u674e\u660e', company: '\u6df1\u5733\u5065\u5eb7\u4f18\u9009', position: '\u91c7\u8d2d\u603b\u76d1',
+        phone: '+86-135-0000-2002', email: 'liming@healthbest.cn', address: '\u6df1\u5733\u5e02\u5357\u5c71\u533a',
+        industry: Industry.trading, strength: RelationshipStrength.warm, myRelation: MyRelationType.retailer,
+        notes: '\u8de8\u5883\u7535\u5546\u6e20\u9053\uff0cNMN\u4ea7\u54c1\u4e3a\u4e3b', tags: ['\u96f6\u552e', '\u7535\u5546'],
+        createdAt: now.subtract(const Duration(days: 340)), lastContactedAt: now.subtract(const Duration(days: 3)),
+        businessCategory: 'retail'),
+      Contact(id: 'c-004', name: '\u4f50\u85e4\u5065\u4e00', nameReading: '\u3055\u3068\u3046 \u3051\u3093\u3044\u3061', company: '\u4e1c\u4eac\u7f8e\u5bb9\u534f\u4f1a', position: '\u7406\u4e8b',
+        phone: '+81-3-6666-0001', email: 'sato.k@beauty-assoc.jp', address: '\u6771\u4eac\u90fd\u6e0b\u8c37\u533a',
+        industry: Industry.consulting, strength: RelationshipStrength.warm, myRelation: MyRelationType.advisor,
+        notes: '\u884c\u4e1a\u8d44\u6e90\u4ecb\u7ecd\uff0c\u5173\u952e\u4eba\u8109\u8282\u70b9', tags: ['\u987e\u95ee', '\u4e1c\u4eac'],
+        createdAt: now.subtract(const Duration(days: 310)), lastContactedAt: now.subtract(const Duration(days: 22))),
+      Contact(id: 'c-005', name: '\u738b\u82b3', company: '\u676d\u5dde\u60a6\u989c\u533b\u7f8e', position: '\u8fd0\u8425\u603b\u76d1',
+        phone: '+86-139-0000-3003', email: 'wangfang@yueyan.com', address: '\u676d\u5dde\u5e02\u897f\u6e56\u533a',
+        industry: Industry.healthcare, strength: RelationshipStrength.hot, myRelation: MyRelationType.clinic,
+        notes: '3\u5bb6\u8fde\u9501\u8bca\u6240\uff0c\u6708\u9500\u7a33\u5b9a', tags: ['\u8bca\u6240', '\u676d\u5dde', 'VIP'],
+        createdAt: now.subtract(const Duration(days: 270)), lastContactedAt: now.subtract(const Duration(days: 2)),
+        businessCategory: 'clinic'),
+      Contact(id: 'c-006', name: 'Mike Chen', company: 'Pacific Health Group', position: 'VP Business Dev',
+        phone: '+1-415-555-0088', email: 'mchen@pacifichealth.com', address: 'San Francisco, CA',
+        industry: Industry.trading, strength: RelationshipStrength.cool, myRelation: MyRelationType.agent,
+        notes: '\u5317\u7f8e\u5e02\u573a\u6f5c\u5728\u4ee3\u7406', tags: ['\u5317\u7f8e', '\u5f00\u53d1\u4e2d'],
+        createdAt: now.subtract(const Duration(days: 175)), lastContactedAt: now.subtract(const Duration(days: 12)),
+        businessCategory: 'agent'),
+      Contact(id: 'c-007', name: '\u5c71\u672c\u771f\u7531\u7f8e', nameReading: '\u3084\u307e\u3082\u3068 \u307e\u3086\u307f', company: '\u9280\u5ea7\u30d3\u30e5\u30fc\u30c6\u30a3\u30fc\u30e9\u30dc', position: '\u30aa\u30fc\u30ca\u30fc',
+        phone: '+81-3-7777-0001', email: 'yamamoto@ginza-beauty.jp', address: '\u6771\u4eac\u90fd\u4e2d\u592e\u533a\u9280\u5ea75-1-1',
+        industry: Industry.healthcare, strength: RelationshipStrength.warm, myRelation: MyRelationType.clinic,
+        notes: '\u9ad8\u7aef\u7f8e\u5bb9\u9662\uff0c\u5bf9\u5916\u6ccc\u4f53\u9762\u819c\u611f\u5174\u8da3', tags: ['\u8bca\u6240', '\u94f6\u5ea7'],
+        createdAt: now.subtract(const Duration(days: 160)), lastContactedAt: now.subtract(const Duration(days: 6)),
+        businessCategory: 'clinic'),
+      Contact(id: 'c-008', name: '\u8d75\u5927\u529b', company: '\u6210\u90fd\u5eb7\u590d\u5802', position: '\u5408\u4f19\u4eba',
+        phone: '+86-136-0000-4004', email: 'zhaodl@kangfutang.cn', address: '\u6210\u90fd\u5e02\u9526\u6c5f\u533a',
+        industry: Industry.healthcare, strength: RelationshipStrength.cool, myRelation: MyRelationType.retailer,
+        notes: '\u7ebf\u4e0b\u96f6\u552e+\u793e\u7fa4\u56e2\u8d2d', tags: ['\u96f6\u552e', '\u6210\u90fd'],
+        createdAt: now.subtract(const Duration(days: 130)), lastContactedAt: now.subtract(const Duration(days: 17)),
+        businessCategory: 'retail'),
+      Contact(id: 'c-009', name: '\u91d1\u76f8\u54f2', nameReading: '\uae40\uc0c1\ucca0', company: 'Seoul Derm Clinic', position: 'Director',
+        phone: '+82-2-555-0099', email: 'kim@seoulderm.kr', address: '\uc11c\uc6b8 \uac15\ub0a8\uad6c',
+        industry: Industry.healthcare, strength: RelationshipStrength.cool, myRelation: MyRelationType.clinic,
+        notes: '\u97e9\u56fd\u76ae\u80a4\u79d1\u8bca\u6240\uff0c\u8003\u5bdf\u4e2d', tags: ['\u8bca\u6240', '\u97e9\u56fd'],
+        createdAt: now.subtract(const Duration(days: 95)), lastContactedAt: now.subtract(const Duration(days: 28)),
+        businessCategory: 'clinic'),
+      Contact(id: 'c-010', name: '\u6797\u5fd7\u8fdc', company: '\u53f0\u5317\u751f\u6280\u80a1\u4efd\u6709\u9650\u516c\u53f8', position: 'CEO',
+        phone: '+886-2-8888-0001', email: 'lin@taipei-biotech.tw', address: '\u53f0\u5317\u5e02\u4fe1\u4e49\u533a',
+        industry: Industry.healthcare, strength: RelationshipStrength.warm, myRelation: MyRelationType.agent,
+        notes: '\u53f0\u6e7e\u533aNMN\u4ee3\u7406\u610f\u5411', tags: ['\u4ee3\u7406', '\u53f0\u6e7e'],
+        createdAt: now.subtract(const Duration(days: 225)), lastContactedAt: now.subtract(const Duration(days: 4)),
+        businessCategory: 'agent'),
+    ];
+  }
 
-  Deal _dealFromDb(Map<String, dynamic> db) => Deal(
-    id: db['id'] as String? ?? '', title: db['title'] as String? ?? '', description: db['description'] as String? ?? '',
-    contactId: db['contact_id'] as String? ?? '', contactName: db['contact_name'] as String? ?? '',
-    stage: DealStage.values.firstWhere((e) => e.name == db['stage'], orElse: () => DealStage.lead),
-    amount: (db['amount'] as num?)?.toDouble() ?? 0, currency: db['currency'] as String? ?? 'JPY',
-    createdAt: DateTime.tryParse(db['created_at'] ?? '') ?? DateTime.now(),
-    expectedCloseDate: DateTime.tryParse(db['expected_close_date'] ?? '') ?? DateTime.now(),
-    updatedAt: DateTime.tryParse(db['updated_at'] ?? '') ?? DateTime.now(),
-    probability: (db['probability'] as num?)?.toDouble() ?? 10, notes: db['notes'] as String? ?? '',
-    tags: (db['tags'] is List) ? List<String>.from(db['tags']) : [],
-  );
-
-  Map<String, dynamic> _dealToDb(Deal d) => {
-    'id': d.id, 'title': d.title, 'description': d.description, 'contact_id': d.contactId, 'contact_name': d.contactName,
-    'stage': d.stage.name, 'amount': d.amount, 'currency': d.currency,
-    'created_at': d.createdAt.toIso8601String(), 'expected_close_date': d.expectedCloseDate.toIso8601String(),
-    'updated_at': d.updatedAt.toIso8601String(), 'probability': d.probability, 'notes': d.notes, 'tags': d.tags,
-  };
-
-  Interaction _interactionFromDb(Map<String, dynamic> db) => Interaction(
-    id: db['id'] as String? ?? '', contactId: db['contact_id'] as String? ?? '', contactName: db['contact_name'] as String? ?? '',
-    type: InteractionType.values.firstWhere((e) => e.name == db['type'], orElse: () => InteractionType.other),
-    title: db['title'] as String? ?? '', notes: db['notes'] as String? ?? '',
-    date: DateTime.tryParse(db['date'] ?? '') ?? DateTime.now(), dealId: db['deal_id'] as String?,
-  );
-
-  Map<String, dynamic> _interactionToDb(Interaction i) => {
-    'id': i.id, 'contact_id': i.contactId, 'contact_name': i.contactName, 'type': i.type.name,
-    'title': i.title, 'notes': i.notes, 'date': i.date.toIso8601String(), 'deal_id': i.dealId,
-  };
-
-  ContactRelation _relationFromDb(Map<String, dynamic> db) => ContactRelation(
-    id: db['id'] as String? ?? '', fromContactId: db['from_contact_id'] as String? ?? '',
-    toContactId: db['to_contact_id'] as String? ?? '', fromName: db['from_name'] as String? ?? '',
-    toName: db['to_name'] as String? ?? '', relationType: db['relation_type'] as String? ?? '',
-    description: db['description'] as String? ?? '', createdAt: DateTime.tryParse(db['created_at'] ?? '') ?? DateTime.now(),
-  );
-
-  Map<String, dynamic> _relationToDb(ContactRelation r) => {
-    'id': r.id, 'from_contact_id': r.fromContactId, 'to_contact_id': r.toContactId,
-    'from_name': r.fromName, 'to_name': r.toName, 'relation_type': r.relationType,
-    'description': r.description, 'created_at': r.createdAt.toIso8601String(),
-  };
+  // ========== Built-in Deals ==========
+  List<Deal> _builtInDeals() {
+    final now = DateTime.now();
+    return [
+      Deal(id: 'd-001', title: '\u4e0a\u6d77\u6cf0\u5eb7 \u5916\u6ccc\u4f53300\u4ebf \u4ee3\u7406\u6279\u53d1', description: '\u534e\u4e1c\u533a\u9996\u6279500\u74f6\u8bd5\u9500',
+        contactId: 'c-001', contactName: '\u5f20\u4f1f', stage: DealStage.negotiation, amount: 7500000, currency: 'JPY',
+        createdAt: now.subtract(const Duration(days: 72)), expectedCloseDate: now.add(const Duration(days: 33)),
+        updatedAt: now.subtract(const Duration(days: 1)), probability: 70, tags: ['\u4ee3\u7406', '\u534e\u4e1c']),
+      Deal(id: 'd-002', title: '\u516d\u672c\u6728\u8bca\u6240 \u6ce8\u5c04\u6db2\u6708\u5ea6\u8ba2\u5355', description: '\u6708\u5ea620\u652f\u5916\u6ccc\u4f53\u6ce8\u5c04\u6db2',
+        contactId: 'c-002', contactName: 'Dr. \u7530\u4e2d\u7f8e\u54b2', stage: DealStage.ordered, amount: 2800000, currency: 'JPY',
+        createdAt: now.subtract(const Duration(days: 88)), expectedCloseDate: now.add(const Duration(days: 17)),
+        updatedAt: now.subtract(const Duration(hours: 6)), probability: 95, tags: ['\u8bca\u6240', '\u6708\u5ea6']),
+      Deal(id: 'd-003', title: '\u6df1\u5733\u5065\u5eb7\u4f18\u9009 NMN\u8de8\u5883\u7535\u5546', description: 'NMN\u80f6\u56ca\u9996\u6279200\u74f6',
+        contactId: 'c-003', contactName: '\u674e\u660e', stage: DealStage.proposal, amount: 1800000, currency: 'JPY',
+        createdAt: now.subtract(const Duration(days: 32)), expectedCloseDate: now.add(const Duration(days: 49)),
+        updatedAt: now.subtract(const Duration(days: 3)), probability: 40, tags: ['\u96f6\u552e', '\u7535\u5546']),
+      Deal(id: 'd-004', title: '\u60a6\u989c\u533b\u7f8e \u5916\u6ccc\u4f53\u9762\u819c+\u6ce8\u5c04\u6db2', description: '3\u5bb6\u8fde\u9501\u8bca\u6240\u6708\u5ea6\u91c7\u8d2d',
+        contactId: 'c-005', contactName: '\u738b\u82b3', stage: DealStage.ordered, amount: 3000000, currency: 'JPY',
+        createdAt: now.subtract(const Duration(days: 114)), expectedCloseDate: now.add(const Duration(days: 9)),
+        updatedAt: now.subtract(const Duration(days: 2)), probability: 90, tags: ['\u8bca\u6240', '\u8fde\u9501']),
+      Deal(id: 'd-005', title: 'Pacific Health \u5317\u7f8e\u72ec\u5bb6\u4ee3\u7406', description: '\u5317\u7f8e\u5e02\u573a\u72ec\u5bb6\u4ee3\u7406\u6743\u8c08\u5224',
+        contactId: 'c-006', contactName: 'Mike Chen', stage: DealStage.contacted, amount: 50000000, currency: 'JPY',
+        createdAt: now.subtract(const Duration(days: 22)), expectedCloseDate: now.add(const Duration(days: 139)),
+        updatedAt: now.subtract(const Duration(days: 12)), probability: 15, tags: ['\u5317\u7f8e', '\u72ec\u5bb6']),
+      Deal(id: 'd-006', title: '\u94f6\u5ea7\u7f8e\u5bb9\u9662 \u9762\u819c\u8bd5\u7528\u91c7\u8d2d', description: '\u9ad8\u7aef\u5916\u6ccc\u4f53\u9762\u819c\u8bd5\u7528\u88c5',
+        contactId: 'c-007', contactName: '\u5c71\u672c\u771f\u7531\u7f8e', stage: DealStage.proposal, amount: 400000, currency: 'JPY',
+        createdAt: now.subtract(const Duration(days: 17)), expectedCloseDate: now.add(const Duration(days: 18)),
+        updatedAt: now.subtract(const Duration(days: 6)), probability: 55, tags: ['\u8bca\u6240', '\u9762\u819c']),
+      Deal(id: 'd-007', title: '\u53f0\u5317\u751f\u6280 NMN Premium \u53f0\u6e7e\u4ee3\u7406', description: '\u53f0\u6e7e\u533aNMN\u5168\u7ebf\u4ea7\u54c1\u72ec\u5bb6\u4ee3\u7406',
+        contactId: 'c-010', contactName: '\u6797\u5fd7\u8fdc', stage: DealStage.negotiation, amount: 12000000, currency: 'JPY',
+        createdAt: now.subtract(const Duration(days: 58)), expectedCloseDate: now.add(const Duration(days: 64)),
+        updatedAt: now.subtract(const Duration(days: 4)), probability: 50, tags: ['\u4ee3\u7406', '\u53f0\u6e7e']),
+    ];
+  }
 }

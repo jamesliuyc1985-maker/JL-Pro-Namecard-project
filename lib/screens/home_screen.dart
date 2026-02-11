@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/notification_service.dart';
-import '../services/auth_service.dart';
 import '../utils/theme.dart';
 import '../utils/formatters.dart';
 import 'dashboard_screen.dart';
@@ -13,7 +12,6 @@ import 'production_screen.dart';
 import 'calendar_task_screen.dart';
 import 'team_screen.dart';
 import 'sales_stats_screen.dart';
-import 'auth_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -94,22 +92,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ]),
             ),
           ),
-          // Logout button
-          GestureDetector(
-            onTap: () async {
-              await AuthService().logout();
-              if (context.mounted) {
-                Navigator.pushAndRemoveUntil(context,
-                  MaterialPageRoute(builder: (_) => AuthScreen(onAuthenticated: () {
-                    Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const HomeScreen()), (_) => false);
-                  })), (_) => false);
-              }
-            },
-            child: Padding(
-              padding: const EdgeInsets.all(6),
-              child: Icon(Icons.logout, color: AppTheme.textSecondary.withValues(alpha: 0.5), size: 18),
-            ),
-          ),
+
         ]);
       }),
     );
