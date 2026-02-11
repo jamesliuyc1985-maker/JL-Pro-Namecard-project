@@ -4,6 +4,8 @@ import '../models/deal.dart';
 import '../models/interaction.dart';
 import '../models/product.dart';
 import '../models/inventory.dart';
+import '../models/team.dart';
+import '../models/task.dart';
 import '../services/data_service.dart';
 
 class CrmProvider extends ChangeNotifier {
@@ -15,6 +17,8 @@ class CrmProvider extends ChangeNotifier {
   List<Product> _products = [];
   List<SalesOrder> _orders = [];
   List<InventoryRecord> _inventoryRecords = [];
+  List<TeamMember> _teamMembers = [];
+  List<Task> _tasks = [];
   Industry? _selectedIndustry;
   String _searchQuery = '';
   bool _isLoading = false;
@@ -46,6 +50,8 @@ class CrmProvider extends ChangeNotifier {
   List<SalesOrder> get orders => _orders;
   List<InventoryRecord> get inventoryRecords => _inventoryRecords;
   List<InventoryStock> get inventoryStocks => _dataService.getInventoryStocks();
+  List<TeamMember> get teamMembers => _teamMembers;
+  List<Task> get tasks => _tasks;
   Industry? get selectedIndustry => _selectedIndustry;
   String get searchQuery => _searchQuery;
   bool get isLoading => _isLoading;
@@ -62,6 +68,8 @@ class CrmProvider extends ChangeNotifier {
       _products = _dataService.getAllProducts();
       _orders = _dataService.getAllOrders();
       _inventoryRecords = _dataService.getAllInventory();
+      _teamMembers = _dataService.getAllTeamMembers();
+      _tasks = _dataService.getAllTasks();
       _syncStatus = null;
     } catch (e) {
       _syncStatus = 'Loading failed: $e';
@@ -76,13 +84,7 @@ class CrmProvider extends ChangeNotifier {
     notifyListeners();
     try {
       await _dataService.syncFromCloud();
-      _contacts = _dataService.getAllContacts();
-      _deals = _dataService.getAllDeals();
-      _interactions = _dataService.getAllInteractions();
-      _relations = _dataService.getAllRelations();
-      _products = _dataService.getAllProducts();
-      _orders = _dataService.getAllOrders();
-      _inventoryRecords = _dataService.getAllInventory();
+      await loadAll();
       _syncStatus = '同步成功';
     } catch (e) {
       _syncStatus = '同步失败: $e';
@@ -104,61 +106,29 @@ class CrmProvider extends ChangeNotifier {
   Map<String, dynamic> get stats => _dataService.getStats();
 
   // Contact
-  Future<void> addContact(Contact contact) async {
-    await _dataService.saveContact(contact);
-    await loadAll();
-  }
-
-  Future<void> updateContact(Contact contact) async {
-    await _dataService.saveContact(contact);
-    await loadAll();
-  }
-
-  Future<void> deleteContact(String id) async {
-    await _dataService.deleteContact(id);
-    await loadAll();
-  }
-
+  Future<void> addContact(Contact contact) async { await _dataService.saveContact(contact); await loadAll(); }
+  Future<void> updateContact(Contact contact) async { await _dataService.saveContact(contact); await loadAll(); }
+  Future<void> deleteContact(String id) async { await _dataService.deleteContact(id); await loadAll(); }
   Contact? getContact(String id) => _dataService.getContact(id);
 
   // Relations
   List<ContactRelation> getRelationsForContact(String contactId) =>
       _relations.where((r) => r.fromContactId == contactId || r.toContactId == contactId).toList();
-
-  Future<void> addRelation(ContactRelation relation) async {
-    await _dataService.saveRelation(relation);
-    await loadAll();
-  }
-
-  Future<void> deleteRelation(String id) async {
-    await _dataService.deleteRelation(id);
-    await loadAll();
-  }
+  Future<void> addRelation(ContactRelation relation) async { await _dataService.saveRelation(relation); await loadAll(); }
+  Future<void> deleteRelation(String id) async { await _dataService.deleteRelation(id); await loadAll(); }
 
   // Deal
   List<Deal> getDealsByStage(DealStage stage) => _deals.where((d) => d.stage == stage).toList();
   List<Deal> getDealsByContact(String contactId) => _deals.where((d) => d.contactId == contactId).toList();
-
-  Future<void> addDeal(Deal deal) async {
-    await _dataService.saveDeal(deal);
-    await loadAll();
-  }
-
-  Future<void> updateDeal(Deal deal) async {
-    await _dataService.saveDeal(deal);
-    await loadAll();
-  }
-
-  Future<void> deleteDeal(String id) async {
-    await _dataService.deleteDeal(id);
-    await loadAll();
-  }
+  Future<void> addDeal(Deal deal) async { await _dataService.saveDeal(deal); await loadAll(); }
+  Future<void> updateDeal(Deal deal) async { await _dataService.saveDeal(deal); await loadAll(); }
+  Future<void> deleteDeal(String id) async { await _dataService.deleteDeal(id); await loadAll(); }
 
   Future<void> moveDealStage(String dealId, DealStage newStage) async {
     final deal = _deals.firstWhere((d) => d.id == dealId);
     deal.stage = newStage;
     deal.updatedAt = DateTime.now();
-    if (newStage == DealStage.closed) { deal.probability = 100; }
+    if (newStage == DealStage.completed) { deal.probability = 100; }
     if (newStage == DealStage.lost) { deal.probability = 0; }
     await _dataService.saveDeal(deal);
     await loadAll();
@@ -167,7 +137,6 @@ class CrmProvider extends ChangeNotifier {
   // Interaction
   List<Interaction> getInteractionsByContact(String contactId) =>
       _interactions.where((i) => i.contactId == contactId).toList();
-
   Future<void> addInteraction(Interaction interaction) async {
     await _dataService.saveInteraction(interaction);
     final contact = _dataService.getContact(interaction.contactId);
@@ -177,60 +146,107 @@ class CrmProvider extends ChangeNotifier {
     }
     await loadAll();
   }
-
-  Future<void> deleteInteraction(String id) async {
-    await _dataService.deleteInteraction(id);
-    await loadAll();
-  }
+  Future<void> deleteInteraction(String id) async { await _dataService.deleteInteraction(id); await loadAll(); }
 
   // Product
   Product? getProduct(String id) => _dataService.getProduct(id);
-
-  List<Product> getProductsByCategory(String category) =>
-      _products.where((p) => p.category == category).toList();
-
-  Future<void> addProduct(Product product) async {
-    await _dataService.saveProduct(product);
-    await loadAll();
-  }
-
-  Future<void> deleteProduct(String id) async {
-    await _dataService.deleteProduct(id);
-    await loadAll();
-  }
+  List<Product> getProductsByCategory(String category) => _products.where((p) => p.category == category).toList();
+  Future<void> addProduct(Product product) async { await _dataService.saveProduct(product); await loadAll(); }
+  Future<void> deleteProduct(String id) async { await _dataService.deleteProduct(id); await loadAll(); }
 
   // Sales Order
-  List<SalesOrder> getOrdersByContact(String contactId) =>
-      _orders.where((o) => o.contactId == contactId).toList();
+  List<SalesOrder> getOrdersByContact(String contactId) => _orders.where((o) => o.contactId == contactId).toList();
+  Future<void> addOrder(SalesOrder order) async { await _dataService.saveOrder(order); await loadAll(); }
+  Future<void> updateOrder(SalesOrder order) async { await _dataService.saveOrder(order); await loadAll(); }
+  Future<void> deleteOrder(String id) async { await _dataService.deleteOrder(id); await loadAll(); }
 
-  Future<void> addOrder(SalesOrder order) async {
+  // Create order + deal + deduct inventory
+  Future<void> createOrderWithDeal(SalesOrder order) async {
     await _dataService.saveOrder(order);
-    await loadAll();
-  }
-
-  Future<void> updateOrder(SalesOrder order) async {
-    await _dataService.saveOrder(order);
-    await loadAll();
-  }
-
-  Future<void> deleteOrder(String id) async {
-    await _dataService.deleteOrder(id);
+    // Create linked deal
+    final deal = Deal(
+      id: generateId(),
+      title: '订单: ${order.contactName}',
+      description: order.items.map((i) => '${i.productName} x${i.quantity}').join(', '),
+      contactId: order.contactId,
+      contactName: order.contactName,
+      stage: DealStage.ordered,
+      amount: order.totalAmount,
+      orderId: order.id,
+      probability: 70,
+    );
+    await _dataService.saveDeal(deal);
+    // Deduct inventory
+    for (final item in order.items) {
+      await _dataService.addInventoryRecord(InventoryRecord(
+        id: generateId(),
+        productId: item.productId,
+        productName: item.productName,
+        productCode: item.productCode,
+        type: 'out',
+        quantity: item.quantity,
+        reason: '销售出库 - ${order.contactName}',
+      ));
+    }
     await loadAll();
   }
 
   // Inventory
   List<InventoryRecord> getInventoryByProduct(String productId) =>
       _inventoryRecords.where((r) => r.productId == productId).toList();
-
   Future<void> addInventoryRecord(InventoryRecord record) async {
     await _dataService.addInventoryRecord(record);
     _inventoryRecords = _dataService.getAllInventory();
     notifyListeners();
   }
-
   Future<void> deleteInventoryRecord(String id) async {
     await _dataService.deleteInventoryRecord(id);
     _inventoryRecords = _dataService.getAllInventory();
+    notifyListeners();
+  }
+
+  int getProductStock(String productId) {
+    final stocks = _dataService.getInventoryStocks();
+    try { return stocks.firstWhere((s) => s.productId == productId).currentStock; } catch (_) { return 0; }
+  }
+
+  // Team
+  TeamMember? getTeamMember(String id) => _dataService.getTeamMember(id);
+  Future<void> addTeamMember(TeamMember member) async {
+    await _dataService.addTeamMember(member);
+    _teamMembers = _dataService.getAllTeamMembers();
+    notifyListeners();
+  }
+  Future<void> updateTeamMember(TeamMember member) async {
+    await _dataService.updateTeamMember(member);
+    _teamMembers = _dataService.getAllTeamMembers();
+    notifyListeners();
+  }
+  Future<void> deleteTeamMember(String id) async {
+    await _dataService.deleteTeamMember(id);
+    _teamMembers = _dataService.getAllTeamMembers();
+    notifyListeners();
+  }
+
+  // Task
+  List<Task> getTasksByAssignee(String assigneeId) => _tasks.where((t) => t.assigneeId == assigneeId).toList();
+  List<Task> getTasksByDate(DateTime date) =>
+      _tasks.where((t) => t.dueDate.year == date.year && t.dueDate.month == date.month && t.dueDate.day == date.day).toList();
+  Map<String, double> get workloadStats => _dataService.getWorkloadStats();
+
+  Future<void> addTask(Task task) async {
+    await _dataService.addTask(task);
+    _tasks = _dataService.getAllTasks();
+    notifyListeners();
+  }
+  Future<void> updateTask(Task task) async {
+    await _dataService.updateTask(task);
+    _tasks = _dataService.getAllTasks();
+    notifyListeners();
+  }
+  Future<void> deleteTask(String id) async {
+    await _dataService.deleteTask(id);
+    _tasks = _dataService.getAllTasks();
     notifyListeners();
   }
 

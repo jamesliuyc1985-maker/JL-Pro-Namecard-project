@@ -22,7 +22,7 @@ class _AddDealScreenState extends State<AddDealScreen> {
   double _probability = 10;
 
   @override
-  void dispose() { for (final c in [_titleCtrl, _descCtrl, _amountCtrl, _notesCtrl]) c.dispose(); super.dispose(); }
+  void dispose() { for (final c in [_titleCtrl, _descCtrl, _amountCtrl, _notesCtrl]) { c.dispose(); } super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
@@ -50,11 +50,12 @@ class _AddDealScreenState extends State<AddDealScreen> {
         const SizedBox(height: 16),
         const Text('阶段', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
-        Wrap(spacing: 8, runSpacing: 8, children: [DealStage.lead, DealStage.contacted, DealStage.proposal, DealStage.negotiation].map((s) {
+        Wrap(spacing: 6, runSpacing: 6, children: DealStage.values.map((s) {
           final sel = _stage == s;
           return ChoiceChip(label: Text(s.label), selected: sel, onSelected: (_) => setState(() { _stage = s; _probability = _defProb(s); }),
             selectedColor: AppTheme.primaryPurple, backgroundColor: AppTheme.cardBgLight,
-            labelStyle: TextStyle(color: sel ? Colors.white : AppTheme.textPrimary, fontSize: 12));
+            labelStyle: TextStyle(color: sel ? Colors.white : AppTheme.textPrimary, fontSize: 11),
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact);
         }).toList()),
         const SizedBox(height: 16),
         Row(children: [
@@ -73,7 +74,7 @@ class _AddDealScreenState extends State<AddDealScreen> {
     );
   }
 
-  double _defProb(DealStage s) { switch (s) { case DealStage.lead: return 10; case DealStage.contacted: return 25; case DealStage.proposal: return 40; case DealStage.negotiation: return 60; default: return 10; } }
+  double _defProb(DealStage s) { switch (s) { case DealStage.lead: return 10; case DealStage.contacted: return 25; case DealStage.proposal: return 40; case DealStage.negotiation: return 60; case DealStage.ordered: return 70; case DealStage.paid: return 80; case DealStage.shipped: return 85; case DealStage.inTransit: return 90; case DealStage.received: return 95; case DealStage.completed: return 100; case DealStage.lost: return 0; } }
 
   void _save() {
     if (_formKey.currentState!.validate() && _selectedContact != null) {

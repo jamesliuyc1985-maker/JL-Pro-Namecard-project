@@ -3,10 +3,11 @@ import '../utils/theme.dart';
 import 'dashboard_screen.dart';
 import 'contacts_screen.dart';
 import 'products_screen.dart';
-import 'sales_screen.dart';
 import 'pipeline_screen.dart';
 import 'network_screen.dart';
 import 'inventory_screen.dart';
+import 'calendar_task_screen.dart';
+import 'team_screen.dart';
 import 'tools_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -19,14 +20,15 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
 
   final _screens = const [
-    DashboardScreen(),   // 0 首页
-    ContactsScreen(),    // 1 人脉
-    NetworkScreen(),     // 2 图谱 (恢复)
-    ProductsScreen(),    // 3 产品
-    SalesScreen(),       // 4 销售
-    InventoryScreen(),   // 5 库存 (新增)
-    PipelineScreen(),    // 6 管线
-    ToolsScreen(),       // 7 工具
+    DashboardScreen(),       // 0 首页
+    ContactsScreen(),        // 1 人脉
+    NetworkScreen(),         // 2 图谱
+    PipelineScreen(),        // 3 管线+销售 (合并)
+    ProductsScreen(),        // 4 产品
+    InventoryScreen(),       // 5 库存
+    CalendarTaskScreen(),    // 6 日历/任务
+    TeamScreen(),            // 7 团队
+    ToolsScreen(),           // 8 工具
   ];
 
   @override
@@ -47,11 +49,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 _navItem(0, Icons.dashboard_rounded, '首页'),
                 _navItem(1, Icons.people_rounded, '人脉'),
                 _navItem(2, Icons.hub_rounded, '图谱'),
-                _navItem(3, Icons.science_rounded, '产品'),
-                _navItem(4, Icons.receipt_long_rounded, '销售'),
+                _navItem(3, Icons.view_kanban_rounded, '管线'),
+                _navItem(4, Icons.science_rounded, '产品'),
                 _navItem(5, Icons.warehouse_rounded, '库存'),
-                _navItem(6, Icons.view_kanban_rounded, '管线'),
-                _navItem(7, Icons.build_circle_rounded, '工具'),
+                _navItem(6, Icons.calendar_month, '任务'),
+                _navItem(7, Icons.group_rounded, '团队'),
+                _navItem(8, Icons.build_circle_rounded, '工具'),
               ],
             ),
           ),
@@ -67,20 +70,20 @@ class _HomeScreenState extends State<HomeScreen> {
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 7),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           gradient: isSelected ? AppTheme.gradient : null,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: isSelected ? Colors.white : AppTheme.textSecondary, size: 18),
+            Icon(icon, color: isSelected ? Colors.white : AppTheme.textSecondary, size: 16),
             const SizedBox(height: 2),
             Text(label, style: TextStyle(
               color: isSelected ? Colors.white : AppTheme.textSecondary,
               fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-              fontSize: 9,
+              fontSize: 8,
             )),
           ],
         ),

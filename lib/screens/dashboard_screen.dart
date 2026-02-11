@@ -166,7 +166,7 @@ class DashboardScreen extends StatelessWidget {
   }
 
   Widget _buildHotDeals(BuildContext context, CrmProvider crm) {
-    final hotDeals = crm.deals.where((d) => d.stage != DealStage.closed && d.stage != DealStage.lost).toList()..sort((a, b) => b.amount.compareTo(a.amount));
+    final hotDeals = crm.deals.where((d) => d.stage != DealStage.completed && d.stage != DealStage.lost).toList()..sort((a, b) => b.amount.compareTo(a.amount));
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(children: hotDeals.take(4).map((deal) {
@@ -237,7 +237,12 @@ class DashboardScreen extends StatelessWidget {
       case DealStage.contacted: return AppTheme.primaryBlue;
       case DealStage.proposal: return AppTheme.primaryPurple;
       case DealStage.negotiation: return AppTheme.warning;
-      case DealStage.closed: return AppTheme.success;
+      case DealStage.ordered: return const Color(0xFF00CEC9);
+      case DealStage.paid: return const Color(0xFF55EFC4);
+      case DealStage.shipped: return const Color(0xFF74B9FF);
+      case DealStage.inTransit: return const Color(0xFFA29BFE);
+      case DealStage.received: return const Color(0xFF81ECEC);
+      case DealStage.completed: return AppTheme.success;
       case DealStage.lost: return AppTheme.danger;
     }
   }

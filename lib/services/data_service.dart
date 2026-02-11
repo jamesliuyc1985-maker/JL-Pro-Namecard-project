@@ -5,6 +5,8 @@ import '../models/deal.dart';
 import '../models/interaction.dart';
 import '../models/product.dart';
 import '../models/inventory.dart';
+import '../models/team.dart';
+import '../models/task.dart';
 
 class DataService {
   static const _uuid = Uuid();
@@ -17,8 +19,60 @@ class DataService {
   List<Product> _productsCache = [];
   List<SalesOrder> _ordersCache = [];
   final List<InventoryRecord> _inventoryCache = [];
+  final List<TeamMember> _teamCache = [];
+  final List<Task> _taskCache = [];
   bool _productsTableExists = false;
   bool _ordersTableExists = false;
+
+  // ========== Team CRUD ==========
+  List<TeamMember> getAllTeamMembers() => List.from(_teamCache);
+
+  TeamMember? getTeamMember(String id) {
+    try { return _teamCache.firstWhere((m) => m.id == id); } catch (_) { return null; }
+  }
+
+  Future<void> addTeamMember(TeamMember member) async {
+    _teamCache.add(member);
+  }
+
+  Future<void> updateTeamMember(TeamMember member) async {
+    final idx = _teamCache.indexWhere((m) => m.id == member.id);
+    if (idx >= 0) { _teamCache[idx] = member; }
+  }
+
+  Future<void> deleteTeamMember(String id) async {
+    _teamCache.removeWhere((m) => m.id == id);
+  }
+
+  // ========== Task CRUD ==========
+  List<Task> getAllTasks() => List.from(_taskCache);
+
+  List<Task> getTasksByAssignee(String assigneeId) =>
+      _taskCache.where((t) => t.assigneeId == assigneeId).toList();
+
+  List<Task> getTasksByDate(DateTime date) =>
+      _taskCache.where((t) => t.dueDate.year == date.year && t.dueDate.month == date.month && t.dueDate.day == date.day).toList();
+
+  Future<void> addTask(Task task) async {
+    _taskCache.add(task);
+  }
+
+  Future<void> updateTask(Task task) async {
+    final idx = _taskCache.indexWhere((t) => t.id == task.id);
+    if (idx >= 0) { _taskCache[idx] = task; }
+  }
+
+  Future<void> deleteTask(String id) async {
+    _taskCache.removeWhere((t) => t.id == id);
+  }
+
+  Map<String, double> getWorkloadStats() {
+    final stats = <String, double>{};
+    for (final t in _taskCache) {
+      stats[t.assigneeName] = (stats[t.assigneeName] ?? 0) + (t.actualHours > 0 ? t.actualHours : t.estimatedHours);
+    }
+    return stats;
+  }
 
   Future<void> init() async {
     _client = Supabase.instance.client;
@@ -271,8 +325,8 @@ class DataService {
   Map<String, dynamic> getStats() {
     final contacts = _contactsCache;
     final deals = _dealsCache;
-    final activeDeals = deals.where((d) => d.stage != DealStage.closed && d.stage != DealStage.lost).toList();
-    final closedDeals = deals.where((d) => d.stage == DealStage.closed).toList();
+    final activeDeals = deals.where((d) => d.stage != DealStage.completed && d.stage != DealStage.lost).toList();
+    final closedDeals = deals.where((d) => d.stage == DealStage.completed).toList();
 
     double pipelineValue = 0;
     for (final d in activeDeals) { pipelineValue += d.amount; }

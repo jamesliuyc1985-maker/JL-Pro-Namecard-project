@@ -80,7 +80,7 @@ class AnalyticsScreen extends StatelessWidget {
   Widget _buildPipelineChart(Map<String, dynamic> stats) {
     final Map<DealStage, int> sc = stats['stageCount'] as Map<DealStage, int>;
     if (sc.isEmpty) return const SizedBox.shrink();
-    final stages = [DealStage.lead, DealStage.contacted, DealStage.proposal, DealStage.negotiation, DealStage.closed];
+    final stages = DealStage.values.where((s) => s != DealStage.lost).toList();
     final maxVal = sc.values.fold(0, (a, b) => a > b ? a : b).toDouble();
 
     return Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -108,7 +108,7 @@ class AnalyticsScreen extends StatelessWidget {
 
   Widget _buildDealFunnel(CrmProvider crm) {
     final deals = crm.deals;
-    final stages = [DealStage.lead, DealStage.contacted, DealStage.proposal, DealStage.negotiation, DealStage.closed];
+    final stages = DealStage.values.where((s) => s != DealStage.lost).toList();
     return Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Container(padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(16)),
@@ -117,7 +117,7 @@ class AnalyticsScreen extends StatelessWidget {
           const SizedBox(height: 16),
           ...stages.map((stage) {
             final sd = deals.where((d) => d.stage == stage).toList();
-            double sa = 0; for (final d in sd) sa += d.amount;
+            double sa = 0; for (final d in sd) { sa += d.amount; }
             final ma = deals.isEmpty ? 1.0 : deals.map((d) => d.amount).fold(0.0, (a, b) => a > b ? a : b);
             final ratio = sa / (ma * stages.length).clamp(1, double.infinity);
             return Padding(padding: const EdgeInsets.only(bottom: 10), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -165,8 +165,18 @@ class AnalyticsScreen extends StatelessWidget {
   }
 
   Color _sColor(DealStage s) {
-    switch (s) { case DealStage.lead: return AppTheme.textSecondary; case DealStage.contacted: return AppTheme.primaryBlue;
-      case DealStage.proposal: return AppTheme.primaryPurple; case DealStage.negotiation: return AppTheme.warning;
-      case DealStage.closed: return AppTheme.success; case DealStage.lost: return AppTheme.danger; }
+    switch (s) {
+      case DealStage.lead: return AppTheme.textSecondary;
+      case DealStage.contacted: return AppTheme.primaryBlue;
+      case DealStage.proposal: return AppTheme.primaryPurple;
+      case DealStage.negotiation: return AppTheme.warning;
+      case DealStage.ordered: return const Color(0xFF00CEC9);
+      case DealStage.paid: return const Color(0xFF55EFC4);
+      case DealStage.shipped: return const Color(0xFF74B9FF);
+      case DealStage.inTransit: return const Color(0xFFA29BFE);
+      case DealStage.received: return const Color(0xFF81ECEC);
+      case DealStage.completed: return AppTheme.success;
+      case DealStage.lost: return AppTheme.danger;
+    }
   }
 }

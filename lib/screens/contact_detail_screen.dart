@@ -7,6 +7,7 @@ import '../models/deal.dart';
 import '../models/interaction.dart';
 import '../utils/theme.dart';
 import '../utils/formatters.dart';
+import 'edit_contact_screen.dart';
 
 class ContactDetailScreen extends StatelessWidget {
   final String contactId;
@@ -51,6 +52,10 @@ class ContactDetailScreen extends StatelessWidget {
         Row(children: [
           IconButton(icon: const Icon(Icons.arrow_back_ios, color: AppTheme.textPrimary), onPressed: () => Navigator.pop(context)),
           const Spacer(),
+          IconButton(
+            icon: const Icon(Icons.edit, color: AppTheme.primaryPurple, size: 22),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => EditContactScreen(contactId: contact.id))),
+          ),
           IconButton(
             icon: const Icon(Icons.delete_outline, color: AppTheme.danger, size: 22),
             onPressed: () => _confirmDelete(context, crm, contact),

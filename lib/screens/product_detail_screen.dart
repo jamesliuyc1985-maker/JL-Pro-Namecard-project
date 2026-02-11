@@ -192,11 +192,13 @@ class ProductDetailScreen extends StatelessWidget {
   }
 
   void _showCreateOrderDialog(BuildContext context, CrmProvider crm, Product product) {
+    final qtyCtrl = TextEditingController(text: '1');
     int quantity = 1;
     String priceType = 'retail';
     final contacts = crm.allContacts;
     String? selectedContactId;
     String selectedContactName = '';
+    final stock = crm.getProductStock(product.id);
 
     showModalBottomSheet(
       context: context, isScrollControlled: true, backgroundColor: AppTheme.cardBg,
@@ -215,7 +217,9 @@ class ProductDetailScreen extends StatelessWidget {
             padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 20, right: 20, top: 20),
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Text('快速下单', style: TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
+              const SizedBox(height: 4),
+              Text('库存: $stock', style: TextStyle(color: stock <= 0 ? AppTheme.danger : AppTheme.success, fontSize: 12)),
+              const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: selectedContactId,
                 decoration: const InputDecoration(labelText: '选择客户', prefixIcon: Icon(Icons.person, color: AppTheme.textSecondary)),
@@ -231,26 +235,43 @@ class ProductDetailScreen extends StatelessWidget {
               const SizedBox(height: 12),
               Row(children: [
                 const Text('价格类型: ', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
-                ...[
-                  {'key': 'agent', 'label': '代理'},
-                  {'key': 'clinic', 'label': '诊所'},
-                  {'key': 'retail', 'label': '零售'},
-                ].map((pt) => Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: ChoiceChip(
-                    label: Text(pt['label']!), selected: priceType == pt['key'],
-                    onSelected: (_) => setModalState(() => priceType = pt['key']!),
-                    selectedColor: AppTheme.primaryPurple, backgroundColor: AppTheme.cardBgLight,
-                    labelStyle: TextStyle(color: priceType == pt['key'] ? Colors.white : AppTheme.textPrimary, fontSize: 12),
-                  ),
-                )),
+                ...['agent', 'clinic', 'retail'].map((pt) {
+                  final labels = {'agent': '代理', 'clinic': '诊所', 'retail': '零售'};
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ChoiceChip(
+                      label: Text(labels[pt]!), selected: priceType == pt,
+                      onSelected: (_) => setModalState(() => priceType = pt),
+                      selectedColor: AppTheme.primaryPurple, backgroundColor: AppTheme.cardBgLight,
+                      labelStyle: TextStyle(color: priceType == pt ? Colors.white : AppTheme.textPrimary, fontSize: 12),
+                    ),
+                  );
+                }),
               ]),
               const SizedBox(height: 12),
               Row(children: [
                 const Text('数量: ', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
-                IconButton(icon: const Icon(Icons.remove_circle, color: AppTheme.textSecondary), onPressed: () { if (quantity > 1) setModalState(() => quantity--); }),
-                Text('$quantity', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
-                IconButton(icon: const Icon(Icons.add_circle, color: AppTheme.primaryPurple), onPressed: () => setModalState(() => quantity++)),
+                IconButton(icon: const Icon(Icons.remove_circle, color: AppTheme.textSecondary), onPressed: () {
+                  if (quantity > 1) {
+                    setModalState(() { quantity--; qtyCtrl.text = '$quantity'; });
+                  }
+                }),
+                SizedBox(
+                  width: 60,
+                  child: TextField(
+                    controller: qtyCtrl,
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
+                    decoration: InputDecoration(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                      filled: true, fillColor: AppTheme.cardBg,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                    ),
+                    onChanged: (v) => setModalState(() { quantity = int.tryParse(v) ?? 1; if (quantity < 1) { quantity = 1; } }),
+                  ),
+                ),
+                IconButton(icon: const Icon(Icons.add_circle, color: AppTheme.primaryPurple), onPressed: () => setModalState(() { quantity++; qtyCtrl.text = '$quantity'; })),
                 const Spacer(),
                 Text(Formatters.currency(total), style: const TextStyle(color: AppTheme.accentGold, fontSize: 20, fontWeight: FontWeight.bold)),
               ]),
@@ -272,13 +293,13 @@ class ProductDetailScreen extends StatelessWidget {
                     )],
                     totalAmount: total,
                   );
-                  crm.addOrder(order);
+                  crm.createOrderWithDeal(order);
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('订单已创建: $selectedContactName - ${Formatters.currency(total)}'), backgroundColor: AppTheme.success),
+                    SnackBar(content: Text('订单已创建并同步管线: $selectedContactName - ${Formatters.currency(total)}'), backgroundColor: AppTheme.success),
                   );
                 },
-                child: const Text('确认下单'),
+                child: const Text('确认下单 (同步管线+扣库存)'),
               )),
               const SizedBox(height: 16),
             ]),
