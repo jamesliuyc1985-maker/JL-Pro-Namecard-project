@@ -110,4 +110,49 @@ class Task {
       default: return p;
     }
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id, 'title': title, 'description': description,
+    'assigneeId': assigneeId, 'assigneeName': assigneeName,
+    'creatorId': creatorId, 'creatorName': creatorName,
+    'status': status, 'phase': phase.name, 'priority': priority,
+    'dueDate': dueDate.toIso8601String(),
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+    'completedAt': completedAt?.toIso8601String(),
+    'estimatedHours': estimatedHours, 'actualHours': actualHours,
+    'contactId': contactId, 'dealId': dealId, 'tags': tags,
+    'history': history.map((h) => {
+      'fromPhase': h.fromPhase, 'toPhase': h.toPhase,
+      'timestamp': h.timestamp.toIso8601String(), 'note': h.note,
+    }).toList(),
+  };
+
+  factory Task.fromJson(Map<String, dynamic> json) => Task(
+    id: json['id'] as String? ?? '',
+    title: json['title'] as String? ?? '',
+    description: json['description'] as String? ?? '',
+    assigneeId: json['assigneeId'] as String? ?? '',
+    assigneeName: json['assigneeName'] as String? ?? '',
+    creatorId: json['creatorId'] as String? ?? '',
+    creatorName: json['creatorName'] as String? ?? '',
+    status: json['status'] as String? ?? 'pending',
+    phase: TaskPhase.values.firstWhere((e) => e.name == json['phase'], orElse: () => TaskPhase.assigned),
+    priority: json['priority'] as String? ?? 'medium',
+    dueDate: DateTime.tryParse(json['dueDate'] ?? ''),
+    createdAt: DateTime.tryParse(json['createdAt'] ?? ''),
+    updatedAt: DateTime.tryParse(json['updatedAt'] ?? ''),
+    completedAt: json['completedAt'] != null ? DateTime.tryParse(json['completedAt']) : null,
+    estimatedHours: (json['estimatedHours'] as num?)?.toDouble() ?? 0,
+    actualHours: (json['actualHours'] as num?)?.toDouble() ?? 0,
+    contactId: json['contactId'] as String?,
+    dealId: json['dealId'] as String?,
+    tags: List<String>.from(json['tags'] ?? []),
+    history: (json['history'] as List?)?.map((h) => TaskHistory(
+      fromPhase: h['fromPhase'] as String? ?? '',
+      toPhase: h['toPhase'] as String? ?? '',
+      timestamp: DateTime.tryParse(h['timestamp'] ?? ''),
+      note: h['note'] as String?,
+    )).toList(),
+  );
 }

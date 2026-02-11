@@ -35,4 +35,24 @@ class ContactAssignment {
     DateTime? updatedAt,
   }) : createdAt = createdAt ?? DateTime.now(),
        updatedAt = updatedAt ?? DateTime.now();
+
+  Map<String, dynamic> toJson() => {
+    'id': id, 'memberId': memberId, 'memberName': memberName,
+    'contactId': contactId, 'contactName': contactName,
+    'stage': stage.name, 'notes': notes,
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+  };
+
+  factory ContactAssignment.fromJson(Map<String, dynamic> json) => ContactAssignment(
+    id: json['id'] as String? ?? '',
+    memberId: json['memberId'] as String? ?? '',
+    memberName: json['memberName'] as String? ?? '',
+    contactId: json['contactId'] as String? ?? '',
+    contactName: json['contactName'] as String? ?? '',
+    stage: ContactWorkStage.values.firstWhere((e) => e.name == json['stage'], orElse: () => ContactWorkStage.lead),
+    notes: json['notes'] as String? ?? '',
+    createdAt: DateTime.tryParse(json['createdAt'] ?? ''),
+    updatedAt: DateTime.tryParse(json['updatedAt'] ?? ''),
+  );
 }

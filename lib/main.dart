@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'firebase_options.dart';
 import 'providers/crm_provider.dart';
 import 'services/data_service.dart';
-import 'services/auth_service.dart';
 import 'services/notification_service.dart';
 import 'utils/theme.dart';
 import 'screens/home_screen.dart';
@@ -12,15 +13,17 @@ import 'screens/auth_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Supabase.initialize(
-    url: 'https://lkwnphfqbnmxhkeedpdg.supabase.co',
-    anonKey: 'sb_publishable_QM3oxU--8_XQ3KNTdeUpTQ_epNcMSbI',
+  // Initialize Firebase
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
   );
 
+  // Initialize DataService (Firestore)
   final dataService = DataService();
   await dataService.init();
-  final authService = AuthService();
-  final isLoggedIn = await authService.isLoggedIn();
+
+  // Check auth state
+  final isLoggedIn = FirebaseAuth.instance.currentUser != null;
 
   runApp(DealNavigatorApp(dataService: dataService, isLoggedIn: isLoggedIn));
 }
@@ -56,7 +59,6 @@ class _DealNavigatorAppState extends State<DealNavigatorApp> {
         ChangeNotifierProvider(create: (_) => NotificationService()),
       ],
       child: Builder(builder: (context) {
-        // Wire notification service into CrmProvider
         final crm = context.read<CrmProvider>();
         final ns = context.read<NotificationService>();
         crm.setNotificationService(ns);

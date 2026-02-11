@@ -19,6 +19,7 @@ class _AuthScreenState extends State<AuthScreen> {
   final _confirmCtrl = TextEditingController();
   final _authService = AuthService();
   String? _error;
+  String? _success;
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +39,18 @@ class _AuthScreenState extends State<AuthScreen> {
               const Text('Deal Navigator', style: TextStyle(color: AppTheme.textPrimary, fontSize: 26, fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
               Text(_isLogin ? '登录到您的账户' : '创建新账户', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
-              const SizedBox(height: 32),
+              const SizedBox(height: 8),
+              // Firebase badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
+                child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.cloud_done, color: Colors.orange, size: 14),
+                  SizedBox(width: 4),
+                  Text('Firebase 云端认证', style: TextStyle(color: Colors.orange, fontSize: 11, fontWeight: FontWeight.w600)),
+                ]),
+              ),
+              const SizedBox(height: 24),
 
               // Name (register only)
               if (!_isLogin) ...[
@@ -90,6 +102,20 @@ class _AuthScreenState extends State<AuthScreen> {
                 ),
               ],
 
+              // Success message
+              if (_success != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: AppTheme.success.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+                  child: Row(children: [
+                    const Icon(Icons.check_circle_outline, color: AppTheme.success, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(_success!, style: const TextStyle(color: AppTheme.success, fontSize: 12))),
+                  ]),
+                ),
+              ],
+
               const SizedBox(height: 24),
 
               // Submit
@@ -106,13 +132,22 @@ class _AuthScreenState extends State<AuthScreen> {
                 ),
               ),
 
-              const SizedBox(height: 16),
+              // Forgot password (login only)
+              if (_isLogin) ...[
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: _isLoading ? null : _forgotPassword,
+                  child: const Text('忘记密码？', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                ),
+              ],
+
+              const SizedBox(height: 8),
 
               // Toggle
               Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                 Text(_isLogin ? '没有账户？' : '已有账户？', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
                 TextButton(
-                  onPressed: () => setState(() { _isLogin = !_isLogin; _error = null; }),
+                  onPressed: () => setState(() { _isLogin = !_isLogin; _error = null; _success = null; }),
                   child: Text(_isLogin ? '立即注册' : '去登录', style: const TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ]),
@@ -133,7 +168,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _submit() async {
-    setState(() { _error = null; _isLoading = true; });
+    setState(() { _error = null; _success = null; _isLoading = true; });
 
     if (_isLogin) {
       if (_emailCtrl.text.isEmpty || _passwordCtrl.text.isEmpty) {
@@ -162,5 +197,25 @@ class _AuthScreenState extends State<AuthScreen> {
         setState(() { _error = result.message; _isLoading = false; });
       }
     }
+  }
+
+  Future<void> _forgotPassword() async {
+    final email = _emailCtrl.text.trim();
+    if (email.isEmpty) {
+      setState(() { _error = '请先输入邮箱地址'; _success = null; });
+      return;
+    }
+    setState(() { _isLoading = true; _error = null; _success = null; });
+    final result = await _authService.resetPassword(email);
+    setState(() {
+      _isLoading = false;
+      if (result.ok) {
+        _success = result.message;
+        _error = null;
+      } else {
+        _error = result.message;
+        _success = null;
+      }
+    });
   }
 }

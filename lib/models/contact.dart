@@ -71,6 +71,7 @@ class Contact {
   DateTime lastContactedAt;
   List<String> tags;
   String? avatarUrl;
+  String? businessCategory; // agent, clinic, retail
 
   Contact({
     required this.id,
@@ -90,6 +91,7 @@ class Contact {
     DateTime? lastContactedAt,
     List<String>? tags,
     this.avatarUrl,
+    this.businessCategory,
   })  : createdAt = createdAt ?? DateTime.now(),
         lastContactedAt = lastContactedAt ?? DateTime.now(),
         tags = tags ?? [];
@@ -112,6 +114,7 @@ class Contact {
         'lastContactedAt': lastContactedAt.toIso8601String(),
         'tags': tags,
         'avatarUrl': avatarUrl,
+        'businessCategory': businessCategory,
       };
 
   factory Contact.fromJson(Map<String, dynamic> json) => Contact(
@@ -142,6 +145,7 @@ class Contact {
             DateTime.tryParse(json['lastContactedAt'] ?? '') ?? DateTime.now(),
         tags: List<String>.from(json['tags'] ?? []),
         avatarUrl: json['avatarUrl'] as String?,
+        businessCategory: json['businessCategory'] as String?,
       );
 }
 
