@@ -188,17 +188,29 @@ class ContactDetailScreen extends StatelessWidget {
   // ========== Communication ==========
   void _makeCall(BuildContext context, String phone) async {
     if (phone.isEmpty) { _showSnack(context, '无电话号码'); return; }
-    try { await launchUrl(Uri.parse('tel:$phone')); } catch (_) { if (context.mounted) _showSnack(context, '无法拨打 $phone'); }
+    final uri = Uri.parse('tel:$phone');
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && context.mounted) { _showSnack(context, '无法拨打 $phone（请在手机上试）'); }
+    } catch (_) { if (context.mounted) { _showSnack(context, '无法拨打 $phone'); } }
   }
 
   void _sendSms(BuildContext context, String phone) async {
     if (phone.isEmpty) { _showSnack(context, '无电话号码'); return; }
-    try { await launchUrl(Uri.parse('sms:$phone')); } catch (_) { if (context.mounted) _showSnack(context, '无法发送短信'); }
+    final uri = Uri.parse('sms:$phone');
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && context.mounted) { _showSnack(context, '无法发送短信（请在手机上试）'); }
+    } catch (_) { if (context.mounted) { _showSnack(context, '无法发送短信'); } }
   }
 
   void _sendEmail(BuildContext context, String email, String name) async {
     if (email.isEmpty) { _showSnack(context, '无邮箱地址'); return; }
-    try { await launchUrl(Uri.parse('mailto:$email?subject=Re: $name')); } catch (_) { if (context.mounted) _showSnack(context, '无法发送邮件'); }
+    final uri = Uri.parse('mailto:$email?subject=Re: $name&body=Dear $name,%0A%0A');
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && context.mounted) { _showSnack(context, '无法发送邮件（请在手机上试）'); }
+    } catch (_) { if (context.mounted) { _showSnack(context, '无法发送邮件'); } }
   }
 
   void _showSnack(BuildContext context, String msg) {

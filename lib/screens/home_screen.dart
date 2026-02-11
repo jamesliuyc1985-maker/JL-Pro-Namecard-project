@@ -5,6 +5,8 @@ import 'contacts_screen.dart';
 import 'products_screen.dart';
 import 'sales_screen.dart';
 import 'pipeline_screen.dart';
+import 'network_screen.dart';
+import 'inventory_screen.dart';
 import 'tools_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -17,12 +19,14 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
 
   final _screens = const [
-    DashboardScreen(),
-    ContactsScreen(),
-    ProductsScreen(),
-    SalesScreen(),
-    PipelineScreen(),
-    ToolsScreen(),
+    DashboardScreen(),   // 0 首页
+    ContactsScreen(),    // 1 人脉
+    NetworkScreen(),     // 2 图谱 (恢复)
+    ProductsScreen(),    // 3 产品
+    SalesScreen(),       // 4 销售
+    InventoryScreen(),   // 5 库存 (新增)
+    PipelineScreen(),    // 6 管线
+    ToolsScreen(),       // 7 工具
   ];
 
   @override
@@ -32,13 +36,7 @@ class _HomeScreenState extends State<HomeScreen> {
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: AppTheme.darkBg,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              blurRadius: 12,
-              offset: const Offset(0, -4),
-            ),
-          ],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 12, offset: const Offset(0, -4))],
         ),
         child: SafeArea(
           child: Padding(
@@ -48,10 +46,12 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 _navItem(0, Icons.dashboard_rounded, '首页'),
                 _navItem(1, Icons.people_rounded, '人脉'),
-                _navItem(2, Icons.science_rounded, '产品'),
-                _navItem(3, Icons.receipt_long_rounded, '销售'),
-                _navItem(4, Icons.view_kanban_rounded, '管线'),
-                _navItem(5, Icons.build_circle_rounded, '工具'),
+                _navItem(2, Icons.hub_rounded, '图谱'),
+                _navItem(3, Icons.science_rounded, '产品'),
+                _navItem(4, Icons.receipt_long_rounded, '销售'),
+                _navItem(5, Icons.warehouse_rounded, '库存'),
+                _navItem(6, Icons.view_kanban_rounded, '管线'),
+                _navItem(7, Icons.build_circle_rounded, '工具'),
               ],
             ),
           ),
@@ -67,19 +67,21 @@ class _HomeScreenState extends State<HomeScreen> {
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 8),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(14),
           gradient: isSelected ? AppTheme.gradient : null,
         ),
-        child: Row(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: isSelected ? Colors.white : AppTheme.textSecondary, size: 20),
-            if (isSelected) ...[
-              const SizedBox(width: 4),
-              Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 11)),
-            ],
+            Icon(icon, color: isSelected ? Colors.white : AppTheme.textSecondary, size: 18),
+            const SizedBox(height: 2),
+            Text(label, style: TextStyle(
+              color: isSelected ? Colors.white : AppTheme.textSecondary,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              fontSize: 9,
+            )),
           ],
         ),
       ),

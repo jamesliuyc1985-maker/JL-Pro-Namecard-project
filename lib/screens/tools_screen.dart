@@ -8,8 +8,7 @@ import '../models/contact.dart';
 import '../models/product.dart';
 import '../utils/theme.dart';
 import '../utils/formatters.dart';
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
+import 'gemini_chat_screen.dart';
 
 class ToolsScreen extends StatelessWidget {
   const ToolsScreen({super.key});
@@ -29,9 +28,11 @@ class ToolsScreen extends StatelessWidget {
             ]),
           ),
           _sectionTitle('AI 助手'),
-          _toolCard(context, Icons.auto_awesome, 'Gemini AI', '打开Google Gemini进行AI对话', AppTheme.primaryPurple, () => _openGemini(context)),
+          _toolCard(context, Icons.auto_awesome, 'Gemini AI 对话', '与AI助手实时对话，分析客户和销售', AppTheme.primaryPurple, () {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const GeminiChatScreen()));
+          }),
           const SizedBox(height: 20),
-          _sectionTitle('数据导出'),
+          _sectionTitle('数据导出 (CSV/Excel)'),
           _toolCard(context, Icons.people_alt, '导出联系人', '导出所有联系人为CSV/Excel', const Color(0xFF00B894), () => _exportContacts(context)),
           const SizedBox(height: 8),
           _toolCard(context, Icons.receipt_long, '导出交易', '导出所有交易记录为CSV/Excel', const Color(0xFF0984E3), () => _exportDeals(context)),
@@ -107,19 +108,19 @@ class ToolsScreen extends StatelessWidget {
         if (contact.phone.isNotEmpty) ...[
           IconButton(
             icon: const Icon(Icons.phone, color: AppTheme.success, size: 20),
-            onPressed: () => _makeCall(context, contact.phone),
+            onPressed: () => _launchAction(context, 'tel:${contact.phone}', '无法拨打 ${contact.phone}'),
             tooltip: '拨打电话',
           ),
           IconButton(
             icon: const Icon(Icons.sms, color: AppTheme.primaryBlue, size: 20),
-            onPressed: () => _sendSms(context, contact.phone),
+            onPressed: () => _launchAction(context, 'sms:${contact.phone}', '无法发送短信到 ${contact.phone}'),
             tooltip: '发送短信',
           ),
         ],
         if (contact.email.isNotEmpty)
           IconButton(
             icon: const Icon(Icons.email, color: AppTheme.primaryPurple, size: 20),
-            onPressed: () => _sendEmail(context, contact.email, contact.name),
+            onPressed: () => _launchAction(context, 'mailto:${contact.email}?subject=Re: ${contact.name}', '无法发送邮件到 ${contact.email}'),
             tooltip: '发送邮件',
           ),
       ]),
@@ -128,46 +129,16 @@ class ToolsScreen extends StatelessWidget {
 
   // ========== Actions ==========
 
-  void _openGemini(BuildContext context) async {
-    final uri = Uri.parse('https://gemini.google.com/');
+  void _launchAction(BuildContext context, String uriString, String errorMsg) async {
+    final uri = Uri.parse(uriString);
     try {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('无法打开 Gemini'), backgroundColor: AppTheme.danger));
+      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMsg), backgroundColor: AppTheme.danger));
       }
-    }
-  }
-
-  void _makeCall(BuildContext context, String phone) async {
-    final uri = Uri.parse('tel:$phone');
-    try {
-      await launchUrl(uri);
-    } catch (_) {
+    } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('无法拨打 $phone'), backgroundColor: AppTheme.danger));
-      }
-    }
-  }
-
-  void _sendSms(BuildContext context, String phone) async {
-    final uri = Uri.parse('sms:$phone');
-    try {
-      await launchUrl(uri);
-    } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('无法发送短信到 $phone'), backgroundColor: AppTheme.danger));
-      }
-    }
-  }
-
-  void _sendEmail(BuildContext context, String email, String name) async {
-    final uri = Uri.parse('mailto:$email?subject=Re: $name&body=Dear $name,%0A%0A');
-    try {
-      await launchUrl(uri);
-    } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('无法发送邮件到 $email'), backgroundColor: AppTheme.danger));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMsg), backgroundColor: AppTheme.danger));
       }
     }
   }
@@ -230,17 +201,15 @@ class ToolsScreen extends StatelessWidget {
 
   void _downloadCsv(BuildContext context, List<List<String>> rows, String filename, String label) {
     try {
-      // Add BOM for Excel to recognize UTF-8
       final csvString = const ListToCsvConverter().convert(rows);
-      final bytes = utf8.encode('\uFEFF$csvString');
-      final blob = html.Blob([bytes], 'text/csv;charset=utf-8');
-      final url = html.Url.createObjectUrlFromBlob(blob);
-      final anchor = html.AnchorElement()
-        ..href = url
-        ..download = filename
-        ..click();
-      html.Url.revokeObjectUrl(url);
-
+      final content = '\uFEFF$csvString';
+      // Use universal approach: create a data URI and launch it
+      final uri = Uri.dataFromString(
+        content,
+        mimeType: 'text/csv',
+        encoding: utf8,
+      );
+      launchUrl(uri);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('$label导出成功: $filename'), backgroundColor: AppTheme.success),
       );

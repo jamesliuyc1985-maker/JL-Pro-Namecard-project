@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
 import '../providers/crm_provider.dart';
 import '../models/contact.dart';
 import '../utils/theme.dart';
@@ -13,6 +14,7 @@ class ScanCardScreen extends StatefulWidget {
 class _ScanCardScreenState extends State<ScanCardScreen> {
   bool _isScanning = false;
   bool _showResult = false;
+  String? _imagePath;
   final _nameCtrl = TextEditingController();
   final _companyCtrl = TextEditingController();
   final _positionCtrl = TextEditingController();
@@ -21,6 +23,7 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
   final _addressCtrl = TextEditingController();
   Industry _industry = Industry.other;
   MyRelationType _myRelation = MyRelationType.other;
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void dispose() {
@@ -49,7 +52,6 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
   Widget _buildScanView() {
     return Column(
       children: [
-        // Camera preview area (simulated)
         Expanded(
           flex: 3,
           child: Container(
@@ -61,22 +63,33 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
             ),
             child: Stack(
               children: [
-                // Camera frame
-                Center(
-                  child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    Icon(_isScanning ? Icons.hourglass_top : Icons.document_scanner_outlined,
-                        color: AppTheme.primaryPurple, size: 64),
-                    const SizedBox(height: 20),
-                    Text(
-                      _isScanning ? '正在识别名片...' : '将名片放入框内',
-                      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
+                if (_imagePath != null)
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Icon(Icons.check_circle, color: AppTheme.success, size: 64),
+                        SizedBox(height: 12),
+                        Text('照片已获取', style: TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w600)),
+                        Text('正在处理中...', style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+                      ]),
                     ),
-                    const SizedBox(height: 8),
-                    const Text('支持中文/日文/英文名片', style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
-                  ]),
-                ),
-                // Scan corners
-                if (!_isScanning) ...[
+                  )
+                else
+                  Center(
+                    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      Icon(_isScanning ? Icons.hourglass_top : Icons.document_scanner_outlined,
+                          color: AppTheme.primaryPurple, size: 64),
+                      const SizedBox(height: 20),
+                      Text(
+                        _isScanning ? '正在识别名片...' : '将名片放入框内',
+                        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text('支持中文/日文/英文名片', style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+                    ]),
+                  ),
+                if (!_isScanning && _imagePath == null) ...[
                   _scanCorner(Alignment.topLeft),
                   _scanCorner(Alignment.topRight),
                   _scanCorner(Alignment.bottomLeft),
@@ -88,7 +101,6 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
             ),
           ),
         ),
-        // Action buttons
         Expanded(
           flex: 2,
           child: Padding(
@@ -101,7 +113,7 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
                     icon: Icons.camera_alt,
                     label: '拍照扫描',
                     color: AppTheme.primaryPurple,
-                    onTap: () => _simulateScan(),
+                    onTap: () => _pickImage(ImageSource.camera),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -110,7 +122,7 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
                     icon: Icons.photo_library,
                     label: '相册导入',
                     color: AppTheme.primaryBlue,
-                    onTap: () => _simulateScan(),
+                    onTap: () => _pickImage(ImageSource.gallery),
                   ),
                 ),
               ]),
@@ -122,18 +134,17 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
                 onTap: () => setState(() => _showResult = true),
               ),
               const SizedBox(height: 20),
-              // Recent scans
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(14)),
-                child: Row(children: [
-                  const Icon(Icons.lightbulb_outline, color: AppTheme.accentGold, size: 20),
-                  const SizedBox(width: 12),
-                  const Expanded(
+                child: const Row(children: [
+                  Icon(Icons.lightbulb_outline, color: AppTheme.accentGold, size: 20),
+                  SizedBox(width: 12),
+                  Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text('扫描提示', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
                       SizedBox(height: 2),
-                      Text('保持名片平整，光线均匀\nOCR自动识别姓名、公司、电话、邮箱',
+                      Text('拍照或从相册选择名片照片\n照片获取后可手动录入识别信息',
                           style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
                     ]),
                   ),
@@ -189,26 +200,41 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
     );
   }
 
-  void _simulateScan() {
-    setState(() => _isScanning = true);
-    // Simulate OCR processing
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: source,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+      if (image != null && mounted) {
         setState(() {
-          _isScanning = false;
-          _showResult = true;
-          // Simulated OCR result
-          _nameCtrl.text = '新田雅之';
-          _companyCtrl.text = '三菱商事株式会社';
-          _positionCtrl.text = '经营企划部 课长';
-          _phoneCtrl.text = '03-3210-2121';
-          _emailCtrl.text = 'm.nitta@mitsubishicorp.com';
-          _addressCtrl.text = '东京都千代田区丸之内2-3-1';
-          _industry = Industry.trading;
-          _myRelation = MyRelationType.client;
+          _imagePath = image.path;
+          _isScanning = true;
         });
+        // After picking image, show the form for manual input
+        await Future.delayed(const Duration(seconds: 1));
+        if (mounted) {
+          setState(() {
+            _isScanning = false;
+            _showResult = true;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('照片获取成功！请填写名片信息'),
+              backgroundColor: AppTheme.success,
+            ),
+          );
+        }
       }
-    });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('无法获取照片: $e'), backgroundColor: AppTheme.danger),
+        );
+      }
+    }
   }
 
   Widget _buildResultForm() {
@@ -217,16 +243,13 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
       children: [
         Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: AppTheme.gradient,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: const Row(children: [
-            Icon(Icons.check_circle, color: Colors.white, size: 24),
-            SizedBox(width: 10),
+          decoration: BoxDecoration(gradient: AppTheme.gradient, borderRadius: BorderRadius.circular(14)),
+          child: Row(children: [
+            Icon(_imagePath != null ? Icons.photo_camera : Icons.edit_note, color: Colors.white, size: 24),
+            const SizedBox(width: 10),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('识别完成', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-              Text('请确认并修正信息后保存', style: TextStyle(color: Colors.white70, fontSize: 12)),
+              Text(_imagePath != null ? '照片已获取' : '手动录入', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text('请填写并确认信息后保存', style: TextStyle(color: Colors.white70, fontSize: 12)),
             ])),
           ]),
         ),
@@ -269,6 +292,7 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
             child: OutlinedButton(
               onPressed: () => setState(() {
                 _showResult = false;
+                _imagePath = null;
                 _clearFields();
               }),
               style: OutlinedButton.styleFrom(
@@ -337,10 +361,7 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
       strength: RelationshipStrength.cool,
     ));
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${_nameCtrl.text} 已添加到人脉库'),
-        backgroundColor: AppTheme.success,
-      ),
+      SnackBar(content: Text('${_nameCtrl.text} 已添加到人脉库'), backgroundColor: AppTheme.success),
     );
     Navigator.pop(context);
   }

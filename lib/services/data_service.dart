@@ -4,6 +4,7 @@ import '../models/contact.dart';
 import '../models/deal.dart';
 import '../models/interaction.dart';
 import '../models/product.dart';
+import '../models/inventory.dart';
 
 class DataService {
   static const _uuid = Uuid();
@@ -15,6 +16,7 @@ class DataService {
   List<ContactRelation> _relationsCache = [];
   List<Product> _productsCache = [];
   List<SalesOrder> _ordersCache = [];
+  final List<InventoryRecord> _inventoryCache = [];
   bool _productsTableExists = false;
   bool _ordersTableExists = false;
 
@@ -94,7 +96,6 @@ class DataService {
         return;
       } catch (_) {}
     }
-    // Fallback to built-in product catalog
     if (_productsCache.isEmpty) {
       _productsCache = _builtInProducts();
     }
@@ -108,7 +109,6 @@ class DataService {
         return;
       } catch (_) {}
     }
-    // Keep in-memory orders
   }
 
   // ========== Contact CRUD ==========
@@ -228,6 +228,45 @@ class DataService {
     }
   }
 
+  // ========== Inventory CRUD ==========
+  List<InventoryRecord> getAllInventory() => List.from(_inventoryCache);
+
+  List<InventoryRecord> getInventoryByProduct(String productId) =>
+      _inventoryCache.where((r) => r.productId == productId).toList();
+
+  Future<void> addInventoryRecord(InventoryRecord record) async {
+    _inventoryCache.add(record);
+  }
+
+  Future<void> deleteInventoryRecord(String id) async {
+    _inventoryCache.removeWhere((r) => r.id == id);
+  }
+
+  List<InventoryStock> getInventoryStocks() {
+    final stockMap = <String, InventoryStock>{};
+    for (final p in _productsCache) {
+      stockMap[p.id] = InventoryStock(
+        productId: p.id,
+        productName: p.name,
+        productCode: p.code,
+        currentStock: 0,
+      );
+    }
+    for (final r in _inventoryCache) {
+      final stock = stockMap[r.productId];
+      if (stock != null) {
+        if (r.type == 'in') {
+          stock.currentStock += r.quantity;
+        } else if (r.type == 'out') {
+          stock.currentStock -= r.quantity;
+        } else if (r.type == 'adjust') {
+          stock.currentStock = r.quantity;
+        }
+      }
+    }
+    return stockMap.values.toList();
+  }
+
   // ========== Stats ==========
   Map<String, dynamic> getStats() {
     final contacts = _contactsCache;
@@ -236,19 +275,19 @@ class DataService {
     final closedDeals = deals.where((d) => d.stage == DealStage.closed).toList();
 
     double pipelineValue = 0;
-    for (final d in activeDeals) pipelineValue += d.amount;
+    for (final d in activeDeals) { pipelineValue += d.amount; }
     double closedValue = 0;
-    for (final d in closedDeals) closedValue += d.amount;
+    for (final d in closedDeals) { closedValue += d.amount; }
 
     double salesTotal = 0;
     int orderCount = _ordersCache.where((o) => o.status == 'completed').length;
-    for (final o in _ordersCache.where((o) => o.status == 'completed')) salesTotal += o.totalAmount;
+    for (final o in _ordersCache.where((o) => o.status == 'completed')) { salesTotal += o.totalAmount; }
 
     final industryCount = <Industry, int>{};
-    for (final c in contacts) industryCount[c.industry] = (industryCount[c.industry] ?? 0) + 1;
+    for (final c in contacts) { industryCount[c.industry] = (industryCount[c.industry] ?? 0) + 1; }
 
     final stageCount = <DealStage, int>{};
-    for (final d in deals) stageCount[d.stage] = (stageCount[d.stage] ?? 0) + 1;
+    for (final d in deals) { stageCount[d.stage] = (stageCount[d.stage] ?? 0) + 1; }
 
     return {
       'totalContacts': contacts.length,
@@ -264,13 +303,14 @@ class DataService {
       'totalOrders': _ordersCache.length,
       'completedOrders': orderCount,
       'salesTotal': salesTotal,
+      'totalInventoryRecords': _inventoryCache.length,
     };
   }
 
   String generateId() => _uuid.v4();
   Future<void> syncFromCloud() async => await _refreshAllCaches();
 
-  // ========== Built-in Product Catalog (能道再生) ==========
+  // ========== Built-in Product Catalog ==========
   List<Product> _builtInProducts() => [
     Product(id: 'prod-exo-001', code: 'NS-EX0-001', name: '外泌体原液 300億', nameJa: 'エクソソーム原液 300億単位', category: 'exosome',
       description: '高純度外泌体原液，含300億単位外泌体粒子。適用于肌膚再生、抗老化治療。採用先進的超離心分離技術，確保高純度和高活性。',

@@ -27,7 +27,6 @@ class _NetworkScreenState extends State<NetworkScreen> {
     return Consumer<CrmProvider>(
       builder: (context, crm, _) {
         final contacts = crm.allContacts;
-        final relations = crm.relations;
         final selectedContact = _selectedContactId != null ? crm.getContact(_selectedContactId!) : null;
 
         return SafeArea(

@@ -3,6 +3,7 @@ import '../models/contact.dart';
 import '../models/deal.dart';
 import '../models/interaction.dart';
 import '../models/product.dart';
+import '../models/inventory.dart';
 import '../services/data_service.dart';
 
 class CrmProvider extends ChangeNotifier {
@@ -13,6 +14,7 @@ class CrmProvider extends ChangeNotifier {
   List<ContactRelation> _relations = [];
   List<Product> _products = [];
   List<SalesOrder> _orders = [];
+  List<InventoryRecord> _inventoryRecords = [];
   Industry? _selectedIndustry;
   String _searchQuery = '';
   bool _isLoading = false;
@@ -27,13 +29,11 @@ class CrmProvider extends ChangeNotifier {
     }
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
-      list = list
-          .where((c) =>
-              c.name.toLowerCase().contains(q) ||
-              c.company.toLowerCase().contains(q) ||
-              c.nameReading.toLowerCase().contains(q) ||
-              c.position.toLowerCase().contains(q))
-          .toList();
+      list = list.where((c) =>
+          c.name.toLowerCase().contains(q) ||
+          c.company.toLowerCase().contains(q) ||
+          c.nameReading.toLowerCase().contains(q) ||
+          c.position.toLowerCase().contains(q)).toList();
     }
     return list;
   }
@@ -44,6 +44,8 @@ class CrmProvider extends ChangeNotifier {
   List<ContactRelation> get relations => _relations;
   List<Product> get products => _products;
   List<SalesOrder> get orders => _orders;
+  List<InventoryRecord> get inventoryRecords => _inventoryRecords;
+  List<InventoryStock> get inventoryStocks => _dataService.getInventoryStocks();
   Industry? get selectedIndustry => _selectedIndustry;
   String get searchQuery => _searchQuery;
   bool get isLoading => _isLoading;
@@ -59,6 +61,7 @@ class CrmProvider extends ChangeNotifier {
       _relations = _dataService.getAllRelations();
       _products = _dataService.getAllProducts();
       _orders = _dataService.getAllOrders();
+      _inventoryRecords = _dataService.getAllInventory();
       _syncStatus = null;
     } catch (e) {
       _syncStatus = 'Loading failed: $e';
@@ -69,7 +72,7 @@ class CrmProvider extends ChangeNotifier {
 
   Future<void> syncFromCloud() async {
     _isLoading = true;
-    _syncStatus = 'Syncing...';
+    _syncStatus = '正在同步...';
     notifyListeners();
     try {
       await _dataService.syncFromCloud();
@@ -79,9 +82,10 @@ class CrmProvider extends ChangeNotifier {
       _relations = _dataService.getAllRelations();
       _products = _dataService.getAllProducts();
       _orders = _dataService.getAllOrders();
-      _syncStatus = 'Sync OK';
+      _inventoryRecords = _dataService.getAllInventory();
+      _syncStatus = '同步成功';
     } catch (e) {
-      _syncStatus = 'Sync failed: $e';
+      _syncStatus = '同步失败: $e';
     }
     _isLoading = false;
     notifyListeners();
@@ -132,11 +136,8 @@ class CrmProvider extends ChangeNotifier {
   }
 
   // Deal
-  List<Deal> getDealsByStage(DealStage stage) =>
-      _deals.where((d) => d.stage == stage).toList();
-
-  List<Deal> getDealsByContact(String contactId) =>
-      _deals.where((d) => d.contactId == contactId).toList();
+  List<Deal> getDealsByStage(DealStage stage) => _deals.where((d) => d.stage == stage).toList();
+  List<Deal> getDealsByContact(String contactId) => _deals.where((d) => d.contactId == contactId).toList();
 
   Future<void> addDeal(Deal deal) async {
     await _dataService.saveDeal(deal);
@@ -157,8 +158,8 @@ class CrmProvider extends ChangeNotifier {
     final deal = _deals.firstWhere((d) => d.id == dealId);
     deal.stage = newStage;
     deal.updatedAt = DateTime.now();
-    if (newStage == DealStage.closed) deal.probability = 100;
-    if (newStage == DealStage.lost) deal.probability = 0;
+    if (newStage == DealStage.closed) { deal.probability = 100; }
+    if (newStage == DealStage.lost) { deal.probability = 0; }
     await _dataService.saveDeal(deal);
     await loadAll();
   }
@@ -215,6 +216,22 @@ class CrmProvider extends ChangeNotifier {
   Future<void> deleteOrder(String id) async {
     await _dataService.deleteOrder(id);
     await loadAll();
+  }
+
+  // Inventory
+  List<InventoryRecord> getInventoryByProduct(String productId) =>
+      _inventoryRecords.where((r) => r.productId == productId).toList();
+
+  Future<void> addInventoryRecord(InventoryRecord record) async {
+    await _dataService.addInventoryRecord(record);
+    _inventoryRecords = _dataService.getAllInventory();
+    notifyListeners();
+  }
+
+  Future<void> deleteInventoryRecord(String id) async {
+    await _dataService.deleteInventoryRecord(id);
+    _inventoryRecords = _dataService.getAllInventory();
+    notifyListeners();
   }
 
   String generateId() => _dataService.generateId();
