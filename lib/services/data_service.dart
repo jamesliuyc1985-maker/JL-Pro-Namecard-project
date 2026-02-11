@@ -8,6 +8,7 @@ import '../models/inventory.dart';
 import '../models/team.dart';
 import '../models/task.dart';
 import '../models/contact_assignment.dart';
+import '../models/factory.dart';
 
 class DataService {
   static const _uuid = Uuid();
@@ -23,6 +24,8 @@ class DataService {
   final List<TeamMember> _teamCache = [];
   final List<Task> _taskCache = [];
   final List<ContactAssignment> _assignmentCache = [];
+  final List<ProductionFactory> _factoryCache = [];
+  final List<ProductionOrder> _productionCache = [];
   bool _productsTableExists = false;
   bool _ordersTableExists = false;
 
@@ -89,6 +92,88 @@ class DataService {
   Future<void> deleteAssignment(String id) async {
     _assignmentCache.removeWhere((a) => a.id == id);
   }
+
+  // ========== Factory CRUD ==========
+  List<ProductionFactory> getAllFactories() => List.from(_factoryCache);
+
+  ProductionFactory? getFactory(String id) {
+    try { return _factoryCache.firstWhere((f) => f.id == id); } catch (_) { return null; }
+  }
+
+  Future<void> addFactory(ProductionFactory factory) async {
+    _factoryCache.add(factory);
+  }
+
+  Future<void> updateFactory(ProductionFactory factory) async {
+    final idx = _factoryCache.indexWhere((f) => f.id == factory.id);
+    if (idx >= 0) { _factoryCache[idx] = factory; }
+  }
+
+  Future<void> deleteFactory(String id) async {
+    _factoryCache.removeWhere((f) => f.id == id);
+  }
+
+  // ========== ProductionOrder CRUD ==========
+  List<ProductionOrder> getAllProductionOrders() => List.from(_productionCache);
+
+  ProductionOrder? getProductionOrder(String id) {
+    try { return _productionCache.firstWhere((p) => p.id == id); } catch (_) { return null; }
+  }
+
+  List<ProductionOrder> getProductionByFactory(String factoryId) =>
+      _productionCache.where((p) => p.factoryId == factoryId).toList();
+
+  List<ProductionOrder> getProductionByProduct(String productId) =>
+      _productionCache.where((p) => p.productId == productId).toList();
+
+  List<ProductionOrder> getProductionByStatus(String status) =>
+      _productionCache.where((p) => p.status == status).toList();
+
+  List<ProductionOrder> getActiveProductions() =>
+      _productionCache.where((p) => ProductionStatus.activeStatuses.contains(p.status)).toList();
+
+  Future<void> addProductionOrder(ProductionOrder order) async {
+    _productionCache.add(order);
+  }
+
+  Future<void> updateProductionOrder(ProductionOrder order) async {
+    final idx = _productionCache.indexWhere((p) => p.id == order.id);
+    if (idx >= 0) { _productionCache[idx] = order; }
+  }
+
+  Future<void> deleteProductionOrder(String id) async {
+    _productionCache.removeWhere((p) => p.id == id);
+  }
+
+  // ========== Built-in Factory Data ==========
+  List<ProductionFactory> _builtInFactories() => [
+    ProductionFactory(
+      id: 'factory-001',
+      name: '株式会社シエン',
+      nameJa: '株式会社シエン',
+      address: '三重県津市木江町1番11号',
+      representative: '池田 幹',
+      description: '高端生物科技加工企业，核心冻干技术，专注再生医疗领域。提供外泌体原液、NAD+等生物制品的冻干加工与精密分装服务。',
+      certifications: ['GMP', '再生医疗加工'],
+      capabilities: ['exosome', 'nad'],
+      phone: '',
+      email: '',
+      isActive: true,
+    ),
+    ProductionFactory(
+      id: 'factory-002',
+      name: '株式会社ミズ・バラエティー',
+      nameJa: '株式会社ミズ・バラエティー',
+      address: '静岡県富士市今泉383-5',
+      representative: '藤田 伸夫',
+      description: '综合健康食品制造企业，持有多项国际认证。专注NMN胶囊、点鼻/吸入制剂等保健品的生产与包装。',
+      certifications: ['ISO9001', 'ISO27001', 'ISO22716', 'JIHFS', 'PrivacyMark', 'GMP'],
+      capabilities: ['nmn', 'skincare'],
+      phone: '',
+      email: '',
+      isActive: true,
+    ),
+  ];
 
   // ========== Completed Tasks History ==========
   List<Task> getCompletedTasks() =>
@@ -184,6 +269,10 @@ class DataService {
     }
     if (_productsCache.isEmpty) {
       _productsCache = _builtInProducts();
+    }
+    // Initialize built-in factories
+    if (_factoryCache.isEmpty) {
+      _factoryCache.addAll(_builtInFactories());
     }
   }
 
@@ -390,6 +479,11 @@ class DataService {
       'completedOrders': orderCount,
       'salesTotal': salesTotal,
       'totalInventoryRecords': _inventoryCache.length,
+      'totalFactories': _factoryCache.length,
+      'activeFactories': _factoryCache.where((f) => f.isActive).length,
+      'totalProductionOrders': _productionCache.length,
+      'activeProductions': _productionCache.where((p) => ProductionStatus.activeStatuses.contains(p.status)).length,
+      'completedProductions': _productionCache.where((p) => p.status == ProductionStatus.completed).length,
     };
   }
 

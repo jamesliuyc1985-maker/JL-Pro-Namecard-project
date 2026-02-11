@@ -7,6 +7,7 @@ import '../models/inventory.dart';
 import '../models/team.dart';
 import '../models/task.dart';
 import '../models/contact_assignment.dart';
+import '../models/factory.dart';
 import '../services/data_service.dart';
 
 class CrmProvider extends ChangeNotifier {
@@ -21,6 +22,8 @@ class CrmProvider extends ChangeNotifier {
   List<TeamMember> _teamMembers = [];
   List<Task> _tasks = [];
   List<ContactAssignment> _assignments = [];
+  List<ProductionFactory> _factories = [];
+  List<ProductionOrder> _productionOrders = [];
   Industry? _selectedIndustry;
   String _searchQuery = '';
   bool _isLoading = false;
@@ -55,6 +58,8 @@ class CrmProvider extends ChangeNotifier {
   List<TeamMember> get teamMembers => _teamMembers;
   List<Task> get tasks => _tasks;
   List<ContactAssignment> get assignments => _assignments;
+  List<ProductionFactory> get factories => _factories;
+  List<ProductionOrder> get productionOrders => _productionOrders;
   Industry? get selectedIndustry => _selectedIndustry;
   String get searchQuery => _searchQuery;
   bool get isLoading => _isLoading;
@@ -74,6 +79,8 @@ class CrmProvider extends ChangeNotifier {
       _teamMembers = _dataService.getAllTeamMembers();
       _tasks = _dataService.getAllTasks();
       _assignments = _dataService.getAllAssignments();
+      _factories = _dataService.getAllFactories();
+      _productionOrders = _dataService.getAllProductionOrders();
       _syncStatus = null;
     } catch (e) {
       _syncStatus = 'Loading failed: $e';
@@ -279,4 +286,108 @@ class CrmProvider extends ChangeNotifier {
   }
 
   String generateId() => _dataService.generateId();
+
+  // ========== Factory ==========
+  ProductionFactory? getFactory(String id) => _dataService.getFactory(id);
+  List<ProductionFactory> get activeFactories => _factories.where((f) => f.isActive).toList();
+
+  Future<void> addFactory(ProductionFactory factory) async {
+    await _dataService.addFactory(factory);
+    _factories = _dataService.getAllFactories();
+    notifyListeners();
+  }
+  Future<void> updateFactory(ProductionFactory factory) async {
+    await _dataService.updateFactory(factory);
+    _factories = _dataService.getAllFactories();
+    notifyListeners();
+  }
+  Future<void> deleteFactory(String id) async {
+    await _dataService.deleteFactory(id);
+    _factories = _dataService.getAllFactories();
+    notifyListeners();
+  }
+
+  // ========== Production Order ==========
+  List<ProductionOrder> getProductionByFactory(String factoryId) =>
+      _productionOrders.where((p) => p.factoryId == factoryId).toList();
+  List<ProductionOrder> getProductionByProduct(String productId) =>
+      _productionOrders.where((p) => p.productId == productId).toList();
+  List<ProductionOrder> getProductionByStatus(String status) =>
+      _productionOrders.where((p) => p.status == status).toList();
+  List<ProductionOrder> get activeProductions =>
+      _productionOrders.where((p) => ProductionStatus.activeStatuses.contains(p.status)).toList();
+
+  Future<void> addProductionOrder(ProductionOrder order) async {
+    await _dataService.addProductionOrder(order);
+    _productionOrders = _dataService.getAllProductionOrders();
+    notifyListeners();
+  }
+
+  Future<void> updateProductionOrder(ProductionOrder order) async {
+    await _dataService.updateProductionOrder(order);
+    _productionOrders = _dataService.getAllProductionOrders();
+    notifyListeners();
+  }
+
+  Future<void> deleteProductionOrder(String id) async {
+    await _dataService.deleteProductionOrder(id);
+    _productionOrders = _dataService.getAllProductionOrders();
+    notifyListeners();
+  }
+
+  /// 生产状态推进 + 三方联动
+  /// planned -> materials -> producing -> quality -> completed
+  /// completed 时自动创建入库记录
+  Future<void> moveProductionStatus(String orderId, String newStatus) async {
+    final order = _productionOrders.firstWhere((p) => p.id == orderId);
+    order.status = newStatus;
+    order.updatedAt = DateTime.now();
+
+    if (newStatus == ProductionStatus.producing && order.startedDate == null) {
+      order.startedDate = DateTime.now();
+    }
+
+    if (newStatus == ProductionStatus.completed) {
+      order.completedDate = DateTime.now();
+      // 三方联动: 生产完成 -> 自动入库
+      if (!order.inventoryLinked) {
+        final invId = generateId();
+        final record = InventoryRecord(
+          id: invId,
+          productId: order.productId,
+          productName: order.productName,
+          productCode: order.productCode,
+          type: 'in',
+          quantity: order.quantity,
+          reason: '生产入库 - ${order.factoryName}',
+          notes: '批次: ${order.batchNumber.isNotEmpty ? order.batchNumber : order.id.substring(0, 8)}',
+        );
+        await _dataService.addInventoryRecord(record);
+        order.inventoryLinked = true;
+        order.linkedInventoryId = invId;
+        _inventoryRecords = _dataService.getAllInventory();
+      }
+    }
+
+    await _dataService.updateProductionOrder(order);
+    _productionOrders = _dataService.getAllProductionOrders();
+    notifyListeners();
+  }
+
+  /// 生产统计
+  Map<String, dynamic> get productionStats {
+    final active = activeProductions;
+    int totalPlanned = 0;
+    for (final p in active) { totalPlanned += p.quantity; }
+    final completed = _productionOrders.where((p) => p.status == ProductionStatus.completed);
+    int totalCompleted = 0;
+    for (final p in completed) { totalCompleted += p.quantity; }
+    return {
+      'activeOrders': active.length,
+      'totalPlannedQty': totalPlanned,
+      'completedOrders': completed.length,
+      'totalCompletedQty': totalCompleted,
+      'factoryCount': _factories.where((f) => f.isActive).length,
+    };
+  }
 }

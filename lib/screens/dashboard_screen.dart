@@ -21,6 +21,7 @@ class DashboardScreen extends StatelessWidget {
             slivers: [
               SliverToBoxAdapter(child: _buildHeader(context)),
               SliverToBoxAdapter(child: _buildKpiCards(stats)),
+              SliverToBoxAdapter(child: _buildProductionSummary(crm)),
               SliverToBoxAdapter(child: _buildSectionTitle('最近动态')),
               SliverToBoxAdapter(child: _buildRecentInteractions(context, crm)),
               SliverToBoxAdapter(child: _buildSectionTitle('重点案件')),
@@ -217,6 +218,51 @@ class DashboardScreen extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+
+  Widget _buildProductionSummary(CrmProvider crm) {
+    final prodStats = crm.productionStats;
+    final activeCount = prodStats['activeOrders'] as int;
+    final completedCount = prodStats['completedOrders'] as int;
+    final totalStock = crm.inventoryStocks.fold<int>(0, (sum, s) => sum + s.currentStock);
+    final orderCount = crm.orders.length;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppTheme.cardBg,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFF00CEC9).withValues(alpha: 0.3)),
+        ),
+        child: Row(children: [
+          const Icon(Icons.sync, color: Color(0xFF00CEC9), size: 16),
+          const SizedBox(width: 8),
+          const Text('供应链', style: TextStyle(color: Color(0xFF00CEC9), fontSize: 12, fontWeight: FontWeight.w600)),
+          const SizedBox(width: 12),
+          _chainChip('生产$activeCount', Icons.precision_manufacturing, const Color(0xFF00CEC9)),
+          const SizedBox(width: 8),
+          _chainChip('库存$totalStock', Icons.warehouse, AppTheme.primaryBlue),
+          const SizedBox(width: 8),
+          _chainChip('订单$orderCount', Icons.receipt, AppTheme.accentGold),
+          const SizedBox(width: 8),
+          _chainChip('完成$completedCount', Icons.check_circle, AppTheme.success),
+        ]),
+      ),
+    );
+  }
+
+  Widget _chainChip(String label, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, color: color, size: 11),
+        const SizedBox(width: 3),
+        Text(label, style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w600)),
+      ]),
     );
   }
 

@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import '../utils/theme.dart';
 import 'dashboard_screen.dart';
 import 'contacts_screen.dart';
-import 'products_screen.dart';
 import 'pipeline_screen.dart';
 import 'network_screen.dart';
-import 'inventory_screen.dart';
+import 'product_inventory_screen.dart';
+import 'production_screen.dart';
 import 'calendar_task_screen.dart';
 import 'team_screen.dart';
 import 'tools_screen.dart';
@@ -20,15 +20,15 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
 
   final _screens = const [
-    DashboardScreen(),       // 0 首页
-    ContactsScreen(),        // 1 人脉
-    NetworkScreen(),         // 2 图谱
-    PipelineScreen(),        // 3 管线+销售 (合并)
-    ProductsScreen(),        // 4 产品
-    InventoryScreen(),       // 5 库存
-    CalendarTaskScreen(),    // 6 日历/任务
-    TeamScreen(),            // 7 团队
-    ToolsScreen(),           // 8 工具
+    DashboardScreen(),           // 0 首页
+    ContactsScreen(),            // 1 人脉
+    NetworkScreen(),             // 2 图谱
+    PipelineScreen(),            // 3 管线+销售
+    ProductInventoryScreen(),    // 4 产品&库存 (合并)
+    ProductionScreen(),          // 5 生产
+    CalendarTaskScreen(),        // 6 任务
+    TeamScreen(),                // 7 团队
+    ToolsScreen(),               // 8 工具
   ];
 
   @override
@@ -51,7 +51,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 _navItem(2, Icons.hub_rounded, '图谱'),
                 _navItem(3, Icons.view_kanban_rounded, '管线'),
                 _navItem(4, Icons.science_rounded, '产品'),
-                _navItem(5, Icons.warehouse_rounded, '库存'),
+                _navItem(5, Icons.precision_manufacturing, '生产'),
                 _navItem(6, Icons.calendar_month, '任务'),
                 _navItem(7, Icons.group_rounded, '团队'),
                 _navItem(8, Icons.build_circle_rounded, '工具'),
