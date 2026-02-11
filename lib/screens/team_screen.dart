@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/crm_provider.dart';
 import '../models/team.dart';
+import '../models/task.dart';
 import '../utils/theme.dart';
 
 class TeamScreen extends StatelessWidget {
@@ -158,6 +159,7 @@ class TeamScreen extends StatelessWidget {
           onSelected: (action) {
             switch (action) {
               case 'edit': _showEditMemberSheet(context, crm, member); break;
+              case 'assign_task': _showAssignTaskSheet(context, crm, member); break;
               case 'toggle':
                 member.isActive = !member.isActive;
                 crm.updateTeamMember(member);
@@ -180,6 +182,7 @@ class TeamScreen extends StatelessWidget {
           },
           itemBuilder: (_) => [
             const PopupMenuItem(value: 'edit', child: Text('编辑', style: TextStyle(color: AppTheme.textPrimary))),
+            const PopupMenuItem(value: 'assign_task', child: Text('分配任务', style: TextStyle(color: AppTheme.primaryBlue))),
             PopupMenuItem(value: 'toggle', child: Text(member.isActive ? '停用' : '启用', style: const TextStyle(color: AppTheme.textPrimary))),
             const PopupMenuItem(value: 'delete', child: Text('删除', style: TextStyle(color: AppTheme.danger))),
           ],
@@ -316,6 +319,98 @@ class TeamScreen extends StatelessWidget {
               )),
               const SizedBox(height: 16),
             ]),
+          );
+        });
+      },
+    );
+  }
+
+  void _showAssignTaskSheet(BuildContext context, CrmProvider crm, TeamMember member) {
+    final titleCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+    final hoursCtrl = TextEditingController(text: '1');
+    String priority = 'medium';
+    DateTime dueDate = DateTime.now().add(const Duration(days: 7));
+
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: AppTheme.cardBg,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) {
+        return StatefulBuilder(builder: (ctx, setModalState) {
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 20, right: 20, top: 20),
+            child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                const Icon(Icons.task_alt, color: AppTheme.primaryBlue, size: 20),
+                const SizedBox(width: 8),
+                Text('分配任务给 ${member.name}', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
+              ]),
+              const SizedBox(height: 14),
+              TextField(controller: titleCtrl, style: const TextStyle(color: AppTheme.textPrimary),
+                decoration: const InputDecoration(labelText: '任务标题 *', prefixIcon: Icon(Icons.task, color: AppTheme.textSecondary, size: 20))),
+              const SizedBox(height: 10),
+              TextField(controller: descCtrl, style: const TextStyle(color: AppTheme.textPrimary), maxLines: 2,
+                decoration: const InputDecoration(labelText: '描述', prefixIcon: Icon(Icons.description, color: AppTheme.textSecondary, size: 20))),
+              const SizedBox(height: 10),
+              const Text('优先级', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
+              const SizedBox(height: 6),
+              Row(children: ['low', 'medium', 'high', 'urgent'].map((p) {
+                Color c;
+                switch (p) {
+                  case 'urgent': c = AppTheme.danger; break;
+                  case 'high': c = AppTheme.warning; break;
+                  case 'medium': c = AppTheme.primaryBlue; break;
+                  default: c = AppTheme.textSecondary; break;
+                }
+                return Padding(padding: const EdgeInsets.only(right: 6), child: ChoiceChip(
+                  label: Text(Task.priorityLabel(p)), selected: priority == p,
+                  onSelected: (_) => setModalState(() => priority = p),
+                  selectedColor: c, backgroundColor: AppTheme.cardBgLight,
+                  labelStyle: TextStyle(color: priority == p ? Colors.white : AppTheme.textPrimary, fontSize: 11),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact,
+                ));
+              }).toList()),
+              const SizedBox(height: 10),
+              Row(children: [
+                Expanded(child: GestureDetector(
+                  onTap: () async {
+                    final picked = await showDatePicker(context: ctx, initialDate: dueDate,
+                      firstDate: DateTime.now().subtract(const Duration(days: 30)),
+                      lastDate: DateTime.now().add(const Duration(days: 365)));
+                    if (picked != null) { setModalState(() => dueDate = picked); }
+                  },
+                  child: Container(padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: AppTheme.cardBgLight, borderRadius: BorderRadius.circular(12)),
+                    child: Row(children: [
+                      const Icon(Icons.calendar_today, color: AppTheme.textSecondary, size: 18),
+                      const SizedBox(width: 8),
+                      Text('${dueDate.month}/${dueDate.day}', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
+                    ])),
+                )),
+                const SizedBox(width: 10),
+                SizedBox(width: 80, child: TextField(controller: hoursCtrl, keyboardType: TextInputType.number,
+                  style: const TextStyle(color: AppTheme.textPrimary),
+                  decoration: const InputDecoration(labelText: '工时', suffixText: 'h', contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10)))),
+              ]),
+              const SizedBox(height: 16),
+              SizedBox(width: double.infinity, child: ElevatedButton(
+                onPressed: () {
+                  if (titleCtrl.text.isEmpty) { return; }
+                  crm.addTask(Task(
+                    id: crm.generateId(), title: titleCtrl.text, description: descCtrl.text,
+                    assigneeId: member.id, assigneeName: member.name,
+                    creatorId: 'james', creatorName: 'James Liu',
+                    priority: priority, dueDate: dueDate,
+                    estimatedHours: double.tryParse(hoursCtrl.text) ?? 0,
+                  ));
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('已分配任务给 ${member.name}'), backgroundColor: AppTheme.success));
+                },
+                child: const Text('创建并分配'),
+              )),
+              const SizedBox(height: 16),
+            ])),
           );
         });
       },

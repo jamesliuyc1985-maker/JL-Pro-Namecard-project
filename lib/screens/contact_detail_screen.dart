@@ -5,6 +5,8 @@ import '../providers/crm_provider.dart';
 import '../models/contact.dart';
 import '../models/deal.dart';
 import '../models/interaction.dart';
+import '../models/contact_assignment.dart';
+import '../models/team.dart';
 import '../utils/theme.dart';
 import '../utils/formatters.dart';
 import 'edit_contact_screen.dart';
@@ -22,6 +24,7 @@ class ContactDetailScreen extends StatelessWidget {
         final deals = crm.getDealsByContact(contactId);
         final interactions = crm.getInteractionsByContact(contactId);
         final relations = crm.getRelationsForContact(contactId);
+        final assignments = crm.getAssignmentsByContact(contactId);
 
         return Scaffold(
           body: SafeArea(
@@ -30,6 +33,7 @@ class ContactDetailScreen extends StatelessWidget {
               SliverToBoxAdapter(child: _buildRelationBadges(contact)),
               SliverToBoxAdapter(child: _buildInfoCards(context, contact)),
               SliverToBoxAdapter(child: _buildActionButtons(context, crm, contact)),
+              SliverToBoxAdapter(child: _buildAssignmentSection(context, crm, contact, assignments)),
               if (relations.isNotEmpty) SliverToBoxAdapter(child: _buildRelationsSection(relations)),
               if (deals.isNotEmpty) SliverToBoxAdapter(child: _buildDealsSection(deals)),
               SliverToBoxAdapter(child: _buildInteractionsSection(context, crm, contact, interactions)),
@@ -220,6 +224,173 @@ class ContactDetailScreen extends StatelessWidget {
 
   void _showSnack(BuildContext context, String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: AppTheme.danger, duration: const Duration(seconds: 2)));
+  }
+
+  // ========== Contact Assignment (Team-Contact Work Stage) ==========
+  Widget _buildAssignmentSection(BuildContext context, CrmProvider crm, Contact contact, List<ContactAssignment> assignments) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Text('负责人 / 工作阶段', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+          const Spacer(),
+          GestureDetector(
+            onTap: () => _showAddAssignmentDialog(context, crm, contact),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(gradient: AppTheme.gradient, borderRadius: BorderRadius.circular(8)),
+              child: const Text('+ 指派', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+            ),
+          ),
+        ]),
+        const SizedBox(height: 8),
+        if (assignments.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12)),
+            child: const Center(child: Text('暂无指派（可选配置）', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12))),
+          )
+        else
+          ...assignments.map((a) {
+            final stageColor = _workStageColor(a.stage);
+            return Container(
+              margin: const EdgeInsets.only(bottom: 6), padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12)),
+              child: Row(children: [
+                Container(
+                  width: 36, height: 36,
+                  decoration: BoxDecoration(color: stageColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(10)),
+                  child: Center(child: Text(a.memberName.isNotEmpty ? a.memberName[0] : '?',
+                    style: TextStyle(color: stageColor, fontWeight: FontWeight.bold, fontSize: 16))),
+                ),
+                const SizedBox(width: 10),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(a.memberName, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
+                  if (a.notes.isNotEmpty) Text(a.notes, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                ])),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(color: stageColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
+                  child: Text(a.stage.label, style: TextStyle(color: stageColor, fontSize: 10, fontWeight: FontWeight.w600)),
+                ),
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, color: AppTheme.textSecondary, size: 16),
+                  color: AppTheme.cardBgLight,
+                  onSelected: (action) {
+                    if (action == 'delete') {
+                      crm.deleteAssignment(a.id);
+                    } else {
+                      // Change stage
+                      final newStage = ContactWorkStage.values.firstWhere((s) => s.name == action);
+                      a.stage = newStage;
+                      a.updatedAt = DateTime.now();
+                      crm.updateAssignment(a);
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    ...ContactWorkStage.values.where((s) => s != a.stage).map((s) => PopupMenuItem(
+                      value: s.name,
+                      child: Row(children: [
+                        Container(width: 8, height: 8, decoration: BoxDecoration(color: _workStageColor(s), shape: BoxShape.circle)),
+                        const SizedBox(width: 8),
+                        Text(s.label, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12)),
+                      ]),
+                    )),
+                    const PopupMenuItem(value: 'delete', child: Text('删除', style: TextStyle(color: AppTheme.danger, fontSize: 12))),
+                  ],
+                ),
+              ]),
+            );
+          }),
+      ]),
+    );
+  }
+
+  Color _workStageColor(ContactWorkStage stage) {
+    switch (stage) {
+      case ContactWorkStage.lead: return AppTheme.textSecondary;
+      case ContactWorkStage.contacted: return AppTheme.primaryBlue;
+      case ContactWorkStage.ongoing: return AppTheme.warning;
+      case ContactWorkStage.negotiation: return AppTheme.primaryPurple;
+      case ContactWorkStage.ordered: return const Color(0xFF00CEC9);
+      case ContactWorkStage.closed: return AppTheme.success;
+    }
+  }
+
+  void _showAddAssignmentDialog(BuildContext context, CrmProvider crm, Contact contact) {
+    String? selectedMemberId;
+    String selectedMemberName = '';
+    ContactWorkStage selectedStage = ContactWorkStage.lead;
+    final notesCtrl = TextEditingController();
+    final members = crm.teamMembers;
+
+    if (members.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先在团队板块中添加成员'), backgroundColor: AppTheme.warning));
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: AppTheme.cardBg,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) {
+        return StatefulBuilder(builder: (ctx, setModalState) {
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 20, right: 20, top: 20),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('指派成员负责 ${contact.name}', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 14),
+              DropdownButtonFormField<String>(
+                initialValue: selectedMemberId,
+                decoration: const InputDecoration(labelText: '选择团队成员', prefixIcon: Icon(Icons.person, color: AppTheme.textSecondary, size: 20)),
+                dropdownColor: AppTheme.cardBgLight,
+                style: const TextStyle(color: AppTheme.textPrimary),
+                items: members.map((m) => DropdownMenuItem(value: m.id, child: Text('${m.name} (${TeamMember.roleLabel(m.role)})', style: const TextStyle(fontSize: 13)))).toList(),
+                onChanged: (v) => setModalState(() {
+                  selectedMemberId = v;
+                  selectedMemberName = members.firstWhere((m) => m.id == v).name;
+                }),
+              ),
+              const SizedBox(height: 12),
+              const Text('工作阶段', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
+              const SizedBox(height: 8),
+              Wrap(spacing: 6, runSpacing: 6, children: ContactWorkStage.values.map((stage) {
+                final color = _workStageColor(stage);
+                return ChoiceChip(
+                  label: Text(stage.label), selected: selectedStage == stage,
+                  onSelected: (_) => setModalState(() => selectedStage = stage),
+                  selectedColor: color, backgroundColor: AppTheme.cardBgLight,
+                  labelStyle: TextStyle(color: selectedStage == stage ? Colors.white : AppTheme.textPrimary, fontSize: 11),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact,
+                );
+              }).toList()),
+              const SizedBox(height: 10),
+              TextField(controller: notesCtrl, style: const TextStyle(color: AppTheme.textPrimary),
+                decoration: const InputDecoration(labelText: '备注', prefixIcon: Icon(Icons.note, color: AppTheme.textSecondary, size: 20))),
+              const SizedBox(height: 16),
+              SizedBox(width: double.infinity, child: ElevatedButton(
+                onPressed: selectedMemberId == null ? null : () {
+                  crm.addAssignment(ContactAssignment(
+                    id: crm.generateId(),
+                    memberId: selectedMemberId!,
+                    memberName: selectedMemberName,
+                    contactId: contact.id,
+                    contactName: contact.name,
+                    stage: selectedStage,
+                    notes: notesCtrl.text,
+                  ));
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('$selectedMemberName 已被指派负责 ${contact.name}'), backgroundColor: AppTheme.success));
+                },
+                child: const Text('确认指派'),
+              )),
+              const SizedBox(height: 16),
+            ]),
+          );
+        });
+      },
+    );
   }
 
   // ========== Sections ==========

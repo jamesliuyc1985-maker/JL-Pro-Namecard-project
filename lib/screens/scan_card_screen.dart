@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../providers/crm_provider.dart';
@@ -108,19 +109,21 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
             child: Column(children: [
               const SizedBox(height: 16),
               Row(children: [
-                Expanded(
-                  child: _actionButton(
-                    icon: Icons.camera_alt,
-                    label: '拍照扫描',
-                    color: AppTheme.primaryPurple,
-                    onTap: () => _pickImage(ImageSource.camera),
+                if (!kIsWeb) ...[
+                  Expanded(
+                    child: _actionButton(
+                      icon: Icons.camera_alt,
+                      label: '拍照扫描',
+                      color: AppTheme.primaryPurple,
+                      onTap: () => _pickImage(ImageSource.camera),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 16),
+                  const SizedBox(width: 16),
+                ],
                 Expanded(
                   child: _actionButton(
                     icon: Icons.photo_library,
-                    label: '相册导入',
+                    label: kIsWeb ? '选择图片' : '相册导入',
                     color: AppTheme.primaryBlue,
                     onTap: () => _pickImage(ImageSource.gallery),
                   ),
@@ -137,15 +140,16 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(14)),
-                child: const Row(children: [
-                  Icon(Icons.lightbulb_outline, color: AppTheme.accentGold, size: 20),
-                  SizedBox(width: 12),
+                child: Row(children: [
+                  const Icon(Icons.lightbulb_outline, color: AppTheme.accentGold, size: 20),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('扫描提示', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
-                      SizedBox(height: 2),
-                      Text('拍照或从相册选择名片照片\n照片获取后可手动录入识别信息',
-                          style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                      const Text('扫描提示', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
+                      const SizedBox(height: 2),
+                      Text(
+                        kIsWeb ? '点击"选择图片"从本地上传名片照片\n选择后可手动录入识别信息' : '拍照或从相册选择名片照片\n照片获取后可手动录入识别信息',
+                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
                     ]),
                   ),
                 ]),
@@ -213,7 +217,6 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
           _imagePath = image.path;
           _isScanning = true;
         });
-        // After picking image, show the form for manual input
         await Future.delayed(const Duration(seconds: 1));
         if (mounted) {
           setState(() {
@@ -221,10 +224,7 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
             _showResult = true;
           });
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('照片获取成功！请填写名片信息'),
-              backgroundColor: AppTheme.success,
-            ),
+            const SnackBar(content: Text('照片获取成功! 请填写名片信息'), backgroundColor: AppTheme.success),
           );
         }
       }
@@ -266,8 +266,7 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
         Wrap(spacing: 8, runSpacing: 8, children: Industry.values.map((ind) {
           final isSelected = _industry == ind;
           return ChoiceChip(
-            label: Text(ind.label),
-            selected: isSelected,
+            label: Text(ind.label), selected: isSelected,
             onSelected: (_) => setState(() => _industry = ind),
             selectedColor: ind.color, backgroundColor: AppTheme.cardBgLight,
             labelStyle: TextStyle(color: isSelected ? Colors.white : AppTheme.textPrimary, fontSize: 12),
@@ -279,8 +278,7 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
         Wrap(spacing: 8, runSpacing: 8, children: MyRelationType.values.map((rel) {
           final isSelected = _myRelation == rel;
           return ChoiceChip(
-            label: Text(rel.label),
-            selected: isSelected,
+            label: Text(rel.label), selected: isSelected,
             onSelected: (_) => setState(() => _myRelation = rel),
             selectedColor: rel.color, backgroundColor: AppTheme.cardBgLight,
             labelStyle: TextStyle(color: isSelected ? Colors.white : AppTheme.textPrimary, fontSize: 12),

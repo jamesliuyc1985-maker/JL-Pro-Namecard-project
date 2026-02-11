@@ -7,6 +7,7 @@ import '../models/product.dart';
 import '../models/inventory.dart';
 import '../models/team.dart';
 import '../models/task.dart';
+import '../models/contact_assignment.dart';
 
 class DataService {
   static const _uuid = Uuid();
@@ -21,6 +22,7 @@ class DataService {
   final List<InventoryRecord> _inventoryCache = [];
   final List<TeamMember> _teamCache = [];
   final List<Task> _taskCache = [];
+  final List<ContactAssignment> _assignmentCache = [];
   bool _productsTableExists = false;
   bool _ordersTableExists = false;
 
@@ -65,6 +67,36 @@ class DataService {
   Future<void> deleteTask(String id) async {
     _taskCache.removeWhere((t) => t.id == id);
   }
+
+  // ========== Contact Assignment CRUD ==========
+  List<ContactAssignment> getAllAssignments() => List.from(_assignmentCache);
+
+  List<ContactAssignment> getAssignmentsByContact(String contactId) =>
+      _assignmentCache.where((a) => a.contactId == contactId).toList();
+
+  List<ContactAssignment> getAssignmentsByMember(String memberId) =>
+      _assignmentCache.where((a) => a.memberId == memberId).toList();
+
+  Future<void> addAssignment(ContactAssignment assignment) async {
+    _assignmentCache.add(assignment);
+  }
+
+  Future<void> updateAssignment(ContactAssignment assignment) async {
+    final idx = _assignmentCache.indexWhere((a) => a.id == assignment.id);
+    if (idx >= 0) { _assignmentCache[idx] = assignment; }
+  }
+
+  Future<void> deleteAssignment(String id) async {
+    _assignmentCache.removeWhere((a) => a.id == id);
+  }
+
+  // ========== Completed Tasks History ==========
+  List<Task> getCompletedTasks() =>
+      _taskCache.where((t) => t.phase == TaskPhase.completed).toList()
+        ..sort((a, b) => (b.completedAt ?? b.updatedAt).compareTo(a.completedAt ?? a.updatedAt));
+
+  List<Task> getTasksByPhase(TaskPhase phase) =>
+      _taskCache.where((t) => t.phase == phase).toList();
 
   Map<String, double> getWorkloadStats() {
     final stats = <String, double>{};

@@ -6,6 +6,7 @@ import '../models/product.dart';
 import '../models/inventory.dart';
 import '../models/team.dart';
 import '../models/task.dart';
+import '../models/contact_assignment.dart';
 import '../services/data_service.dart';
 
 class CrmProvider extends ChangeNotifier {
@@ -19,6 +20,7 @@ class CrmProvider extends ChangeNotifier {
   List<InventoryRecord> _inventoryRecords = [];
   List<TeamMember> _teamMembers = [];
   List<Task> _tasks = [];
+  List<ContactAssignment> _assignments = [];
   Industry? _selectedIndustry;
   String _searchQuery = '';
   bool _isLoading = false;
@@ -52,6 +54,7 @@ class CrmProvider extends ChangeNotifier {
   List<InventoryStock> get inventoryStocks => _dataService.getInventoryStocks();
   List<TeamMember> get teamMembers => _teamMembers;
   List<Task> get tasks => _tasks;
+  List<ContactAssignment> get assignments => _assignments;
   Industry? get selectedIndustry => _selectedIndustry;
   String get searchQuery => _searchQuery;
   bool get isLoading => _isLoading;
@@ -70,6 +73,7 @@ class CrmProvider extends ChangeNotifier {
       _inventoryRecords = _dataService.getAllInventory();
       _teamMembers = _dataService.getAllTeamMembers();
       _tasks = _dataService.getAllTasks();
+      _assignments = _dataService.getAllAssignments();
       _syncStatus = null;
     } catch (e) {
       _syncStatus = 'Loading failed: $e';
@@ -232,6 +236,8 @@ class CrmProvider extends ChangeNotifier {
   List<Task> getTasksByAssignee(String assigneeId) => _tasks.where((t) => t.assigneeId == assigneeId).toList();
   List<Task> getTasksByDate(DateTime date) =>
       _tasks.where((t) => t.dueDate.year == date.year && t.dueDate.month == date.month && t.dueDate.day == date.day).toList();
+  List<Task> getTasksByPhase(TaskPhase phase) => _dataService.getTasksByPhase(phase);
+  List<Task> getCompletedTasks() => _dataService.getCompletedTasks();
   Map<String, double> get workloadStats => _dataService.getWorkloadStats();
 
   Future<void> addTask(Task task) async {
@@ -247,6 +253,28 @@ class CrmProvider extends ChangeNotifier {
   Future<void> deleteTask(String id) async {
     await _dataService.deleteTask(id);
     _tasks = _dataService.getAllTasks();
+    notifyListeners();
+  }
+
+  // Contact Assignment
+  List<ContactAssignment> getAssignmentsByContact(String contactId) =>
+      _assignments.where((a) => a.contactId == contactId).toList();
+  List<ContactAssignment> getAssignmentsByMember(String memberId) =>
+      _assignments.where((a) => a.memberId == memberId).toList();
+
+  Future<void> addAssignment(ContactAssignment assignment) async {
+    await _dataService.addAssignment(assignment);
+    _assignments = _dataService.getAllAssignments();
+    notifyListeners();
+  }
+  Future<void> updateAssignment(ContactAssignment assignment) async {
+    await _dataService.updateAssignment(assignment);
+    _assignments = _dataService.getAllAssignments();
+    notifyListeners();
+  }
+  Future<void> deleteAssignment(String id) async {
+    await _dataService.deleteAssignment(id);
+    _assignments = _dataService.getAllAssignments();
     notifyListeners();
   }
 

@@ -1,3 +1,30 @@
+/// Task phases for workflow management
+enum TaskPhase {
+  assigned('分配', 0),
+  preparing('准备中', 1),
+  started('已启动', 2),
+  ongoing('持续工作', 3),
+  completed('已完成', 4);
+
+  final String label;
+  final int order;
+  const TaskPhase(this.label, this.order);
+}
+
+class TaskHistory {
+  final String fromPhase;
+  final String toPhase;
+  final DateTime timestamp;
+  final String? note;
+
+  TaskHistory({
+    required this.fromPhase,
+    required this.toPhase,
+    DateTime? timestamp,
+    this.note,
+  }) : timestamp = timestamp ?? DateTime.now();
+}
+
 class Task {
   String id;
   String title;
@@ -6,16 +33,19 @@ class Task {
   String assigneeName;
   String creatorId;
   String creatorName;
-  String status; // pending, in_progress, completed, cancelled
+  String status; // kept for backwards compat: pending, in_progress, completed, cancelled
+  TaskPhase phase; // new: assigned, preparing, started, ongoing, completed
   String priority; // low, medium, high, urgent
   DateTime dueDate;
   DateTime createdAt;
   DateTime updatedAt;
+  DateTime? completedAt;
   double estimatedHours;
   double actualHours;
   String? contactId;
   String? dealId;
   List<String> tags;
+  List<TaskHistory> history;
 
   Task({
     required this.id,
@@ -26,19 +56,40 @@ class Task {
     this.creatorId = '',
     this.creatorName = '',
     this.status = 'pending',
+    this.phase = TaskPhase.assigned,
     this.priority = 'medium',
     DateTime? dueDate,
     DateTime? createdAt,
     DateTime? updatedAt,
+    this.completedAt,
     this.estimatedHours = 0,
     this.actualHours = 0,
     this.contactId,
     this.dealId,
     List<String>? tags,
+    List<TaskHistory>? history,
   }) : dueDate = dueDate ?? DateTime.now().add(const Duration(days: 7)),
        createdAt = createdAt ?? DateTime.now(),
        updatedAt = updatedAt ?? DateTime.now(),
-       tags = tags ?? [];
+       tags = tags ?? [],
+       history = history ?? [];
+
+  /// Move to next phase and record history
+  void moveToPhase(TaskPhase newPhase, {String? note}) {
+    final old = phase;
+    history.add(TaskHistory(fromPhase: old.label, toPhase: newPhase.label, note: note));
+    phase = newPhase;
+    updatedAt = DateTime.now();
+    // sync status field
+    if (newPhase == TaskPhase.completed) {
+      status = 'completed';
+      completedAt = DateTime.now();
+    } else if (newPhase == TaskPhase.assigned) {
+      status = 'pending';
+    } else {
+      status = 'in_progress';
+    }
+  }
 
   static String statusLabel(String s) {
     switch (s) {

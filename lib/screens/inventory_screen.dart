@@ -174,6 +174,20 @@ class _InventoryScreenState extends State<InventoryScreen> with SingleTickerProv
               const SizedBox(height: 3),
               Text(stock.productCode, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
             ])),
+            // Quick adjust button
+            GestureDetector(
+              onTap: () => _showQuickAdjustDialog(context, crm, stock),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(color: AppTheme.primaryPurple.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+                child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.tune, color: AppTheme.primaryPurple, size: 14),
+                  SizedBox(width: 4),
+                  Text('调整', style: TextStyle(color: AppTheme.primaryPurple, fontSize: 11, fontWeight: FontWeight.w600)),
+                ]),
+              ),
+            ),
+            const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
@@ -249,6 +263,75 @@ class _InventoryScreenState extends State<InventoryScreen> with SingleTickerProv
               ]),
             ]),
           ),
+        );
+      },
+    );
+  }
+
+  // ========== Quick Adjust Dialog ==========
+  void _showQuickAdjustDialog(BuildContext context, CrmProvider crm, InventoryStock stock) {
+    final qtyCtrl = TextEditingController(text: '${stock.currentStock}');
+    final reasonCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppTheme.cardBg,
+          title: Row(children: [
+            const Icon(Icons.tune, color: AppTheme.primaryPurple, size: 22),
+            const SizedBox(width: 8),
+            Expanded(child: Text('调整 ${stock.productName}', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16))),
+          ]),
+          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('当前库存: ${stock.currentStock}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: qtyCtrl,
+              keyboardType: TextInputType.number,
+              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 20, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+              decoration: InputDecoration(
+                labelText: '目标库存数量',
+                filled: true, fillColor: AppTheme.cardBgLight,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: reasonCtrl,
+              style: const TextStyle(color: AppTheme.textPrimary),
+              decoration: const InputDecoration(labelText: '调整原因', hintText: '盘点/退货/损耗...'),
+            ),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+            ElevatedButton(
+              onPressed: () {
+                final newQty = int.tryParse(qtyCtrl.text) ?? stock.currentStock;
+                if (newQty != stock.currentStock) {
+                  crm.addInventoryRecord(InventoryRecord(
+                    id: crm.generateId(),
+                    productId: stock.productId,
+                    productName: stock.productName,
+                    productCode: stock.productCode,
+                    type: 'adjust',
+                    quantity: newQty,
+                    reason: reasonCtrl.text.isNotEmpty ? reasonCtrl.text : '手动调整',
+                    notes: '${stock.currentStock} → $newQty',
+                  ));
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('${stock.productName} 库存已调整: ${stock.currentStock} → $newQty'),
+                      backgroundColor: AppTheme.success,
+                    ));
+                  }
+                }
+                Navigator.pop(ctx);
+              },
+              child: const Text('确认调整'),
+            ),
+          ],
         );
       },
     );
