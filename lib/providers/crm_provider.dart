@@ -9,9 +9,11 @@ import '../models/task.dart';
 import '../models/contact_assignment.dart';
 import '../models/factory.dart';
 import '../services/data_service.dart';
+import '../services/notification_service.dart';
 
 class CrmProvider extends ChangeNotifier {
   final DataService _dataService;
+  NotificationService? _notificationService;
   List<Contact> _contacts = [];
   List<Deal> _deals = [];
   List<Interaction> _interactions = [];
@@ -30,6 +32,14 @@ class CrmProvider extends ChangeNotifier {
   String? _syncStatus;
 
   CrmProvider(this._dataService);
+
+  void setNotificationService(NotificationService ns) { _notificationService = ns; }
+
+  void _notify(String title, String body, NotificationType type, {String? relatedId}) {
+    _notificationService?.add(CrmNotification(
+      id: generateId(), title: title, body: body, type: type, relatedId: relatedId,
+    ));
+  }
 
   List<Contact> get contacts {
     var list = List<Contact>.from(_contacts);
@@ -137,11 +147,14 @@ class CrmProvider extends ChangeNotifier {
 
   Future<void> moveDealStage(String dealId, DealStage newStage) async {
     final deal = _deals.firstWhere((d) => d.id == dealId);
+    final oldLabel = deal.stage.label;
     deal.stage = newStage;
     deal.updatedAt = DateTime.now();
     if (newStage == DealStage.completed) { deal.probability = 100; }
     if (newStage == DealStage.lost) { deal.probability = 0; }
     await _dataService.saveDeal(deal);
+    _notify('管线变动', '${deal.contactName}: $oldLabel → ${newStage.label} | ¥${deal.amount.toStringAsFixed(0)}',
+      NotificationType.pipelineChange, relatedId: dealId);
     await loadAll();
   }
 
@@ -188,6 +201,8 @@ class CrmProvider extends ChangeNotifier {
       probability: 70,
     );
     await _dataService.saveDeal(deal);
+    _notify('新订单创建', '${order.contactName} 下单 ${order.items.length}项产品, 金额: ¥${order.totalAmount.toStringAsFixed(0)}',
+      NotificationType.orderCreated, relatedId: order.id);
     await loadAll();
   }
 
@@ -216,6 +231,8 @@ class CrmProvider extends ChangeNotifier {
       deal.updatedAt = DateTime.now();
       await _dataService.saveDeal(deal);
     }
+    _notify('订单已出货', '${order.contactName} 的订单已出货，库存已扣减',
+      NotificationType.orderShipped, relatedId: orderId);
     _inventoryRecords = _dataService.getAllInventory();
     await loadAll();
   }
@@ -436,12 +453,43 @@ class CrmProvider extends ChangeNotifier {
         order.inventoryLinked = true;
         order.linkedInventoryId = invId;
         _inventoryRecords = _dataService.getAllInventory();
+        _notify('生产完成', '${order.productName} x${order.quantity} 已完成生产并入库 (工厂: ${order.factoryName})',
+          NotificationType.productionComplete, relatedId: order.id);
       }
     }
 
     await _dataService.updateProductionOrder(order);
     _productionOrders = _dataService.getAllProductionOrders();
     notifyListeners();
+  }
+
+  /// 按渠道(代理/诊所/零售)的销售统计
+  Map<String, Map<String, dynamic>> get channelSalesStats {
+    final result = <String, Map<String, dynamic>>{
+      'agent': {'label': '代理', 'orders': 0, 'amount': 0.0, 'shipped': 0, 'completed': 0},
+      'clinic': {'label': '诊所', 'orders': 0, 'amount': 0.0, 'shipped': 0, 'completed': 0},
+      'retail': {'label': '零售', 'orders': 0, 'amount': 0.0, 'shipped': 0, 'completed': 0},
+    };
+    for (final o in _orders) {
+      final ch = result[o.priceType] ?? result['retail']!;
+      ch['orders'] = (ch['orders'] as int) + 1;
+      ch['amount'] = (ch['amount'] as double) + o.totalAmount;
+      if (o.status == 'shipped') ch['shipped'] = (ch['shipped'] as int) + 1;
+      if (o.status == 'completed') ch['completed'] = (ch['completed'] as int) + 1;
+    }
+    return result;
+  }
+
+  /// 按管线阶段的Deal统计
+  Map<DealStage, Map<String, dynamic>> get pipelineStageStats {
+    final result = <DealStage, Map<String, dynamic>>{};
+    for (final stage in DealStage.values) {
+      final stageDeals = _deals.where((d) => d.stage == stage).toList();
+      double total = 0;
+      for (final d in stageDeals) { total += d.amount; }
+      result[stage] = {'count': stageDeals.length, 'amount': total};
+    }
+    return result;
   }
 
   /// 生产统计

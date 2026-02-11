@@ -37,6 +37,9 @@ enum MyRelationType {
   investor('投资方', Color(0xFF6C5CE7)),
   advisor('顾问', Color(0xFF00B894)),
   supplier('供应商', Color(0xFFFDAA5B)),
+  agent('代理商', Color(0xFFFF6348)),
+  clinic('诊所', Color(0xFF1ABC9C)),
+  retailer('零售商', Color(0xFFE056A0)),
   friend('朋友', Color(0xFF74B9FF)),
   referral('被推荐人', Color(0xFFA29BFE)),
   colleague('同事/同行', Color(0xFF636E72)),
@@ -45,6 +48,9 @@ enum MyRelationType {
   final String label;
   final Color color;
   const MyRelationType(this.label, this.color);
+
+  /// 是否属于医疗产品业务渠道
+  bool get isMedChannel => this == agent || this == clinic || this == retailer;
 }
 
 class Contact {

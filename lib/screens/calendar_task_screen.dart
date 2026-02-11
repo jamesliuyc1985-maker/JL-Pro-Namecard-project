@@ -262,38 +262,42 @@ class _CalendarTaskScreenState extends State<CalendarTaskScreen> with SingleTick
     }
     final isOverdue = task.dueDate.isBefore(DateTime.now()) && task.phase != TaskPhase.completed;
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: AppTheme.cardBgLight,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: isOverdue ? AppTheme.danger.withValues(alpha: 0.5) : color.withValues(alpha: 0.2)),
+    return GestureDetector(
+      onTap: () => _showEditTaskSheet(context, crm, task),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: AppTheme.cardBgLight,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: isOverdue ? AppTheme.danger.withValues(alpha: 0.5) : color.withValues(alpha: 0.2)),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(child: Text(task.title, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13))),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(color: priorityColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(4)),
+              child: Text(Task.priorityLabel(task.priority), style: TextStyle(color: priorityColor, fontSize: 9, fontWeight: FontWeight.w600)),
+            ),
+          ]),
+          const SizedBox(height: 4),
+          Row(children: [
+            Icon(Icons.person_outline, color: AppTheme.textSecondary, size: 12),
+            const SizedBox(width: 3),
+            Text(task.assigneeName.isNotEmpty ? task.assigneeName : '未分配', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+            const SizedBox(width: 8),
+            Icon(Icons.calendar_today, color: isOverdue ? AppTheme.danger : AppTheme.textSecondary, size: 10),
+            const SizedBox(width: 3),
+            Text(DateFormat('MM/dd').format(task.dueDate), style: TextStyle(color: isOverdue ? AppTheme.danger : AppTheme.textSecondary, fontSize: 10)),
+            if (isOverdue) ...[const SizedBox(width: 4), const Text('逾期', style: TextStyle(color: AppTheme.danger, fontSize: 9, fontWeight: FontWeight.bold))],
+            const Spacer(),
+            const Icon(Icons.edit, color: AppTheme.textSecondary, size: 12),
+            const SizedBox(width: 6),
+            _phaseAdvanceButton(context, crm, task),
+          ]),
+        ]),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Expanded(child: Text(task.title, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13))),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-            decoration: BoxDecoration(color: priorityColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(4)),
-            child: Text(Task.priorityLabel(task.priority), style: TextStyle(color: priorityColor, fontSize: 9, fontWeight: FontWeight.w600)),
-          ),
-        ]),
-        const SizedBox(height: 4),
-        Row(children: [
-          Icon(Icons.person_outline, color: AppTheme.textSecondary, size: 12),
-          const SizedBox(width: 3),
-          Text(task.assigneeName.isNotEmpty ? task.assigneeName : '未分配', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
-          const SizedBox(width: 8),
-          Icon(Icons.calendar_today, color: isOverdue ? AppTheme.danger : AppTheme.textSecondary, size: 10),
-          const SizedBox(width: 3),
-          Text(DateFormat('MM/dd').format(task.dueDate), style: TextStyle(color: isOverdue ? AppTheme.danger : AppTheme.textSecondary, fontSize: 10)),
-          if (isOverdue) ...[const SizedBox(width: 4), const Text('逾期', style: TextStyle(color: AppTheme.danger, fontSize: 9, fontWeight: FontWeight.bold))],
-          const Spacer(),
-          // Phase advance button
-          _phaseAdvanceButton(context, crm, task),
-        ]),
-      ]),
     );
   }
 
@@ -506,7 +510,9 @@ class _CalendarTaskScreenState extends State<CalendarTaskScreen> with SingleTick
     final phaseColor = _phaseColor(task.phase);
     final isOverdue = task.dueDate.isBefore(DateTime.now()) && task.phase != TaskPhase.completed;
 
-    return Container(
+    return GestureDetector(
+      onTap: () => _showEditTaskSheet(context, crm, task),
+      child: Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12),
@@ -565,7 +571,7 @@ class _CalendarTaskScreenState extends State<CalendarTaskScreen> with SingleTick
           if (isOverdue) ...[const SizedBox(width: 4), const Text('逾期', style: TextStyle(color: AppTheme.danger, fontSize: 10, fontWeight: FontWeight.bold))],
         ])),
       ]),
-    );
+    ));
   }
 
   Color _phaseColor(TaskPhase phase) {
@@ -679,6 +685,144 @@ class _CalendarTaskScreenState extends State<CalendarTaskScreen> with SingleTick
                     SnackBar(content: Text('任务已创建: ${titleCtrl.text}'), backgroundColor: AppTheme.success));
                 },
                 child: const Text('创建任务'),
+              )),
+              const SizedBox(height: 16),
+            ])),
+          );
+        });
+      },
+    );
+  }
+
+  // ========== Edit Task ==========
+  void _showEditTaskSheet(BuildContext context, CrmProvider crm, Task task) {
+    final titleCtrl = TextEditingController(text: task.title);
+    final descCtrl = TextEditingController(text: task.description);
+    final hoursCtrl = TextEditingController(text: task.estimatedHours > 0 ? '${task.estimatedHours}' : '');
+    final actualCtrl = TextEditingController(text: task.actualHours > 0 ? '${task.actualHours}' : '');
+    String priority = task.priority;
+    String? assigneeId = task.assigneeId.isNotEmpty ? task.assigneeId : null;
+    String assigneeName = task.assigneeName;
+    DateTime dueDate = task.dueDate;
+    TaskPhase phase = task.phase;
+    final members = crm.teamMembers;
+
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: AppTheme.cardBg,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) {
+        return StatefulBuilder(builder: (ctx, setModalState) {
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 20, right: 20, top: 20),
+            child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                const Text('编辑任务', style: TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                IconButton(icon: const Icon(Icons.delete_outline, color: AppTheme.danger, size: 20), onPressed: () {
+                  crm.deleteTask(task.id);
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('任务已删除'), backgroundColor: AppTheme.danger));
+                }),
+              ]),
+              const SizedBox(height: 14),
+              TextField(controller: titleCtrl, style: const TextStyle(color: AppTheme.textPrimary),
+                decoration: const InputDecoration(labelText: '任务标题 *', prefixIcon: Icon(Icons.task, color: AppTheme.textSecondary, size: 20))),
+              const SizedBox(height: 10),
+              TextField(controller: descCtrl, style: const TextStyle(color: AppTheme.textPrimary), maxLines: 2,
+                decoration: const InputDecoration(labelText: '描述', prefixIcon: Icon(Icons.description, color: AppTheme.textSecondary, size: 20))),
+              const SizedBox(height: 10),
+              if (members.isNotEmpty) ...[
+                DropdownButtonFormField<String>(
+                  initialValue: assigneeId,
+                  decoration: const InputDecoration(labelText: '分配给', prefixIcon: Icon(Icons.person, color: AppTheme.textSecondary, size: 20)),
+                  dropdownColor: AppTheme.cardBgLight,
+                  style: const TextStyle(color: AppTheme.textPrimary),
+                  items: members.map((m) => DropdownMenuItem(value: m.id, child: Text('${m.name} (${TeamMember.roleLabel(m.role)})', style: const TextStyle(fontSize: 13)))).toList(),
+                  onChanged: (v) => setModalState(() {
+                    assigneeId = v;
+                    assigneeName = members.firstWhere((m) => m.id == v).name;
+                  }),
+                ),
+                const SizedBox(height: 10),
+              ],
+              // Phase selector
+              const Text('任务阶段', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
+              const SizedBox(height: 6),
+              Wrap(spacing: 6, runSpacing: 6, children: TaskPhase.values.map((p) {
+                final c = _phaseColor(p);
+                return ChoiceChip(
+                  label: Text(p.label), selected: phase == p,
+                  onSelected: (_) => setModalState(() => phase = p),
+                  selectedColor: c, backgroundColor: AppTheme.cardBgLight,
+                  labelStyle: TextStyle(color: phase == p ? Colors.white : AppTheme.textPrimary, fontSize: 11),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact,
+                );
+              }).toList()),
+              const SizedBox(height: 10),
+              const Text('优先级', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
+              const SizedBox(height: 6),
+              Row(children: ['low', 'medium', 'high', 'urgent'].map((p) {
+                Color c;
+                switch (p) {
+                  case 'urgent': c = AppTheme.danger; break;
+                  case 'high': c = AppTheme.warning; break;
+                  case 'medium': c = AppTheme.primaryBlue; break;
+                  default: c = AppTheme.textSecondary; break;
+                }
+                return Padding(padding: const EdgeInsets.only(right: 6), child: ChoiceChip(
+                  label: Text(Task.priorityLabel(p)), selected: priority == p,
+                  onSelected: (_) => setModalState(() => priority = p),
+                  selectedColor: c, backgroundColor: AppTheme.cardBgLight,
+                  labelStyle: TextStyle(color: priority == p ? Colors.white : AppTheme.textPrimary, fontSize: 11),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact,
+                ));
+              }).toList()),
+              const SizedBox(height: 10),
+              Row(children: [
+                Expanded(child: GestureDetector(
+                  onTap: () async {
+                    final picked = await showDatePicker(context: ctx, initialDate: dueDate,
+                      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                      lastDate: DateTime.now().add(const Duration(days: 365)));
+                    if (picked != null) { setModalState(() => dueDate = picked); }
+                  },
+                  child: Container(padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: AppTheme.cardBgLight, borderRadius: BorderRadius.circular(12)),
+                    child: Row(children: [
+                      const Icon(Icons.calendar_today, color: AppTheme.textSecondary, size: 18),
+                      const SizedBox(width: 8),
+                      Text(DateFormat('yyyy/MM/dd').format(dueDate), style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
+                    ])),
+                )),
+                const SizedBox(width: 8),
+                SizedBox(width: 70, child: TextField(controller: hoursCtrl, keyboardType: TextInputType.number,
+                  style: const TextStyle(color: AppTheme.textPrimary),
+                  decoration: const InputDecoration(labelText: '预估h', contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)))),
+                const SizedBox(width: 8),
+                SizedBox(width: 70, child: TextField(controller: actualCtrl, keyboardType: TextInputType.number,
+                  style: const TextStyle(color: AppTheme.textPrimary),
+                  decoration: const InputDecoration(labelText: '实际h', contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)))),
+              ]),
+              const SizedBox(height: 16),
+              SizedBox(width: double.infinity, child: ElevatedButton(
+                onPressed: () {
+                  if (titleCtrl.text.isEmpty) { return; }
+                  task.title = titleCtrl.text;
+                  task.description = descCtrl.text;
+                  task.assigneeId = assigneeId ?? '';
+                  task.assigneeName = assigneeName;
+                  task.priority = priority;
+                  task.dueDate = dueDate;
+                  task.estimatedHours = double.tryParse(hoursCtrl.text) ?? 0;
+                  task.actualHours = double.tryParse(actualCtrl.text) ?? 0;
+                  if (phase != task.phase) { task.moveToPhase(phase, note: '手动调整'); }
+                  task.updatedAt = DateTime.now();
+                  crm.updateTask(task);
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('任务已更新: ${titleCtrl.text}'), backgroundColor: AppTheme.success));
+                },
+                child: const Text('保存修改'),
               )),
               const SizedBox(height: 16),
             ])),

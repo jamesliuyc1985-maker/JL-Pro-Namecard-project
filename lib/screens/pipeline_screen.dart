@@ -437,7 +437,7 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
                       }
                       return OrderItem(productId: p.id, productName: p.name, productCode: p.code, quantity: e.value, unitPrice: up, subtotal: up * e.value);
                     }).toList();
-                    final order = SalesOrder(id: crm.generateId(), contactId: selectedContactId!, contactName: selectedContactName, items: items, totalAmount: total);
+                    final order = SalesOrder(id: crm.generateId(), contactId: selectedContactId!, contactName: selectedContactName, items: items, totalAmount: total, priceType: priceType);
                     crm.createOrderWithDeal(order);
                     Navigator.pop(ctx);
                     if (context.mounted) {

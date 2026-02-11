@@ -108,6 +108,7 @@ class SalesOrder {
   String contactId;
   String contactName;
   String status; // draft, confirmed, shipped, completed, cancelled
+  String priceType; // agent, clinic, retail
   List<OrderItem> items;
   double totalAmount;
   String currency;
@@ -120,6 +121,7 @@ class SalesOrder {
     required this.contactId,
     required this.contactName,
     this.status = 'draft',
+    this.priceType = 'retail',
     List<OrderItem>? items,
     this.totalAmount = 0,
     this.currency = 'JPY',
@@ -142,6 +144,7 @@ class SalesOrder {
     'contact_id': contactId,
     'contact_name': contactName,
     'status': status,
+    'price_type': priceType,
     'items': items.map((i) => i.toJson()).toList(),
     'total_amount': totalAmount,
     'currency': currency,
@@ -161,6 +164,7 @@ class SalesOrder {
       contactId: json['contact_id'] as String? ?? '',
       contactName: json['contact_name'] as String? ?? '',
       status: json['status'] as String? ?? 'draft',
+      priceType: json['price_type'] as String? ?? 'retail',
       items: parsedItems,
       totalAmount: (json['total_amount'] as num?)?.toDouble() ?? 0,
       currency: json['currency'] as String? ?? 'JPY',
