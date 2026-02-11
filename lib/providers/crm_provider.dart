@@ -13,6 +13,7 @@ class CrmProvider extends ChangeNotifier {
   Industry? _selectedIndustry;
   String _searchQuery = '';
   bool _isLoading = false;
+  String? _syncStatus;
 
   CrmProvider(this._dataService);
 
@@ -41,14 +42,39 @@ class CrmProvider extends ChangeNotifier {
   Industry? get selectedIndustry => _selectedIndustry;
   String get searchQuery => _searchQuery;
   bool get isLoading => _isLoading;
+  String? get syncStatus => _syncStatus;
 
   Future<void> loadAll() async {
     _isLoading = true;
     notifyListeners();
-    _contacts = _dataService.getAllContacts();
-    _deals = _dataService.getAllDeals();
-    _interactions = _dataService.getAllInteractions();
-    _relations = _dataService.getAllRelations();
+    try {
+      _contacts = _dataService.getAllContacts();
+      _deals = _dataService.getAllDeals();
+      _interactions = _dataService.getAllInteractions();
+      _relations = _dataService.getAllRelations();
+      _syncStatus = null;
+    } catch (e) {
+      _syncStatus = '同步失败: $e';
+    }
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  /// Pull latest data from Supabase cloud
+  Future<void> syncFromCloud() async {
+    _isLoading = true;
+    _syncStatus = '正在同步...';
+    notifyListeners();
+    try {
+      await _dataService.syncFromCloud();
+      _contacts = _dataService.getAllContacts();
+      _deals = _dataService.getAllDeals();
+      _interactions = _dataService.getAllInteractions();
+      _relations = _dataService.getAllRelations();
+      _syncStatus = '同步成功';
+    } catch (e) {
+      _syncStatus = '同步失败: $e';
+    }
     _isLoading = false;
     notifyListeners();
   }

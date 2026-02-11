@@ -57,6 +57,22 @@ class DashboardScreen extends StatelessWidget {
             ),
           ),
           IconButton(
+            icon: const Icon(Icons.cloud_sync_rounded, color: AppTheme.primaryBlue, size: 24),
+            onPressed: () async {
+              final crm = Provider.of<CrmProvider>(context, listen: false);
+              await crm.syncFromCloud();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(crm.syncStatus ?? '同步完成'),
+                    backgroundColor: crm.syncStatus?.contains('失败') == true ? Colors.red : AppTheme.success,
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+          ),
+          IconButton(
             icon: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(gradient: AppTheme.gradient, borderRadius: BorderRadius.circular(10)),
