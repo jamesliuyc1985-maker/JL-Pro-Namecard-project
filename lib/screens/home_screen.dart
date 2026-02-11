@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import '../utils/theme.dart';
 import 'dashboard_screen.dart';
 import 'contacts_screen.dart';
+import 'products_screen.dart';
+import 'sales_screen.dart';
 import 'pipeline_screen.dart';
-import 'analytics_screen.dart';
-import 'network_screen.dart';
+import 'tools_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -18,9 +19,10 @@ class _HomeScreenState extends State<HomeScreen> {
   final _screens = const [
     DashboardScreen(),
     ContactsScreen(),
+    ProductsScreen(),
+    SalesScreen(),
     PipelineScreen(),
-    NetworkScreen(),
-    AnalyticsScreen(),
+    ToolsScreen(),
   ];
 
   @override
@@ -40,15 +42,16 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _navItem(0, Icons.dashboard_rounded, '首页'),
                 _navItem(1, Icons.people_rounded, '人脉'),
-                _navItem(2, Icons.view_kanban_rounded, '管线'),
-                _navItem(3, Icons.hub_rounded, '图谱'),
-                _navItem(4, Icons.analytics_rounded, '分析'),
+                _navItem(2, Icons.science_rounded, '产品'),
+                _navItem(3, Icons.receipt_long_rounded, '销售'),
+                _navItem(4, Icons.view_kanban_rounded, '管线'),
+                _navItem(5, Icons.build_circle_rounded, '工具'),
               ],
             ),
           ),
@@ -64,7 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
           gradient: isSelected ? AppTheme.gradient : null,
@@ -72,10 +75,10 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: isSelected ? Colors.white : AppTheme.textSecondary, size: 22),
+            Icon(icon, color: isSelected ? Colors.white : AppTheme.textSecondary, size: 20),
             if (isSelected) ...[
-              const SizedBox(width: 6),
-              Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12)),
+              const SizedBox(width: 4),
+              Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 11)),
             ],
           ],
         ),

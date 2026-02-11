@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../models/contact.dart';
 import '../models/deal.dart';
 import '../models/interaction.dart';
+import '../models/product.dart';
 import '../services/data_service.dart';
 
 class CrmProvider extends ChangeNotifier {
@@ -10,6 +11,8 @@ class CrmProvider extends ChangeNotifier {
   List<Deal> _deals = [];
   List<Interaction> _interactions = [];
   List<ContactRelation> _relations = [];
+  List<Product> _products = [];
+  List<SalesOrder> _orders = [];
   Industry? _selectedIndustry;
   String _searchQuery = '';
   bool _isLoading = false;
@@ -39,6 +42,8 @@ class CrmProvider extends ChangeNotifier {
   List<Deal> get deals => _deals;
   List<Interaction> get interactions => _interactions;
   List<ContactRelation> get relations => _relations;
+  List<Product> get products => _products;
+  List<SalesOrder> get orders => _orders;
   Industry? get selectedIndustry => _selectedIndustry;
   String get searchQuery => _searchQuery;
   bool get isLoading => _isLoading;
@@ -52,18 +57,19 @@ class CrmProvider extends ChangeNotifier {
       _deals = _dataService.getAllDeals();
       _interactions = _dataService.getAllInteractions();
       _relations = _dataService.getAllRelations();
+      _products = _dataService.getAllProducts();
+      _orders = _dataService.getAllOrders();
       _syncStatus = null;
     } catch (e) {
-      _syncStatus = '同步失败: $e';
+      _syncStatus = 'Loading failed: $e';
     }
     _isLoading = false;
     notifyListeners();
   }
 
-  /// Pull latest data from Supabase cloud
   Future<void> syncFromCloud() async {
     _isLoading = true;
-    _syncStatus = '正在同步...';
+    _syncStatus = 'Syncing...';
     notifyListeners();
     try {
       await _dataService.syncFromCloud();
@@ -71,9 +77,11 @@ class CrmProvider extends ChangeNotifier {
       _deals = _dataService.getAllDeals();
       _interactions = _dataService.getAllInteractions();
       _relations = _dataService.getAllRelations();
-      _syncStatus = '同步成功';
+      _products = _dataService.getAllProducts();
+      _orders = _dataService.getAllOrders();
+      _syncStatus = 'Sync OK';
     } catch (e) {
-      _syncStatus = '同步失败: $e';
+      _syncStatus = 'Sync failed: $e';
     }
     _isLoading = false;
     notifyListeners();
@@ -171,6 +179,41 @@ class CrmProvider extends ChangeNotifier {
 
   Future<void> deleteInteraction(String id) async {
     await _dataService.deleteInteraction(id);
+    await loadAll();
+  }
+
+  // Product
+  Product? getProduct(String id) => _dataService.getProduct(id);
+
+  List<Product> getProductsByCategory(String category) =>
+      _products.where((p) => p.category == category).toList();
+
+  Future<void> addProduct(Product product) async {
+    await _dataService.saveProduct(product);
+    await loadAll();
+  }
+
+  Future<void> deleteProduct(String id) async {
+    await _dataService.deleteProduct(id);
+    await loadAll();
+  }
+
+  // Sales Order
+  List<SalesOrder> getOrdersByContact(String contactId) =>
+      _orders.where((o) => o.contactId == contactId).toList();
+
+  Future<void> addOrder(SalesOrder order) async {
+    await _dataService.saveOrder(order);
+    await loadAll();
+  }
+
+  Future<void> updateOrder(SalesOrder order) async {
+    await _dataService.saveOrder(order);
+    await loadAll();
+  }
+
+  Future<void> deleteOrder(String id) async {
+    await _dataService.deleteOrder(id);
     await loadAll();
   }
 

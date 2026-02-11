@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../providers/crm_provider.dart';
 import '../models/contact.dart';
 import '../models/deal.dart';
@@ -24,9 +25,9 @@ class ContactDetailScreen extends StatelessWidget {
         return Scaffold(
           body: SafeArea(
             child: CustomScrollView(slivers: [
-              SliverToBoxAdapter(child: _buildHeader(context, contact)),
+              SliverToBoxAdapter(child: _buildHeader(context, crm, contact)),
               SliverToBoxAdapter(child: _buildRelationBadges(contact)),
-              SliverToBoxAdapter(child: _buildInfoCards(contact)),
+              SliverToBoxAdapter(child: _buildInfoCards(context, contact)),
               SliverToBoxAdapter(child: _buildActionButtons(context, crm, contact)),
               if (relations.isNotEmpty) SliverToBoxAdapter(child: _buildRelationsSection(relations)),
               if (deals.isNotEmpty) SliverToBoxAdapter(child: _buildDealsSection(deals)),
@@ -40,7 +41,7 @@ class ContactDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader(BuildContext context, Contact contact) {
+  Widget _buildHeader(BuildContext context, CrmProvider crm, Contact contact) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -50,6 +51,10 @@ class ContactDetailScreen extends StatelessWidget {
         Row(children: [
           IconButton(icon: const Icon(Icons.arrow_back_ios, color: AppTheme.textPrimary), onPressed: () => Navigator.pop(context)),
           const Spacer(),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: AppTheme.danger, size: 22),
+            onPressed: () => _confirmDelete(context, crm, contact),
+          ),
         ]),
         const SizedBox(height: 8),
         Container(
@@ -66,6 +71,31 @@ class ContactDetailScreen extends StatelessWidget {
         const SizedBox(height: 6),
         Text('${contact.company} | ${contact.position}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
       ]),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, CrmProvider crm, Contact contact) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cardBg,
+        title: const Text('删除联系人', style: TextStyle(color: AppTheme.textPrimary)),
+        content: Text('确定删除 ${contact.name}？\n相关的互动记录和关系也将被删除。', style: const TextStyle(color: AppTheme.textSecondary)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          TextButton(
+            onPressed: () {
+              crm.deleteContact(contact.id);
+              Navigator.pop(ctx);
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('${contact.name} 已删除'), backgroundColor: AppTheme.danger),
+              );
+            },
+            child: const Text('删除', style: TextStyle(color: AppTheme.danger)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -94,12 +124,12 @@ class ContactDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoCards(Contact contact) {
+  Widget _buildInfoCards(BuildContext context, Contact contact) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(children: [
-        if (contact.phone.isNotEmpty) _infoRow(Icons.phone, contact.phone, AppTheme.primaryBlue),
-        if (contact.email.isNotEmpty) _infoRow(Icons.email, contact.email, AppTheme.primaryPurple),
+        if (contact.phone.isNotEmpty) _infoRowTappable(Icons.phone, contact.phone, AppTheme.primaryBlue, () => _makeCall(context, contact.phone)),
+        if (contact.email.isNotEmpty) _infoRowTappable(Icons.email, contact.email, AppTheme.primaryPurple, () => _sendEmail(context, contact.email, contact.name)),
         if (contact.address.isNotEmpty) _infoRow(Icons.location_on, contact.address, AppTheme.success),
         if (contact.referredBy.isNotEmpty) _infoRow(Icons.handshake, '引荐人: ${contact.referredBy}', AppTheme.warning),
       ]),
@@ -114,15 +144,32 @@ class ContactDetailScreen extends StatelessWidget {
     );
   }
 
+  Widget _infoRowTappable(IconData icon, String text, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 6), padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12)),
+        child: Row(children: [
+          Icon(icon, color: color, size: 18), const SizedBox(width: 12),
+          Expanded(child: Text(text, style: TextStyle(color: color, fontSize: 13, decoration: TextDecoration.underline))),
+          Icon(Icons.open_in_new, color: color.withValues(alpha: 0.6), size: 14),
+        ]),
+      ),
+    );
+  }
+
   Widget _buildActionButtons(BuildContext context, CrmProvider crm, Contact contact) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(children: [
-        Expanded(child: _actionBtn(Icons.phone, '电话', AppTheme.primaryBlue, () {})),
+        Expanded(child: _actionBtn(Icons.phone, '电话', AppTheme.primaryBlue, () => _makeCall(context, contact.phone))),
         const SizedBox(width: 8),
-        Expanded(child: _actionBtn(Icons.email, '邮件', AppTheme.primaryPurple, () {})),
+        Expanded(child: _actionBtn(Icons.sms, '短信', AppTheme.success, () => _sendSms(context, contact.phone))),
         const SizedBox(width: 8),
-        Expanded(child: _actionBtn(Icons.note_add, '记录', AppTheme.success, () => _showAddInteractionDialog(context, crm, contact))),
+        Expanded(child: _actionBtn(Icons.email, '邮件', AppTheme.primaryPurple, () => _sendEmail(context, contact.email, contact.name))),
+        const SizedBox(width: 8),
+        Expanded(child: _actionBtn(Icons.note_add, '记录', AppTheme.warning, () => _showAddInteractionDialog(context, crm, contact))),
       ]),
     );
   }
@@ -138,6 +185,27 @@ class ContactDetailScreen extends StatelessWidget {
     );
   }
 
+  // ========== Communication ==========
+  void _makeCall(BuildContext context, String phone) async {
+    if (phone.isEmpty) { _showSnack(context, '无电话号码'); return; }
+    try { await launchUrl(Uri.parse('tel:$phone')); } catch (_) { if (context.mounted) _showSnack(context, '无法拨打 $phone'); }
+  }
+
+  void _sendSms(BuildContext context, String phone) async {
+    if (phone.isEmpty) { _showSnack(context, '无电话号码'); return; }
+    try { await launchUrl(Uri.parse('sms:$phone')); } catch (_) { if (context.mounted) _showSnack(context, '无法发送短信'); }
+  }
+
+  void _sendEmail(BuildContext context, String email, String name) async {
+    if (email.isEmpty) { _showSnack(context, '无邮箱地址'); return; }
+    try { await launchUrl(Uri.parse('mailto:$email?subject=Re: $name')); } catch (_) { if (context.mounted) _showSnack(context, '无法发送邮件'); }
+  }
+
+  void _showSnack(BuildContext context, String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: AppTheme.danger, duration: const Duration(seconds: 2)));
+  }
+
+  // ========== Sections ==========
   Widget _buildRelationsSection(List<ContactRelation> relations) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -148,8 +216,7 @@ class ContactDetailScreen extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: 6), padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12)),
           child: Row(children: [
-            const Icon(Icons.link, color: AppTheme.accentGold, size: 16),
-            const SizedBox(width: 8),
+            const Icon(Icons.link, color: AppTheme.accentGold, size: 16), const SizedBox(width: 8),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('${r.fromName} ↔ ${r.toName}', style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
               if (r.description.isNotEmpty) Text(r.description, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
