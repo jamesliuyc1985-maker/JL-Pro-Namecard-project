@@ -5,6 +5,7 @@ import '../providers/crm_provider.dart';
 import '../models/contact.dart';
 import '../models/deal.dart';
 import '../models/interaction.dart';
+import '../models/product.dart';
 import '../models/contact_assignment.dart';
 import '../models/team.dart';
 import '../utils/theme.dart';
@@ -25,6 +26,7 @@ class ContactDetailScreen extends StatelessWidget {
         final interactions = crm.getInteractionsByContact(contactId);
         final relations = crm.getRelationsForContact(contactId);
         final assignments = crm.getAssignmentsByContact(contactId);
+        final salesStats = crm.getContactSalesStats(contactId);
 
         return Scaffold(
           body: SafeArea(
@@ -33,6 +35,10 @@ class ContactDetailScreen extends StatelessWidget {
               SliverToBoxAdapter(child: _buildRelationBadges(contact)),
               SliverToBoxAdapter(child: _buildInfoCards(context, contact)),
               SliverToBoxAdapter(child: _buildActionButtons(context, crm, contact)),
+              // === 销售统计板块 (新增) ===
+              SliverToBoxAdapter(child: _buildSalesStatsSection(salesStats)),
+              // === 合作历史/订单板块 (新增) ===
+              SliverToBoxAdapter(child: _buildOrderHistorySection(crm, salesStats)),
               SliverToBoxAdapter(child: _buildAssignmentSection(context, crm, contact, assignments)),
               if (relations.isNotEmpty) SliverToBoxAdapter(child: _buildRelationsSection(relations)),
               if (deals.isNotEmpty) SliverToBoxAdapter(child: _buildDealsSection(deals)),
@@ -194,6 +200,164 @@ class ContactDetailScreen extends StatelessWidget {
     );
   }
 
+  // ========== 销售统计板块 (新增) ==========
+  Widget _buildSalesStatsSection(Map<String, dynamic> stats) {
+    final int totalOrders = stats['totalOrders'] ?? 0;
+    final double totalAmount = (stats['totalAmount'] ?? 0).toDouble();
+    final int completedOrders = stats['completedOrders'] ?? 0;
+    final double completedAmount = (stats['completedAmount'] ?? 0).toDouble();
+    final int activeDeals = stats['activeDeals'] ?? 0;
+    final double pipelineValue = (stats['pipelineValue'] ?? 0).toDouble();
+
+    if (totalOrders == 0 && activeDeals == 0) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Icon(Icons.analytics, color: AppTheme.accentGold, size: 18),
+            const SizedBox(width: 6),
+            const Text('销售统计', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+          ]),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12)),
+            child: const Center(child: Text('暂无销售记录', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13))),
+          ),
+        ]),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.analytics, color: AppTheme.accentGold, size: 18),
+          const SizedBox(width: 6),
+          const Text('销售统计', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+        ]),
+        const SizedBox(height: 8),
+        // KPI row
+        Row(children: [
+          Expanded(child: _statCard('总订单', '$totalOrders', AppTheme.primaryPurple, Icons.receipt_long)),
+          const SizedBox(width: 8),
+          Expanded(child: _statCard('订单总额', Formatters.currency(totalAmount), AppTheme.accentGold, Icons.monetization_on)),
+        ]),
+        const SizedBox(height: 8),
+        Row(children: [
+          Expanded(child: _statCard('已完成', '$completedOrders 单', AppTheme.success, Icons.check_circle)),
+          const SizedBox(width: 8),
+          Expanded(child: _statCard('成交额', Formatters.currency(completedAmount), AppTheme.success, Icons.paid)),
+        ]),
+        const SizedBox(height: 8),
+        Row(children: [
+          Expanded(child: _statCard('进行中', '$activeDeals 案件', AppTheme.primaryBlue, Icons.trending_up)),
+          const SizedBox(width: 8),
+          Expanded(child: _statCard('管线价值', Formatters.currency(pipelineValue), AppTheme.warning, Icons.account_balance_wallet)),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _statCard(String label, String value, Color color, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.cardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(children: [
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+          child: Icon(icon, color: color, size: 16),
+        ),
+        const SizedBox(width: 8),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
+          Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+        ])),
+      ]),
+    );
+  }
+
+  // ========== 合作历史/订单板块 (新增) ==========
+  Widget _buildOrderHistorySection(CrmProvider crm, Map<String, dynamic> stats) {
+    final List<SalesOrder> contactOrders = (stats['orders'] as List<SalesOrder>?) ?? [];
+    if (contactOrders.isEmpty) return const SizedBox.shrink();
+
+    // 按时间倒序
+    final sorted = List<SalesOrder>.from(contactOrders)..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.history, color: AppTheme.primaryBlue, size: 18),
+          const SizedBox(width: 6),
+          Text('合作历史 (${sorted.length}单)', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+        ]),
+        const SizedBox(height: 8),
+        ...sorted.map((order) {
+          final statusColor = _orderStatusColor(order.status);
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppTheme.cardBg,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Icon(Icons.receipt, color: statusColor, size: 14),
+                const SizedBox(width: 6),
+                Expanded(child: Text(
+                  '订单 ${order.id.length > 8 ? order.id.substring(0, 8) : order.id}',
+                  style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13),
+                )),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
+                  child: Text(SalesOrder.statusLabel(order.status), style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.w600)),
+                ),
+              ]),
+              const SizedBox(height: 6),
+              // 产品明细
+              ...order.items.map((item) => Padding(
+                padding: const EdgeInsets.only(left: 20, bottom: 2),
+                child: Row(children: [
+                  const Icon(Icons.circle, color: AppTheme.textSecondary, size: 4),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text('${item.productName} x${item.quantity}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11))),
+                  Text(Formatters.currency(item.subtotal), style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                ]),
+              )),
+              const SizedBox(height: 4),
+              Row(children: [
+                Text(Formatters.dateShort(order.createdAt), style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+                const Spacer(),
+                Text(Formatters.currency(order.totalAmount), style: const TextStyle(color: AppTheme.accentGold, fontWeight: FontWeight.bold, fontSize: 14)),
+              ]),
+            ]),
+          );
+        }),
+      ]),
+    );
+  }
+
+  Color _orderStatusColor(String status) {
+    switch (status) {
+      case 'draft': return AppTheme.textSecondary;
+      case 'confirmed': return AppTheme.warning;
+      case 'shipped': return const Color(0xFF74B9FF);
+      case 'completed': return AppTheme.success;
+      case 'cancelled': return AppTheme.danger;
+      default: return AppTheme.textSecondary;
+    }
+  }
+
   // ========== Communication ==========
   void _makeCall(BuildContext context, String phone) async {
     if (phone.isEmpty) { _showSnack(context, '无电话号码'); return; }
@@ -280,7 +444,6 @@ class ContactDetailScreen extends StatelessWidget {
                     if (action == 'delete') {
                       crm.deleteAssignment(a.id);
                     } else {
-                      // Change stage
                       final newStage = ContactWorkStage.values.firstWhere((s) => s.name == action);
                       a.stage = newStage;
                       a.updatedAt = DateTime.now();
@@ -424,7 +587,7 @@ class ContactDetailScreen extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('关联案件', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+        const Text('销售管线', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         ...deals.map((deal) => Container(
           margin: const EdgeInsets.only(bottom: 8), padding: const EdgeInsets.all(14),

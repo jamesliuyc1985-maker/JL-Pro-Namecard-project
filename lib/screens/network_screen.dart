@@ -28,13 +28,14 @@ class _NetworkScreenState extends State<NetworkScreen> {
       builder: (context, crm, _) {
         final contacts = crm.allContacts;
         final selectedContact = _selectedContactId != null ? crm.getContact(_selectedContactId!) : null;
+        final salesContactIds = crm.contactsWithSales;
 
         return SafeArea(
           child: Column(children: [
             _buildHeader(context, crm),
-            if (selectedContact != null) _buildSelectedInfo(context, crm, selectedContact),
-            _buildLegend(),
-            Expanded(child: _buildNetworkGraph(context, crm, contacts)),
+            if (selectedContact != null) _buildSelectedInfo(context, crm, selectedContact, salesContactIds),
+            _buildLegend(salesContactIds.length),
+            Expanded(child: _buildNetworkGraph(context, crm, contacts, salesContactIds)),
             _buildRelationsList(crm),
           ]),
         );
@@ -65,7 +66,7 @@ class _NetworkScreenState extends State<NetworkScreen> {
     );
   }
 
-  Widget _buildLegend() {
+  Widget _buildLegend(int salesCount) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: SizedBox(
@@ -75,6 +76,21 @@ class _NetworkScreenState extends State<NetworkScreen> {
           children: [
             _legendItem('我', AppTheme.accentGold),
             ...MyRelationType.values.take(6).map((r) => _legendItem(r.label, r.color)),
+            // 销售线索高光图例
+            Container(
+              margin: const EdgeInsets.only(right: 10),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Container(
+                  width: 10, height: 10,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppTheme.accentGold, width: 2),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text('销售线索 ($salesCount)', style: const TextStyle(color: AppTheme.accentGold, fontSize: 10, fontWeight: FontWeight.w600)),
+              ]),
+            ),
           ],
         ),
       ),
@@ -92,14 +108,15 @@ class _NetworkScreenState extends State<NetworkScreen> {
     );
   }
 
-  Widget _buildSelectedInfo(BuildContext context, CrmProvider crm, Contact contact) {
+  Widget _buildSelectedInfo(BuildContext context, CrmProvider crm, Contact contact, Set<String> salesIds) {
     final relatedRelations = crm.getRelationsForContact(contact.id);
+    final hasSales = salesIds.contains(contact.id);
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: contact.myRelation.color.withValues(alpha: 0.5)),
+        border: Border.all(color: hasSales ? AppTheme.accentGold : contact.myRelation.color.withValues(alpha: 0.5), width: hasSales ? 2 : 1),
       ),
       child: Row(children: [
         Container(
@@ -109,7 +126,21 @@ class _NetworkScreenState extends State<NetworkScreen> {
         ),
         const SizedBox(width: 10),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(contact.name, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold, fontSize: 14)),
+          Row(children: [
+            Text(contact.name, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold, fontSize: 14)),
+            if (hasSales) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(color: AppTheme.accentGold.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(6)),
+                child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.local_fire_department, color: AppTheme.accentGold, size: 10),
+                  SizedBox(width: 2),
+                  Text('销售线索', style: TextStyle(color: AppTheme.accentGold, fontSize: 9, fontWeight: FontWeight.w600)),
+                ]),
+              ),
+            ],
+          ]),
           Text('${contact.myRelation.label} | ${contact.company} | 关联${relatedRelations.length}人',
               style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
         ])),
@@ -121,7 +152,7 @@ class _NetworkScreenState extends State<NetworkScreen> {
     );
   }
 
-  Widget _buildNetworkGraph(BuildContext context, CrmProvider crm, List<Contact> contacts) {
+  Widget _buildNetworkGraph(BuildContext context, CrmProvider crm, List<Contact> contacts, Set<String> salesIds) {
     return InteractiveViewer(
       transformationController: _transformController,
       boundaryMargin: const EdgeInsets.all(200),
@@ -137,6 +168,7 @@ class _NetworkScreenState extends State<NetworkScreen> {
               relations: crm.relations,
               selectedId: _selectedContactId,
               centerSize: size,
+              salesContactIds: salesIds,
             ),
             child: SizedBox(
               width: size.width, height: size.height,
@@ -161,7 +193,7 @@ class _NetworkScreenState extends State<NetworkScreen> {
                     ),
                   ),
                   // Contact nodes
-                  ..._buildContactNodes(contacts, size),
+                  ..._buildContactNodes(contacts, size, salesIds),
                 ],
               ),
             ),
@@ -171,7 +203,7 @@ class _NetworkScreenState extends State<NetworkScreen> {
     );
   }
 
-  List<Widget> _buildContactNodes(List<Contact> contacts, Size size) {
+  List<Widget> _buildContactNodes(List<Contact> contacts, Size size, Set<String> salesIds) {
     final center = Offset(size.width / 2, size.height / 2);
     final widgets = <Widget>[];
 
@@ -187,6 +219,7 @@ class _NetworkScreenState extends State<NetworkScreen> {
         final y = center.dy + radius * sin(angle) - nodeSize / 2;
         final contact = list[i];
         final isSelected = _selectedContactId == contact.id;
+        final hasSales = salesIds.contains(contact.id);
 
         widgets.add(Positioned(
           left: x, top: y,
@@ -197,15 +230,42 @@ class _NetworkScreenState extends State<NetworkScreen> {
               decoration: BoxDecoration(
                 color: isSelected ? contact.myRelation.color : contact.myRelation.color.withValues(alpha: 0.7),
                 shape: BoxShape.circle,
-                border: Border.all(color: isSelected ? Colors.white : contact.myRelation.color, width: isSelected ? 2.5 : 1),
-                boxShadow: isSelected ? [BoxShadow(color: contact.myRelation.color.withValues(alpha: 0.6), blurRadius: 10)] : null,
-              ),
-              child: Center(
-                child: Text(
-                  contact.name.length >= 2 ? contact.name.substring(contact.name.length - 2) : contact.name,
-                  style: TextStyle(color: Colors.white, fontSize: nodeSize > 34 ? 11 : 9, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
+                border: Border.all(
+                  color: hasSales
+                      ? AppTheme.accentGold
+                      : (isSelected ? Colors.white : contact.myRelation.color),
+                  width: hasSales ? 3 : (isSelected ? 2.5 : 1),
                 ),
+                boxShadow: [
+                  if (isSelected) BoxShadow(color: contact.myRelation.color.withValues(alpha: 0.6), blurRadius: 10),
+                  if (hasSales && !isSelected) BoxShadow(color: AppTheme.accentGold.withValues(alpha: 0.6), blurRadius: 8, spreadRadius: 1),
+                ],
+              ),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Center(
+                    child: Text(
+                      contact.name.length >= 2 ? contact.name.substring(contact.name.length - 2) : contact.name,
+                      style: TextStyle(color: Colors.white, fontSize: nodeSize > 34 ? 11 : 9, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  // 销售线索火标
+                  if (hasSales)
+                    Positioned(
+                      top: -4, right: -4,
+                      child: Container(
+                        width: 14, height: 14,
+                        decoration: BoxDecoration(
+                          color: AppTheme.accentGold,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppTheme.darkBg, width: 1.5),
+                        ),
+                        child: const Center(child: Icon(Icons.local_fire_department, color: Colors.white, size: 8)),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
@@ -344,8 +404,15 @@ class _NetworkPainter extends CustomPainter {
   final List<ContactRelation> relations;
   final String? selectedId;
   final Size centerSize;
+  final Set<String> salesContactIds;
 
-  _NetworkPainter({required this.contacts, required this.relations, this.selectedId, required this.centerSize});
+  _NetworkPainter({
+    required this.contacts,
+    required this.relations,
+    this.selectedId,
+    required this.centerSize,
+    required this.salesContactIds,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -372,9 +439,12 @@ class _NetworkPainter extends CustomPainter {
     for (final c in contacts) {
       final pos = posMap[c.id];
       if (pos == null) continue;
+      final hasSales = salesContactIds.contains(c.id);
       final paint = Paint()
-        ..color = c.myRelation.color.withValues(alpha: selectedId == null || selectedId == c.id ? 0.3 : 0.08)
-        ..strokeWidth = c.strength == RelationshipStrength.hot ? 2 : 1;
+        ..color = hasSales
+            ? const Color(0xFFD4A017).withValues(alpha: selectedId == null || selectedId == c.id ? 0.5 : 0.15)
+            : c.myRelation.color.withValues(alpha: selectedId == null || selectedId == c.id ? 0.3 : 0.08)
+        ..strokeWidth = hasSales ? 2.5 : (c.strength == RelationshipStrength.hot ? 2 : 1);
       canvas.drawLine(center, pos, paint);
     }
 
@@ -394,7 +464,7 @@ class _NetworkPainter extends CustomPainter {
       path.moveTo(fromPos.dx, fromPos.dy);
       final midX = (fromPos.dx + toPos.dx) / 2;
       final midY = (fromPos.dy + toPos.dy) / 2;
-      final offset = 20.0;
+      const offset = 20.0;
       path.quadraticBezierTo(midX + offset, midY - offset, toPos.dx, toPos.dy);
       canvas.drawPath(path, paint);
     }

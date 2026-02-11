@@ -171,8 +171,9 @@ class CrmProvider extends ChangeNotifier {
   Future<void> updateOrder(SalesOrder order) async { await _dataService.saveOrder(order); await loadAll(); }
   Future<void> deleteOrder(String id) async { await _dataService.deleteOrder(id); await loadAll(); }
 
-  // Create order + deal + deduct inventory
+  // Create order + deal (预定模式: 不扣库存, 出货时才扣)
   Future<void> createOrderWithDeal(SalesOrder order) async {
+    order.status = 'confirmed'; // 预定状态
     await _dataService.saveOrder(order);
     // Create linked deal
     final deal = Deal(
@@ -187,7 +188,16 @@ class CrmProvider extends ChangeNotifier {
       probability: 70,
     );
     await _dataService.saveDeal(deal);
-    // Deduct inventory
+    await loadAll();
+  }
+
+  /// 出货: 扣减库存 + 更新订单状态 + 推进管线
+  Future<void> shipOrder(String orderId) async {
+    final order = _orders.firstWhere((o) => o.id == orderId);
+    order.status = 'shipped';
+    order.updatedAt = DateTime.now();
+    await _dataService.saveOrder(order);
+    // 出货时扣减库存
     for (final item in order.items) {
       await _dataService.addInventoryRecord(InventoryRecord(
         id: generateId(),
@@ -196,10 +206,70 @@ class CrmProvider extends ChangeNotifier {
         productCode: item.productCode,
         type: 'out',
         quantity: item.quantity,
-        reason: '销售出库 - ${order.contactName}',
+        reason: '出货 - ${order.contactName}',
       ));
     }
+    // 同步推进关联Deal
+    final linkedDeal = _deals.where((d) => d.orderId == orderId).toList();
+    for (final deal in linkedDeal) {
+      deal.stage = DealStage.shipped;
+      deal.updatedAt = DateTime.now();
+      await _dataService.saveDeal(deal);
+    }
+    _inventoryRecords = _dataService.getAllInventory();
     await loadAll();
+  }
+
+  /// 预定数量(已下单未出货)
+  int getReservedStock(String productId) {
+    int reserved = 0;
+    for (final o in _orders) {
+      if (o.status == 'confirmed' || o.status == 'draft') {
+        for (final item in o.items) {
+          if (item.productId == productId) reserved += item.quantity;
+        }
+      }
+    }
+    return reserved;
+  }
+
+  /// 联系人销售统计
+  Map<String, dynamic> getContactSalesStats(String contactId) {
+    final contactOrders = _orders.where((o) => o.contactId == contactId).toList();
+    double totalAmount = 0;
+    int totalOrders = contactOrders.length;
+    int completedOrders = 0;
+    double completedAmount = 0;
+    for (final o in contactOrders) {
+      totalAmount += o.totalAmount;
+      if (o.status == 'completed') {
+        completedOrders++;
+        completedAmount += o.totalAmount;
+      }
+    }
+    final contactDeals = _deals.where((d) => d.contactId == contactId).toList();
+    int activeDeals = contactDeals.where((d) => d.stage != DealStage.completed && d.stage != DealStage.lost).length;
+    double pipelineValue = 0;
+    for (final d in contactDeals.where((d) => d.stage != DealStage.completed && d.stage != DealStage.lost)) {
+      pipelineValue += d.amount;
+    }
+    return {
+      'totalOrders': totalOrders,
+      'totalAmount': totalAmount,
+      'completedOrders': completedOrders,
+      'completedAmount': completedAmount,
+      'activeDeals': activeDeals,
+      'pipelineValue': pipelineValue,
+      'orders': contactOrders,
+    };
+  }
+
+  /// 有销售线索的联系人ID集合
+  Set<String> get contactsWithSales {
+    final ids = <String>{};
+    for (final o in _orders) { ids.add(o.contactId); }
+    for (final d in _deals) { ids.add(d.contactId); }
+    return ids;
   }
 
   // Inventory
