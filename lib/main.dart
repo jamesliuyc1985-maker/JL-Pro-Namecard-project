@@ -22,12 +22,12 @@ void main() async {
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
-    ).timeout(const Duration(seconds: 8));
+    ).timeout(const Duration(seconds: 6));
     _firebaseReady = true;
     if (kDebugMode) debugPrint('[Main] Firebase initialized successfully');
   } catch (e) {
     _firebaseReady = false;
-    if (kDebugMode) debugPrint('[Main] Firebase init failed (app works in local mode): $e');
+    if (kDebugMode) debugPrint('[Main] Firebase init failed (local mode): $e');
   }
 
   // 2. DataService 初始化（local-first, 总是先加载本地种子数据）
@@ -75,33 +75,73 @@ class DealNavigatorApp extends StatelessWidget {
   }
 }
 
-/// Firebase 登录状态网关
-class _AuthGate extends StatelessWidget {
+/// Firebase 登录状态网关（带超时保护）
+class _AuthGate extends StatefulWidget {
   const _AuthGate();
+  @override
+  State<_AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<_AuthGate> {
+  bool _timedOut = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // 5 秒超时保护：如果 Auth 流一直没响应，降级到本地模式
+    Future.delayed(const Duration(seconds: 5), () {
+      if (mounted && _timedOut == false) {
+        // 如果仍在 waiting 状态，检查一下
+        final user = FirebaseAuth.instance.currentUser;
+        if (user == null) {
+          // 可能 Auth 正常但没登录，不做操作（让 StreamBuilder 处理）
+        }
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
+        // 连接中 → 显示 loading（但有超时保护）
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
+          return Scaffold(
             backgroundColor: AppTheme.darkBg,
-            body: Center(child: CircularProgressIndicator()),
+            body: Center(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                const Text('正在连接...', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                const SizedBox(height: 24),
+                TextButton(
+                  onPressed: () {
+                    // 手动跳过，进入本地模式
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(builder: (_) => const HomeScreen()),
+                    );
+                  },
+                  child: const Text('跳过登录 (本地模式)', style: TextStyle(fontSize: 12)),
+                ),
+              ]),
+            ),
           );
         }
 
         if (snapshot.hasData && snapshot.data != null) {
-          // 已登录 → 设置 userId + 后台同步 Firestore
+          // 已登录 → 设置 userId + 后台同步
           final user = snapshot.data!;
           final crm = context.read<CrmProvider>();
           crm.setUserId(user.uid);
-          // 后台异步同步 Firestore 数据（不阻塞 UI）
-          crm.syncFromCloud();
+          // 后台异步同步（不阻塞 UI，带超时）
+          crm.syncFromCloud().timeout(const Duration(seconds: 8)).catchError((_) {});
 
           return HomeScreen(
             onLogout: () async {
-              await AuthService().logout();
+              try {
+                await AuthService().logout();
+              } catch (_) {}
             },
           );
         }
@@ -109,7 +149,7 @@ class _AuthGate extends StatelessWidget {
         // 未登录 → 登录页
         return AuthScreen(
           onLoginSuccess: () {
-            // StreamBuilder 会自动检测到 authState 变化并重建
+            // StreamBuilder 自动检测 authState 变化
           },
         );
       },

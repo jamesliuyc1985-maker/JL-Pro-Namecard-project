@@ -44,7 +44,10 @@ class AppUser {
   );
 }
 
-/// Firebase Auth 服务
+/// 全局超时时间
+const _timeout = Duration(seconds: 6);
+
+/// Firebase Auth 服务（所有网络调用带超时保护）
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -57,9 +60,12 @@ class AuthService {
 
   /// 邮箱注册
   Future<AppUser> register(String email, String password, String displayName) async {
-    final cred = await _auth.createUserWithEmailAndPassword(email: email, password: password);
+    final cred = await _auth.createUserWithEmailAndPassword(
+      email: email, password: password,
+    ).timeout(_timeout);
     final user = cred.user!;
-    await user.updateDisplayName(displayName);
+    // updateDisplayName 不阻塞
+    user.updateDisplayName(displayName).catchError((_) {});
 
     final appUser = AppUser(
       uid: user.uid,
@@ -69,70 +75,96 @@ class AuthService {
       lastLoginAt: DateTime.now(),
     );
 
-    // 保存到 Firestore
-    await _db.collection('users').doc(user.uid).set(appUser.toJson());
+    // 后台保存到 Firestore，不阻塞注册流程
+    _db.collection('users').doc(user.uid).set(appUser.toJson()).catchError((e) {
+      if (kDebugMode) debugPrint('[AuthService] save user profile error: $e');
+    });
     return appUser;
   }
 
   /// 邮箱登录
   Future<AppUser> login(String email, String password) async {
-    final cred = await _auth.signInWithEmailAndPassword(email: email, password: password);
+    final cred = await _auth.signInWithEmailAndPassword(
+      email: email, password: password,
+    ).timeout(_timeout);
     final user = cred.user!;
 
-    // 从 Firestore 获取用户信息
-    final doc = await _db.collection('users').doc(user.uid).get();
-    if (doc.exists) {
-      final appUser = AppUser.fromJson(doc.data()!);
-      appUser.lastLoginAt = DateTime.now();
-      await _db.collection('users').doc(user.uid).update({'lastLoginAt': DateTime.now().toIso8601String()});
-      return appUser;
-    } else {
-      // Firestore 没有记录，创建一个
-      final appUser = AppUser(
-        uid: user.uid,
-        email: email,
-        displayName: user.displayName ?? email.split('@').first,
-        lastLoginAt: DateTime.now(),
-      );
-      await _db.collection('users').doc(user.uid).set(appUser.toJson());
-      return appUser;
+    // 尝试从 Firestore 获取用户信息（带超时）
+    try {
+      final doc = await _db.collection('users').doc(user.uid).get()
+          .timeout(const Duration(seconds: 4));
+      if (doc.exists) {
+        final appUser = AppUser.fromJson(doc.data()!);
+        appUser.lastLoginAt = DateTime.now();
+        // 后台更新 lastLogin
+        _db.collection('users').doc(user.uid).update({
+          'lastLoginAt': DateTime.now().toIso8601String(),
+        }).catchError((_) {});
+        return appUser;
+      }
+    } catch (_) {
+      // Firestore 超时/失败，用 Auth 信息构建
     }
+
+    // 降级：用 Firebase Auth 基本信息
+    final appUser = AppUser(
+      uid: user.uid,
+      email: email,
+      displayName: user.displayName ?? email.split('@').first,
+      lastLoginAt: DateTime.now(),
+    );
+    // 后台创建 Firestore 记录
+    _db.collection('users').doc(user.uid).set(appUser.toJson()).catchError((_) {});
+    return appUser;
   }
 
-  /// 获取当前 AppUser
+  /// 获取当前 AppUser（带超时，失败返回基本信息）
   Future<AppUser?> getCurrentUser() async {
     final user = _auth.currentUser;
     if (user == null) return null;
+
+    // 先用 Auth 基本信息构建默认值
+    final fallback = AppUser(
+      uid: user.uid,
+      email: user.email ?? '',
+      displayName: user.displayName ?? '',
+      role: UserRole.admin, // 默认 admin（单用户模式）
+    );
+
     try {
-      final doc = await _db.collection('users').doc(user.uid).get();
+      final doc = await _db.collection('users').doc(user.uid).get()
+          .timeout(const Duration(seconds: 4));
       if (doc.exists) return AppUser.fromJson(doc.data()!);
-      return AppUser(uid: user.uid, email: user.email ?? '', displayName: user.displayName ?? '');
+      return fallback;
     } catch (e) {
-      if (kDebugMode) debugPrint('[AuthService] getCurrentUser error: $e');
-      return AppUser(uid: user.uid, email: user.email ?? '', displayName: user.displayName ?? '');
+      if (kDebugMode) debugPrint('[AuthService] getCurrentUser timeout/error: $e');
+      return fallback;
     }
   }
 
-  /// 获取所有用户 (管理员用)
+  /// 获取所有用户（带超时）
   Future<List<AppUser>> getAllUsers() async {
     try {
-      final snap = await _db.collection('users').get();
+      final snap = await _db.collection('users').get()
+          .timeout(const Duration(seconds: 4));
       return snap.docs.map((d) => AppUser.fromJson(d.data())).toList();
     } catch (e) {
-      if (kDebugMode) debugPrint('[AuthService] getAllUsers error: $e');
+      if (kDebugMode) debugPrint('[AuthService] getAllUsers timeout/error: $e');
       return [];
     }
   }
 
   /// 更新用户角色
   Future<void> updateUserRole(String uid, UserRole role) async {
-    await _db.collection('users').doc(uid).update({'role': role.name});
+    await _db.collection('users').doc(uid).update({'role': role.name})
+        .timeout(_timeout);
   }
 
   /// 更新个人信息
   Future<void> updateProfile(String uid, String displayName) async {
-    await _db.collection('users').doc(uid).update({'displayName': displayName});
-    await _auth.currentUser?.updateDisplayName(displayName);
+    await _db.collection('users').doc(uid).update({'displayName': displayName})
+        .timeout(_timeout);
+    _auth.currentUser?.updateDisplayName(displayName).catchError((_) {});
   }
 
   /// 修改密码

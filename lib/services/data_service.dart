@@ -332,38 +332,47 @@ class DataService {
     });
   }
 
-  /// 从 Firestore 拉取数据到本地缓存
+  /// 从 Firestore 拉取数据到本地缓存（每个集合独立超时，失败保留本地数据）
   Future<void> syncFromCloud() async {
     if (!_firestoreEnabled || _db == null) return;
+    const t = Duration(seconds: 5);
     try {
       // 联系人
-      final contactSnap = await _db!.collection('contacts').get();
-      if (contactSnap.docs.isNotEmpty) {
-        _contactsCache = contactSnap.docs.map((d) {
-          try { return Contact.fromJson(d.data()); } catch (_) { return null; }
-        }).whereType<Contact>().toList();
-      }
+      try {
+        final snap = await _db!.collection('contacts').get().timeout(t);
+        if (snap.docs.isNotEmpty) {
+          _contactsCache = snap.docs.map((d) {
+            try { return Contact.fromJson(d.data()); } catch (_) { return null; }
+          }).whereType<Contact>().toList();
+        }
+      } catch (_) {}
       // Deal
-      final dealSnap = await _db!.collection('deals').get();
-      if (dealSnap.docs.isNotEmpty) {
-        _dealsCache = dealSnap.docs.map((d) {
-          try { return Deal.fromJson(d.data()); } catch (_) { return null; }
-        }).whereType<Deal>().toList();
-      }
+      try {
+        final snap = await _db!.collection('deals').get().timeout(t);
+        if (snap.docs.isNotEmpty) {
+          _dealsCache = snap.docs.map((d) {
+            try { return Deal.fromJson(d.data()); } catch (_) { return null; }
+          }).whereType<Deal>().toList();
+        }
+      } catch (_) {}
       // Relations
-      final relSnap = await _db!.collection('relations').get();
-      if (relSnap.docs.isNotEmpty) {
-        _relationsCache = relSnap.docs.map((d) {
-          try { return ContactRelation.fromJson(d.data()); } catch (_) { return null; }
-        }).whereType<ContactRelation>().toList();
-      }
+      try {
+        final snap = await _db!.collection('relations').get().timeout(t);
+        if (snap.docs.isNotEmpty) {
+          _relationsCache = snap.docs.map((d) {
+            try { return ContactRelation.fromJson(d.data()); } catch (_) { return null; }
+          }).whereType<ContactRelation>().toList();
+        }
+      } catch (_) {}
       // Products
-      final prodSnap = await _db!.collection('products').get();
-      if (prodSnap.docs.isNotEmpty) {
-        _productsCache = prodSnap.docs.map((d) {
-          try { return Product.fromJson(d.data()); } catch (_) { return null; }
-        }).whereType<Product>().toList();
-      }
+      try {
+        final snap = await _db!.collection('products').get().timeout(t);
+        if (snap.docs.isNotEmpty) {
+          _productsCache = snap.docs.map((d) {
+            try { return Product.fromJson(d.data()); } catch (_) { return null; }
+          }).whereType<Product>().toList();
+        }
+      } catch (_) {}
 
       if (kDebugMode) {
         debugPrint('[DataService] Cloud sync: ${_contactsCache.length} contacts, ${_dealsCache.length} deals, ${_relationsCache.length} relations');

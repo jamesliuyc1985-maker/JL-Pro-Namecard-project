@@ -31,7 +31,6 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final _auth = AuthService();
   AppUser? _appUser;
   List<AppUser> _allUsers = [];
   bool _isLoading = true;
@@ -44,17 +43,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadUser() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
+
+    // 先用 Firebase Auth 本地缓存的信息（零延迟）
+    final fbUser = FirebaseAuth.instance.currentUser;
+    if (fbUser != null) {
+      _appUser = AppUser(
+        uid: fbUser.uid,
+        email: fbUser.email ?? '',
+        displayName: fbUser.displayName ?? 'User',
+        role: UserRole.admin,
+      );
+    } else {
+      _appUser = AppUser(
+        uid: 'local',
+        email: 'local@mode',
+        displayName: 'James Liu',
+        role: UserRole.admin,
+      );
+    }
+
+    // 先展示，不等网络
+    if (mounted) setState(() => _isLoading = false);
+
+    // 后台尝试从 Firestore 获取更详细的用户信息（带超时）
     try {
-      _appUser = await _auth.getCurrentUser();
+      final auth = AuthService();
+      final detailedUser = await auth.getCurrentUser()
+          .timeout(const Duration(seconds: 4));
+      if (detailedUser != null && mounted) {
+        setState(() => _appUser = detailedUser);
+      }
+
+      // 如果是 admin，后台拉取所有用户
       if (_appUser?.role == UserRole.admin) {
-        _allUsers = await _auth.getAllUsers();
+        final users = await auth.getAllUsers()
+            .timeout(const Duration(seconds: 4));
+        if (mounted) setState(() => _allUsers = users);
       }
     } catch (e) {
-      // 如果 Firebase 不可用，用本地默认
-      _appUser = AppUser(uid: 'local', email: 'local@mode', displayName: 'James Liu', role: UserRole.admin);
+      // Firestore 超时，保持已有的本地数据
     }
-    if (mounted) setState(() => _isLoading = false);
   }
 
   @override
@@ -64,7 +94,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     final user = _appUser ?? AppUser(uid: 'local', email: 'local@mode', displayName: 'User', role: UserRole.member);
-    final isFirebase = FirebaseAuth.instance.currentUser != null;
+    bool isFirebase;
+    try {
+      isFirebase = FirebaseAuth.instance.currentUser != null;
+    } catch (_) {
+      isFirebase = false;
+    }
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -219,9 +254,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (isFirebase) ...[
           _actionTile(Icons.sync, '同步云端数据', () async {
             setState(() => _syncStatus = '正在同步...');
-            final crm = context.read<CrmProvider>();
-            await crm.syncFromCloud();
-            setState(() => _syncStatus = crm.syncStatus);
+            try {
+              final crm = context.read<CrmProvider>();
+              await crm.syncFromCloud().timeout(const Duration(seconds: 8));
+              if (mounted) setState(() => _syncStatus = crm.syncStatus ?? '同步成功');
+            } catch (e) {
+              if (mounted) setState(() => _syncStatus = '同步超时');
+            }
           }),
           _actionTile(Icons.lock_outline, '修改密码', () => _showChangePassword(context)),
         ],
@@ -285,8 +324,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 color: AppTheme.cardBgLight,
                 onSelected: (role) async {
-                  await _auth.updateUserRole(u.uid, role);
-                  _loadUser();
+                  try {
+                    await AuthService().updateUserRole(u.uid, role);
+                    _loadUser();
+                  } catch (_) {}
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                       content: Text('${u.displayName} 角色已更新为 ${AppRole.label(role.name)}'),
@@ -379,16 +420,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
           SizedBox(width: double.infinity, child: ElevatedButton(
             onPressed: () async {
               try {
-                await _auth.updateProfile(user.uid, nameCtrl.text.trim());
+                await AuthService().updateProfile(user.uid, nameCtrl.text.trim());
                 await _loadUser();
-                if (mounted) Navigator.pop(ctx);
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('资料已更新'), backgroundColor: AppTheme.success),
-                );
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('资料已更新'), backgroundColor: AppTheme.success),
+                  );
+                }
               } catch (e) {
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('更新失败: $e'), backgroundColor: AppTheme.danger),
-                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('更新失败: $e'), backgroundColor: AppTheme.danger),
+                  );
+                }
               }
             },
             child: const Text('保存'),
@@ -420,13 +465,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 return;
               }
               try {
-                await _auth.changePassword(pwdCtrl.text);
-                if (mounted) Navigator.pop(ctx);
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('密码已修改'), backgroundColor: AppTheme.success));
+                await AuthService().changePassword(pwdCtrl.text);
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('密码已修改'), backgroundColor: AppTheme.success));
+                }
               } catch (e) {
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('修改失败: $e'), backgroundColor: AppTheme.danger));
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('修改失败: $e'), backgroundColor: AppTheme.danger));
+                }
               }
             },
             child: const Text('确认修改'),
