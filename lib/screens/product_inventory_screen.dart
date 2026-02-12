@@ -17,12 +17,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> with Si
   late TabController _tabCtrl;
   String _selectedCategory = 'all';
 
-  static const _productImages = {
-    'exosome': 'https://sspark.genspark.ai/cfimages?u1=gQJ0%2FI61F8aniwhXmW3RCOtb2ddp%2BIkvgbC7uSVsjje5TY6kHHdQPw%2BFX0pCr5TsSpLSsbDs4eWYMJDVR%2FFZAjSEVv7H2zT35KTXrux0iEY5eavPlEp5xTtvMR0zx5sQIvyRD6SSeJwJP6BNzxz7kIebeN1oPBmfpBnWtYaphXqzk2qYywDvrib4XqOrSyCsmijp5I4%3D&u2=vdsQVGBgw%2FpPeDo2&width=2560',
-    'nad': 'https://sspark.genspark.ai/cfimages?u1=sRtjvw4%2BttLmk7K%2FoqtAySxDHIfxfQxdrWD8dNNTPqpf7SfyCC70nmBNWp2kitq5LVhYo72q0eLJKLZc6SGQcCEn0xAr%2Bt%2F6GBJL&u2=CUZ%2FXXvVVY4pRp%2FA&width=2560',
-    'nmn': 'https://sspark.genspark.ai/cfimages?u1=umpIeewrXO51nUeXp9Sk6w%2BIHeHot3yc8B6pSBifIaLZ2ZvtXbmTVq0zU2pJNFDy5kBDFJCGoACEsZE0Us67CjdBUw%3D%3D&u2=41xNTu8VL%2Bvli1tf&width=2560',
-  };
-
   @override
   void initState() { super.initState(); _tabCtrl = TabController(length: 3, vsync: this); }
   @override
@@ -227,7 +221,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> with Si
 
   Widget _productCard(BuildContext context, Product product, CrmProvider crm) {
     final stock = crm.getProductStock(product.id);
-    final imageUrl = _productImages[product.category];
 
     return GestureDetector(
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProductDetailScreen(productId: product.id))),
@@ -240,13 +233,10 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> with Si
           border: Border.all(color: AppTheme.steel.withValues(alpha: 0.2)),
         ),
         child: Row(children: [
-          // Product thumbnail
+          // Product icon (no images)
           ClipRRect(
             borderRadius: BorderRadius.circular(6),
-            child: imageUrl != null
-              ? Image.network(imageUrl, width: 56, height: 56, fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => _fallbackThumb(product.category))
-              : _fallbackThumb(product.category),
+            child: _fallbackThumb(product.category),
           ),
           const SizedBox(width: 12),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

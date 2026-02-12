@@ -21,7 +21,7 @@ class _SmartPriorityScreenState extends State<SmartPriorityScreen> with SingleTi
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 2, vsync: this);
+    _tabCtrl = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -35,30 +35,37 @@ class _SmartPriorityScreenState extends State<SmartPriorityScreen> with SingleTi
     return Consumer<CrmProvider>(builder: (context, crm, _) {
       final dealScores = _scoreDealPriority(crm);
       final contactScores = _scoreContactPriority(crm);
+      final starredDeals = crm.starredDeals;
 
       return SafeArea(child: Column(children: [
-        _buildHeader(dealScores, contactScores),
+        _buildHeader(dealScores, contactScores, starredDeals),
         _buildSummaryCards(dealScores, contactScores, crm),
         TabBar(
           controller: _tabCtrl,
           indicatorColor: AppTheme.accentGold,
           labelColor: AppTheme.accentGold,
           unselectedLabelColor: AppTheme.textSecondary,
-          labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
           tabs: [
             Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.trending_up, size: 16),
-              const SizedBox(width: 6),
-              Text('项目优先 (${dealScores.length})'),
+              const Icon(Icons.star, size: 14),
+              const SizedBox(width: 4),
+              Text('重点 (${starredDeals.length})'),
             ])),
             Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.person_search, size: 16),
-              const SizedBox(width: 6),
-              Text('人脉跟进 (${contactScores.length})'),
+              const Icon(Icons.trending_up, size: 14),
+              const SizedBox(width: 4),
+              Text('项目 (${dealScores.length})'),
+            ])),
+            Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.person_search, size: 14),
+              const SizedBox(width: 4),
+              Text('人脉 (${contactScores.length})'),
             ])),
           ],
         ),
         Expanded(child: TabBarView(controller: _tabCtrl, children: [
+          _buildStarredTab(crm, starredDeals),
           _buildDealPriorityList(crm, dealScores),
           _buildContactPriorityList(crm, contactScores),
         ])),
@@ -66,7 +73,7 @@ class _SmartPriorityScreenState extends State<SmartPriorityScreen> with SingleTi
     });
   }
 
-  Widget _buildHeader(List<_DealScore> deals, List<_ContactScore> contacts) {
+  Widget _buildHeader(List<_DealScore> deals, List<_ContactScore> contacts, List<Deal> starred) {
     final urgentDeals = deals.where((d) => d.signal == _Signal.red).length;
     final urgentContacts = contacts.where((c) => c.signal == _Signal.red).length;
     return Padding(
@@ -75,13 +82,23 @@ class _SmartPriorityScreenState extends State<SmartPriorityScreen> with SingleTi
         const Icon(Icons.auto_awesome, color: AppTheme.accentGold, size: 24),
         const SizedBox(width: 10),
         const Expanded(child: Text('智能跟进', style: TextStyle(color: AppTheme.textPrimary, fontSize: 22, fontWeight: FontWeight.bold))),
+        if (starred.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.only(right: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(color: AppTheme.accentGold.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.star, color: AppTheme.accentGold, size: 14),
+              Text(' ${starred.length}', style: const TextStyle(color: AppTheme.accentGold, fontSize: 11, fontWeight: FontWeight.w600)),
+            ]),
+          ),
         if (urgentDeals + urgentContacts > 0)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(color: AppTheme.danger.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.priority_high, color: AppTheme.danger, size: 14),
-              Text(' ${urgentDeals + urgentContacts}项紧急', style: const TextStyle(color: AppTheme.danger, fontSize: 11, fontWeight: FontWeight.w600)),
+              Text(' ${urgentDeals + urgentContacts}', style: const TextStyle(color: AppTheme.danger, fontSize: 11, fontWeight: FontWeight.w600)),
             ]),
           ),
       ]),
@@ -274,6 +291,92 @@ class _SmartPriorityScreenState extends State<SmartPriorityScreen> with SingleTi
     ]));
   }
 
+  // ========== Starred Key Projects Tab ==========
+  Widget _buildStarredTab(CrmProvider crm, List<Deal> starred) {
+    if (starred.isEmpty) {
+      return const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Icon(Icons.star_border, color: AppTheme.textSecondary, size: 48),
+        SizedBox(height: 12),
+        Text('暂无重点标记项目', style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+        SizedBox(height: 4),
+        Text('在项目列表中点击星标添加重点项目', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+      ]));
+    }
+    final sorted = List<Deal>.from(starred)..sort((a, b) => b.amount.compareTo(a.amount));
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: sorted.length,
+      itemBuilder: (ctx, i) => _starredDealCard(crm, sorted[i]),
+    );
+  }
+
+  Widget _starredDealCard(CrmProvider crm, Deal deal) {
+    final c = _stageColor(deal.stage);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.cardBg, borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.accentGold.withValues(alpha: 0.5)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          GestureDetector(
+            onTap: () => crm.toggleDealStar(deal.id),
+            child: const Icon(Icons.star, color: AppTheme.accentGold, size: 22),
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(deal.title, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
+            Text(deal.contactName, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+          ])),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(color: c.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(4)),
+            child: Text(deal.stage.label, style: TextStyle(color: c, fontSize: 9, fontWeight: FontWeight.w600)),
+          ),
+        ]),
+        const SizedBox(height: 8),
+        Row(children: [
+          Text(Formatters.currency(deal.amount), style: const TextStyle(color: AppTheme.accentGold, fontWeight: FontWeight.bold, fontSize: 16)),
+          const Spacer(),
+          Text('${deal.probability.toInt()}%', style: TextStyle(color: c, fontWeight: FontWeight.bold, fontSize: 12)),
+          const SizedBox(width: 8),
+          Text('${deal.expectedCloseDate.difference(DateTime.now()).inDays}天', style: TextStyle(
+            color: deal.expectedCloseDate.difference(DateTime.now()).inDays <= 7 ? AppTheme.danger : AppTheme.textSecondary, fontSize: 11)),
+        ]),
+        const SizedBox(height: 4),
+        ClipRRect(borderRadius: BorderRadius.circular(2),
+          child: LinearProgressIndicator(value: deal.probability / 100, backgroundColor: AppTheme.cardBgLight,
+            valueColor: AlwaysStoppedAnimation(c), minHeight: 2)),
+        if (deal.tags.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Wrap(spacing: 4, children: deal.tags.map((t) => Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            decoration: BoxDecoration(color: AppTheme.steel.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(3)),
+            child: Text(t, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 8)),
+          )).toList()),
+        ],
+      ]),
+    );
+  }
+
+  Color _stageColor(DealStage s) {
+    switch (s) {
+      case DealStage.lead: return AppTheme.textSecondary;
+      case DealStage.contacted: return AppTheme.info;
+      case DealStage.proposal: return const Color(0xFF9B59B6);
+      case DealStage.negotiation: return AppTheme.warning;
+      case DealStage.ordered: return const Color(0xFF1ABC9C);
+      case DealStage.paid: return AppTheme.success;
+      case DealStage.shipped: return AppTheme.info;
+      case DealStage.inTransit: return const Color(0xFF8E7CC3);
+      case DealStage.received: return const Color(0xFF5DADE2);
+      case DealStage.completed: return AppTheme.success;
+      case DealStage.lost: return AppTheme.danger;
+    }
+  }
+
   // ========== Deal Priority ==========
   Widget _buildDealPriorityList(CrmProvider crm, List<_DealScore> scores) {
     if (scores.isEmpty) {
@@ -295,10 +398,10 @@ class _SmartPriorityScreenState extends State<SmartPriorityScreen> with SingleTi
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppTheme.cardBg, borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: signalColor.withValues(alpha: 0.4)),
+        border: Border.all(color: ds.deal.isStarred ? AppTheme.accentGold.withValues(alpha: 0.5) : signalColor.withValues(alpha: 0.4)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // 排名 + 信号灯 + 标题
+        // 排名 + 信号灯 + 标题 + 星标
         Row(children: [
           Container(
             width: 28, height: 28,
@@ -310,6 +413,12 @@ class _SmartPriorityScreenState extends State<SmartPriorityScreen> with SingleTi
             Text(ds.deal.title, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
             Text(ds.deal.contactName, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
           ])),
+          GestureDetector(
+            onTap: () => crm.toggleDealStar(ds.deal.id),
+            child: Icon(ds.deal.isStarred ? Icons.star : Icons.star_border,
+              color: ds.deal.isStarred ? AppTheme.accentGold : AppTheme.textSecondary, size: 22),
+          ),
+          const SizedBox(width: 6),
           // 信号灯
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),

@@ -7,6 +7,7 @@ import '../utils/formatters.dart';
 import 'contact_detail_screen.dart';
 import 'add_contact_screen.dart';
 import 'scan_card_screen.dart';
+import 'excel_import_screen.dart';
 
 class ContactsScreen extends StatelessWidget {
   const ContactsScreen({super.key});
@@ -31,16 +32,24 @@ class ContactsScreen extends StatelessWidget {
 
   Widget _buildHeader(BuildContext context, CrmProvider crm) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 8, 4),
+      padding: const EdgeInsets.fromLTRB(20, 16, 4, 4),
       child: Row(children: [
         const Text('人脉网络', style: TextStyle(color: AppTheme.textPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
         const Spacer(),
         IconButton(
+          tooltip: 'Excel导入',
+          icon: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: AppTheme.cardBgLight, borderRadius: BorderRadius.circular(10)),
+            child: const Icon(Icons.upload_file, color: AppTheme.success, size: 20)),
+          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ExcelImportScreen())),
+        ),
+        IconButton(
+          tooltip: '名片扫描',
           icon: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: AppTheme.cardBgLight, borderRadius: BorderRadius.circular(10)),
             child: const Icon(Icons.document_scanner, color: AppTheme.primaryPurple, size: 20)),
           onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ScanCardScreen())),
         ),
         IconButton(
+          tooltip: '手动添加',
           icon: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(gradient: AppTheme.gradient, borderRadius: BorderRadius.circular(10)),
             child: const Icon(Icons.person_add, color: Colors.white, size: 20)),
           onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddContactScreen())),

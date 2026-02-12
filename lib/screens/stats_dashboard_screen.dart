@@ -17,17 +17,21 @@ class StatsDashboardScreen extends StatefulWidget {
 
 class _StatsDashboardScreenState extends State<StatsDashboardScreen> with SingleTickerProviderStateMixin {
   late TabController _tabCtrl;
+  String _searchQuery = '';
+  final _searchCtrl = TextEditingController();
+  bool _showSearch = false;
 
   @override
   void initState() { super.initState(); _tabCtrl = TabController(length: 6, vsync: this); }
   @override
-  void dispose() { _tabCtrl.dispose(); super.dispose(); }
+  void dispose() { _tabCtrl.dispose(); _searchCtrl.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<CrmProvider>(builder: (context, crm, _) {
       return SafeArea(child: Column(children: [
         _header(),
+        if (_showSearch) _searchBarWidget(),
         _tabBar(),
         Expanded(child: TabBarView(controller: _tabCtrl, children: [
           _overviewTab(crm),
@@ -42,14 +46,36 @@ class _StatsDashboardScreenState extends State<StatsDashboardScreen> with Single
   }
 
   Widget _header() {
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(20, 14, 16, 4),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 14, 8, 4),
       child: Row(children: [
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('综合统计', style: TextStyle(color: AppTheme.offWhite, fontSize: 20, fontWeight: FontWeight.w600)),
           Text('Analytics Dashboard', style: TextStyle(color: AppTheme.slate, fontSize: 11)),
         ])),
+        IconButton(
+          icon: Icon(_showSearch ? Icons.search_off : Icons.search, color: AppTheme.gold, size: 20),
+          onPressed: () => setState(() { _showSearch = !_showSearch; if (!_showSearch) { _searchQuery = ''; _searchCtrl.clear(); } }),
+        ),
       ]),
+    );
+  }
+
+  Widget _searchBarWidget() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: TextField(
+        controller: _searchCtrl,
+        style: const TextStyle(color: AppTheme.offWhite, fontSize: 13),
+        decoration: InputDecoration(
+          hintText: '搜索产品/工厂/客户/团队...', hintStyle: const TextStyle(color: AppTheme.slate, fontSize: 12),
+          prefixIcon: const Icon(Icons.search, color: AppTheme.slate, size: 18),
+          suffixIcon: _searchQuery.isNotEmpty ? IconButton(icon: const Icon(Icons.clear, size: 16, color: AppTheme.slate), onPressed: () { _searchCtrl.clear(); setState(() => _searchQuery = ''); }) : null,
+          filled: true, fillColor: AppTheme.navyLight, contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+        ),
+        onChanged: (v) => setState(() => _searchQuery = v),
+      ),
     );
   }
 

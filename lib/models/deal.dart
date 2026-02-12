@@ -32,6 +32,7 @@ class Deal {
   String notes;
   List<String> tags;
   String? orderId; // linked sales order
+  bool isStarred; // key project marker
 
   Deal({
     required this.id,
@@ -49,6 +50,7 @@ class Deal {
     this.notes = '',
     List<String>? tags,
     this.orderId,
+    this.isStarred = false,
   })  : createdAt = createdAt ?? DateTime.now(),
         expectedCloseDate = expectedCloseDate ?? DateTime.now().add(const Duration(days: 90)),
         updatedAt = updatedAt ?? DateTime.now(),
@@ -63,6 +65,7 @@ class Deal {
     'updatedAt': updatedAt.toIso8601String(),
     'probability': probability, 'notes': notes, 'tags': tags,
     'orderId': orderId,
+    'isStarred': isStarred,
   };
 
   factory Deal.fromJson(Map<String, dynamic> json) => Deal(
@@ -81,5 +84,6 @@ class Deal {
     notes: json['notes'] as String? ?? '',
     tags: List<String>.from(json['tags'] ?? []),
     orderId: json['orderId'] as String?,
+    isStarred: json['isStarred'] as bool? ?? false,
   );
 }

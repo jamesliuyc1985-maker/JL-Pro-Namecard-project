@@ -15,23 +15,21 @@ class ProductionScreen extends StatefulWidget {
 
 class _ProductionScreenState extends State<ProductionScreen> with SingleTickerProviderStateMixin {
   late TabController _tabCtrl;
-
-  static const _factoryImages = [
-    'https://sspark.genspark.ai/cfimages?u1=gQJ0%2FI61F8aniwhXmW3RCOtb2ddp%2BIkvgbC7uSVsjje5TY6kHHdQPw%2BFX0pCr5TsSpLSsbDs4eWYMJDVR%2FFZAjSEVv7H2zT35KTXrux0iEY5eavPlEp5xTtvMR0zx5sQIvyRD6SSeJwJP6BNzxz7kIebeN1oPBmfpBnWtYaphXqzk2qYywDvrib4XqOrSyCsmijp5I4%3D&u2=vdsQVGBgw%2FpPeDo2&width=2560',
-    'https://sspark.genspark.ai/cfimages?u1=NMt7iimnkNbTD%2BHBOS0KWCZby0endZndjAqeIfg699osg2c%2BTTy413AhtpAFkSGl0%2Fvs9UDe5XmyB0CtcFXmR4EhnUgIASlhjPa9aNAr4oX2vKyVfBD0ndqRYWGvasifbDvHNJGudph2pzV6ULTi&u2=boXq0HzYZ6OkrSKA&width=2560',
-    'https://sspark.genspark.ai/cfimages?u1=%2B867UIyvfKjTMlImBU%2BnMIh0a98A0vGpZPtfJNpzgdWwOO6FYfdSkOHd%2F4MR4tAcV%2FCnx0oWbiO%2BamB6pdSO%2F%2BBB3LinyUpmMeoEWIPciHaJeA%3D%3D&u2=KwRXd53fs%2BatU71C&width=2560',
-  ];
+  String _searchQuery = '';
+  final _searchCtrl = TextEditingController();
+  bool _showSearch = false;
 
   @override
   void initState() { super.initState(); _tabCtrl = TabController(length: 3, vsync: this); }
   @override
-  void dispose() { _tabCtrl.dispose(); super.dispose(); }
+  void dispose() { _tabCtrl.dispose(); _searchCtrl.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<CrmProvider>(builder: (context, crm, _) {
       return SafeArea(child: Column(children: [
         _header(context, crm),
+        if (_showSearch) _searchBarWidget(),
         _summaryBar(crm),
         _tabBar(),
         Expanded(child: TabBarView(controller: _tabCtrl, children: [
@@ -45,12 +43,16 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
 
   Widget _header(BuildContext context, CrmProvider crm) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
+      padding: const EdgeInsets.fromLTRB(20, 12, 4, 8),
       child: Row(children: [
         const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('生产管理', style: TextStyle(color: AppTheme.offWhite, fontSize: 20, fontWeight: FontWeight.w600)),
           Text('Production Management', style: TextStyle(color: AppTheme.slate, fontSize: 11)),
         ])),
+        IconButton(
+          icon: Icon(_showSearch ? Icons.search_off : Icons.search, color: AppTheme.gold, size: 20),
+          onPressed: () => setState(() { _showSearch = !_showSearch; if (!_showSearch) { _searchQuery = ''; _searchCtrl.clear(); } }),
+        ),
         IconButton(
           tooltip: '新建生产单',
           icon: Container(
@@ -62,6 +64,36 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
         ),
       ]),
     );
+  }
+
+  Widget _searchBarWidget() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: TextField(
+        controller: _searchCtrl,
+        style: const TextStyle(color: AppTheme.offWhite, fontSize: 13),
+        decoration: InputDecoration(
+          hintText: '搜索产品/工厂/批次号...', hintStyle: const TextStyle(color: AppTheme.slate, fontSize: 12),
+          prefixIcon: const Icon(Icons.search, color: AppTheme.slate, size: 18),
+          suffixIcon: _searchQuery.isNotEmpty ? IconButton(icon: const Icon(Icons.clear, size: 16, color: AppTheme.slate), onPressed: () { _searchCtrl.clear(); setState(() => _searchQuery = ''); }) : null,
+          filled: true, fillColor: AppTheme.navyLight, contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+        ),
+        onChanged: (v) => setState(() => _searchQuery = v),
+      ),
+    );
+  }
+
+  List<ProductionOrder> _filterOrders(List<ProductionOrder> orders) {
+    if (_searchQuery.isEmpty) return orders;
+    final q = _searchQuery.toLowerCase();
+    return orders.where((o) =>
+      o.productName.toLowerCase().contains(q) ||
+      o.factoryName.toLowerCase().contains(q) ||
+      o.batchNumber.toLowerCase().contains(q) ||
+      o.assigneeName.toLowerCase().contains(q) ||
+      o.notes.toLowerCase().contains(q)
+    ).toList();
   }
 
   Widget _summaryBar(CrmProvider crm) {
@@ -106,8 +138,8 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
 
   // === Tab 1: Production Orders ===
   Widget _ordersTab(CrmProvider crm) {
-    final orders = crm.activeProductions;
-    if (orders.isEmpty) return const Center(child: Text('暂无进行中的生产订单', style: TextStyle(color: AppTheme.slate)));
+    final orders = _filterOrders(crm.activeProductions);
+    if (orders.isEmpty) return Center(child: Text(_searchQuery.isEmpty ? '暂无进行中的生产订单' : '未找到"$_searchQuery"', style: const TextStyle(color: AppTheme.slate)));
 
     final sorted = List<ProductionOrder>.from(orders)..sort((a, b) => a.plannedDate.compareTo(b.plannedDate));
     return ListView.builder(
@@ -203,8 +235,12 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
 
   // === Tab 2: Factory List ===
   Widget _factoriesTab(CrmProvider crm) {
-    final factories = crm.factories;
-    if (factories.isEmpty) return const Center(child: Text('暂无工厂信息', style: TextStyle(color: AppTheme.slate)));
+    var factories = crm.factories;
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      factories = factories.where((f) => f.name.toLowerCase().contains(q) || f.representative.toLowerCase().contains(q) || f.address.toLowerCase().contains(q)).toList();
+    }
+    if (factories.isEmpty) return Center(child: Text(_searchQuery.isEmpty ? '暂无工厂信息' : '未找到"$_searchQuery"', style: const TextStyle(color: AppTheme.slate)));
 
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -215,56 +251,49 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
 
   Widget _factoryCard(CrmProvider crm, ProductionFactory factory, int index) {
     final activeOrders = crm.getProductionByFactory(factory.id).where((p) => ProductionStatus.activeStatuses.contains(p.status)).length;
-    final imageUrl = _factoryImages[index % _factoryImages.length];
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppTheme.navyLight, borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppTheme.steel.withValues(alpha: 0.2)),
       ),
-      child: Column(children: [
-        // Small image banner
-        ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-          child: Image.network(imageUrl, width: double.infinity, height: 80, fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(height: 80, color: AppTheme.navyMid,
-              child: const Center(child: Icon(Icons.factory_outlined, color: AppTheme.slate, size: 32)))),
-        ),
-        Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Expanded(child: Text(factory.name, style: const TextStyle(color: AppTheme.offWhite, fontWeight: FontWeight.w600, fontSize: 14))),
-            if (activeOrders > 0)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(color: AppTheme.info.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(4)),
-                child: Text('$activeOrders 单', style: const TextStyle(color: AppTheme.info, fontSize: 10, fontWeight: FontWeight.w600)),
-              ),
-          ]),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.factory_outlined, color: AppTheme.gold, size: 20),
+          const SizedBox(width: 8),
+          Expanded(child: Text(factory.name, style: const TextStyle(color: AppTheme.offWhite, fontWeight: FontWeight.w600, fontSize: 14))),
+          if (activeOrders > 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(color: AppTheme.info.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(4)),
+              child: Text('$activeOrders 单', style: const TextStyle(color: AppTheme.info, fontSize: 10, fontWeight: FontWeight.w600)),
+            ),
+        ]),
+        const SizedBox(height: 4),
+        if (factory.representative.isNotEmpty)
+          Text('代表: ${factory.representative}', style: const TextStyle(color: AppTheme.slate, fontSize: 11)),
+        Text(factory.address, style: const TextStyle(color: AppTheme.slate, fontSize: 11)),
+        const SizedBox(height: 6),
+        if (factory.certifications.isNotEmpty)
+          Wrap(spacing: 4, runSpacing: 4, children: factory.certifications.map((c) =>
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(color: AppTheme.success.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
+              child: Text(c, style: const TextStyle(color: AppTheme.success, fontSize: 9)),
+            )).toList()),
+        if (factory.capabilities.isNotEmpty) ...[
           const SizedBox(height: 4),
-          if (factory.representative.isNotEmpty)
-            Text('代表: ${factory.representative}', style: const TextStyle(color: AppTheme.slate, fontSize: 11)),
-          Text(factory.address, style: const TextStyle(color: AppTheme.slate, fontSize: 11)),
-          const SizedBox(height: 6),
-          if (factory.certifications.isNotEmpty)
-            Wrap(spacing: 4, runSpacing: 4, children: factory.certifications.map((c) =>
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(color: AppTheme.success.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
-                child: Text(c, style: const TextStyle(color: AppTheme.success, fontSize: 9)),
-              )).toList()),
-          if (factory.capabilities.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Wrap(spacing: 4, runSpacing: 4, children: factory.capabilities.map((cap) {
-              final label = cap == 'exosome' ? '外泌体' : cap == 'nad' ? 'NAD+' : cap == 'nmn' ? 'NMN' : cap == 'skincare' ? '美容' : cap;
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(color: AppTheme.info.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
-                child: Text(label, style: const TextStyle(color: AppTheme.info, fontSize: 9)),
-              );
-            }).toList()),
-          ],
-        ])),
+          Wrap(spacing: 4, runSpacing: 4, children: factory.capabilities.map((cap) {
+            final label = cap == 'exosome' ? '外泌体' : cap == 'nad' ? 'NAD+' : cap == 'nmn' ? 'NMN' : cap == 'skincare' ? '美容' : cap;
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(color: AppTheme.info.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
+              child: Text(label, style: const TextStyle(color: AppTheme.info, fontSize: 9)),
+            );
+          }).toList()),
+        ],
       ]),
     );
   }

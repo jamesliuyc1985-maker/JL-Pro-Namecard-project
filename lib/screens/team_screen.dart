@@ -6,31 +6,71 @@ import '../models/task.dart';
 import '../models/contact_assignment.dart';
 import '../utils/theme.dart';
 
-class TeamScreen extends StatelessWidget {
+class TeamScreen extends StatefulWidget {
   const TeamScreen({super.key});
+  @override
+  State<TeamScreen> createState() => _TeamScreenState();
+}
+
+class _TeamScreenState extends State<TeamScreen> {
+  String _searchQuery = '';
+  final _searchCtrl = TextEditingController();
+  bool _showSearch = false;
+
+  @override
+  void dispose() { _searchCtrl.dispose(); super.dispose(); }
+
+  List<TeamMember> _filter(List<TeamMember> members) {
+    if (_searchQuery.isEmpty) return members;
+    final q = _searchQuery.toLowerCase();
+    return members.where((m) => m.name.toLowerCase().contains(q) || m.email.toLowerCase().contains(q) || m.phone.toLowerCase().contains(q) || TeamMember.roleLabel(m.role).toLowerCase().contains(q)).toList();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<CrmProvider>(builder: (context, crm, _) {
-      final members = crm.teamMembers;
+      final members = _filter(crm.teamMembers);
       return SafeArea(
         child: Column(children: [
           _buildHeader(context, crm),
-          _buildSummary(crm, members),
+          if (_showSearch) _searchBarWidget(),
+          _buildSummary(crm, crm.teamMembers),
           Expanded(child: members.isEmpty ? _buildEmpty() : _buildMemberList(context, crm, members)),
         ]),
       );
     });
   }
 
+  Widget _searchBarWidget() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: TextField(
+        controller: _searchCtrl,
+        style: const TextStyle(color: AppTheme.offWhite, fontSize: 13),
+        decoration: InputDecoration(
+          hintText: '搜索成员姓名/邮箱/电话...', hintStyle: const TextStyle(color: AppTheme.slate, fontSize: 12),
+          prefixIcon: const Icon(Icons.search, color: AppTheme.slate, size: 18),
+          suffixIcon: _searchQuery.isNotEmpty ? IconButton(icon: const Icon(Icons.clear, size: 16, color: AppTheme.slate), onPressed: () { _searchCtrl.clear(); setState(() => _searchQuery = ''); }) : null,
+          filled: true, fillColor: AppTheme.navyLight, contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+        ),
+        onChanged: (v) => setState(() => _searchQuery = v),
+      ),
+    );
+  }
+
   Widget _buildHeader(BuildContext context, CrmProvider crm) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 16, 4),
+      padding: const EdgeInsets.fromLTRB(20, 16, 4, 4),
       child: Row(children: [
         const Icon(Icons.group, color: AppTheme.primaryBlue, size: 24),
         const SizedBox(width: 10),
         const Text('团队管理', style: TextStyle(color: AppTheme.textPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
         const Spacer(),
+        IconButton(
+          icon: Icon(_showSearch ? Icons.search_off : Icons.search, color: AppTheme.gold, size: 20),
+          onPressed: () => setState(() { _showSearch = !_showSearch; if (!_showSearch) { _searchQuery = ''; _searchCtrl.clear(); } }),
+        ),
         IconButton(
           icon: Container(
             padding: const EdgeInsets.all(8),

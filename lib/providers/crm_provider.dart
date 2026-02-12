@@ -209,6 +209,19 @@ class CrmProvider extends ChangeNotifier {
     await loadAll();
   }
 
+  /// 标记/取消重点项目
+  Future<void> toggleDealStar(String dealId) async {
+    final deal = _deals.firstWhere((d) => d.id == dealId);
+    deal.isStarred = !deal.isStarred;
+    deal.updatedAt = DateTime.now();
+    await _dataService.saveDeal(deal);
+    await _syncService.put('deals', deal.id, deal.toJson());
+    notifyListeners();
+  }
+
+  /// 获取重点标记的Deal
+  List<Deal> get starredDeals => _deals.where((d) => d.isStarred).toList();
+
   Future<void> moveDealStage(String dealId, DealStage newStage) async {
     final deal = _deals.firstWhere((d) => d.id == dealId);
     final oldLabel = deal.stage.label;
