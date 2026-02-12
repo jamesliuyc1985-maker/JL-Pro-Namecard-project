@@ -8,6 +8,7 @@ import 'providers/crm_provider.dart';
 import 'services/data_service.dart';
 import 'services/notification_service.dart';
 import 'services/auth_service.dart';
+import 'services/sync_service.dart';
 import 'utils/theme.dart';
 import 'screens/home_screen.dart';
 import 'screens/auth_screen.dart';
@@ -31,29 +32,36 @@ void main() async {
     if (kDebugMode) debugPrint('[Main] Firebase init failed (local mode): $e');
   }
 
-  // 2. DataService 初始化（local-first, 总是先加载本地种子数据）
+  // 2. SyncService 初始化（Hive 本地持久化）
+  final syncService = SyncService();
+  await syncService.init();
+
+  // 3. DataService 初始化（内存缓存 + 种子数据）
   final dataService = DataService();
   await dataService.init();
 
-  // 3. 如果 Firebase 可用，设置 Firestore 同步
+  // 4. 如果 Firebase 可用，启用双向同步
   if (_firebaseReady) {
     dataService.enableFirestore();
+    syncService.enableFirestore();
   }
 
-  runApp(DealNavigatorApp(dataService: dataService));
+  runApp(DealNavigatorApp(dataService: dataService, syncService: syncService));
 }
 
 class DealNavigatorApp extends StatelessWidget {
   final DataService dataService;
-  const DealNavigatorApp({super.key, required this.dataService});
+  final SyncService syncService;
+  const DealNavigatorApp({super.key, required this.dataService, required this.syncService});
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider.value(value: syncService),
         ChangeNotifierProvider(create: (_) {
           final ns = NotificationService();
-          final crm = CrmProvider(dataService);
+          final crm = CrmProvider(dataService, syncService);
           crm.setNotificationService(ns);
           crm.loadAll();
           return crm;

@@ -10,9 +10,11 @@ import '../models/contact_assignment.dart';
 import '../models/factory.dart';
 import '../services/data_service.dart';
 import '../services/notification_service.dart';
+import '../services/sync_service.dart';
 
 class CrmProvider extends ChangeNotifier {
   final DataService _dataService;
+  final SyncService _syncService;
   NotificationService? _notificationService;
   List<Contact> _contacts = [];
   List<Deal> _deals = [];
@@ -31,7 +33,7 @@ class CrmProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _syncStatus;
 
-  CrmProvider(this._dataService);
+  CrmProvider(this._dataService, this._syncService);
 
   void setNotificationService(NotificationService ns) { _notificationService = ns; }
   void setUserId(String uid) { _dataService.setUserId(uid); }
@@ -76,6 +78,12 @@ class CrmProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get syncStatus => _syncStatus;
 
+  // === SyncService accessors ===
+  SyncService get syncService => _syncService;
+  SyncStatus get syncState => _syncService.status;
+  int get pendingWriteCount => _syncService.pendingWriteCount;
+  DateTime? get lastSyncTime => _syncService.lastSyncTime;
+
   Future<void> loadAll() async {
     _isLoading = true;
     notifyListeners();
@@ -105,11 +113,29 @@ class CrmProvider extends ChangeNotifier {
     _syncStatus = '正在同步...';
     notifyListeners();
     try {
+      // 1. SyncService: Hive ↔ Firestore 双向同步
+      await _syncService.syncFromCloud();
+      // 2. DataService: 内存缓存从云端拉取
       await _dataService.syncFromCloud();
       await loadAll();
-      _syncStatus = '同步成功';
+      _syncStatus = '同步成功 (${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, "0")})';
     } catch (e) {
       _syncStatus = '同步失败: $e';
+    }
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  /// 全量推送本地数据到云端
+  Future<void> pushToCloud() async {
+    _isLoading = true;
+    _syncStatus = '正在上传...';
+    notifyListeners();
+    try {
+      await _syncService.pushToCloud();
+      _syncStatus = '上传成功 (${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, "0")})';
+    } catch (e) {
+      _syncStatus = '上传失败: $e';
     }
     _isLoading = false;
     notifyListeners();
@@ -127,25 +153,61 @@ class CrmProvider extends ChangeNotifier {
 
   Map<String, dynamic> get stats => _dataService.getStats();
 
-  // Contact
-  Future<void> addContact(Contact contact) async { await _dataService.saveContact(contact); await loadAll(); }
-  Future<void> updateContact(Contact contact) async { await _dataService.saveContact(contact); await loadAll(); }
-  Future<void> deleteContact(String id) async { await _dataService.deleteContact(id); await loadAll(); }
+  // Contact (with Hive sync)
+  Future<void> addContact(Contact contact) async {
+    await _dataService.saveContact(contact);
+    await _syncService.put('contacts', contact.id, contact.toJson());
+    await loadAll();
+  }
+  Future<void> updateContact(Contact contact) async {
+    await _dataService.saveContact(contact);
+    await _syncService.put('contacts', contact.id, contact.toJson());
+    await loadAll();
+  }
+  Future<void> deleteContact(String id) async {
+    await _dataService.deleteContact(id);
+    await _syncService.delete('contacts', id);
+    await loadAll();
+  }
   Contact? getContact(String id) => _dataService.getContact(id);
 
-  // Relations
+  // Relations (with Hive sync)
   List<ContactRelation> getRelationsForContact(String contactId) =>
       _relations.where((r) => r.fromContactId == contactId || r.toContactId == contactId).toList();
-  Future<void> addRelation(ContactRelation relation) async { await _dataService.saveRelation(relation); await loadAll(); }
-  Future<void> updateRelation(ContactRelation relation) async { await _dataService.saveRelation(relation); await loadAll(); }
-  Future<void> deleteRelation(String id) async { await _dataService.deleteRelation(id); await loadAll(); }
+  Future<void> addRelation(ContactRelation relation) async {
+    await _dataService.saveRelation(relation);
+    await _syncService.put('relations', relation.id, relation.toJson());
+    await loadAll();
+  }
+  Future<void> updateRelation(ContactRelation relation) async {
+    await _dataService.saveRelation(relation);
+    await _syncService.put('relations', relation.id, relation.toJson());
+    await loadAll();
+  }
+  Future<void> deleteRelation(String id) async {
+    await _dataService.deleteRelation(id);
+    await _syncService.delete('relations', id);
+    await loadAll();
+  }
 
-  // Deal
+  // Deal (with Hive sync)
   List<Deal> getDealsByStage(DealStage stage) => _deals.where((d) => d.stage == stage).toList();
   List<Deal> getDealsByContact(String contactId) => _deals.where((d) => d.contactId == contactId).toList();
-  Future<void> addDeal(Deal deal) async { await _dataService.saveDeal(deal); await loadAll(); }
-  Future<void> updateDeal(Deal deal) async { await _dataService.saveDeal(deal); await loadAll(); }
-  Future<void> deleteDeal(String id) async { await _dataService.deleteDeal(id); await loadAll(); }
+  Future<void> addDeal(Deal deal) async {
+    await _dataService.saveDeal(deal);
+    await _syncService.put('deals', deal.id, deal.toJson());
+    await loadAll();
+  }
+  Future<void> updateDeal(Deal deal) async {
+    await _dataService.saveDeal(deal);
+    await _syncService.put('deals', deal.id, deal.toJson());
+    await loadAll();
+  }
+  Future<void> deleteDeal(String id) async {
+    await _dataService.deleteDeal(id);
+    await _syncService.delete('deals', id);
+    await loadAll();
+  }
 
   Future<void> moveDealStage(String dealId, DealStage newStage) async {
     final deal = _deals.firstWhere((d) => d.id == dealId);
@@ -174,17 +236,37 @@ class CrmProvider extends ChangeNotifier {
   }
   Future<void> deleteInteraction(String id) async { await _dataService.deleteInteraction(id); await loadAll(); }
 
-  // Product
+  // Product (with Hive sync)
   Product? getProduct(String id) => _dataService.getProduct(id);
   List<Product> getProductsByCategory(String category) => _products.where((p) => p.category == category).toList();
-  Future<void> addProduct(Product product) async { await _dataService.saveProduct(product); await loadAll(); }
-  Future<void> deleteProduct(String id) async { await _dataService.deleteProduct(id); await loadAll(); }
+  Future<void> addProduct(Product product) async {
+    await _dataService.saveProduct(product);
+    await _syncService.put('products', product.id, product.toJson());
+    await loadAll();
+  }
+  Future<void> deleteProduct(String id) async {
+    await _dataService.deleteProduct(id);
+    await _syncService.delete('products', id);
+    await loadAll();
+  }
 
-  // Sales Order
+  // Sales Order (with Hive sync)
   List<SalesOrder> getOrdersByContact(String contactId) => _orders.where((o) => o.contactId == contactId).toList();
-  Future<void> addOrder(SalesOrder order) async { await _dataService.saveOrder(order); await loadAll(); }
-  Future<void> updateOrder(SalesOrder order) async { await _dataService.saveOrder(order); await loadAll(); }
-  Future<void> deleteOrder(String id) async { await _dataService.deleteOrder(id); await loadAll(); }
+  Future<void> addOrder(SalesOrder order) async {
+    await _dataService.saveOrder(order);
+    await _syncService.put('sales_orders', order.id, order.toJson());
+    await loadAll();
+  }
+  Future<void> updateOrder(SalesOrder order) async {
+    await _dataService.saveOrder(order);
+    await _syncService.put('sales_orders', order.id, order.toJson());
+    await loadAll();
+  }
+  Future<void> deleteOrder(String id) async {
+    await _dataService.deleteOrder(id);
+    await _syncService.delete('sales_orders', id);
+    await loadAll();
+  }
 
   // Create order + deal (预定模式: 不扣库存, 出货时才扣)
   Future<void> createOrderWithDeal(SalesOrder order) async {
