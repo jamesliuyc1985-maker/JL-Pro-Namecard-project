@@ -143,8 +143,9 @@ class DataService {
     _teamCache.addAll(_builtInTeam());
     _contactsCache = _builtInContacts();
     _dealsCache = _builtInDeals();
+    _relationsCache = _builtInRelations();
     if (kDebugMode) {
-      debugPrint('[DataService] Loaded: ${_contactsCache.length} contacts, ${_dealsCache.length} deals, ${_productsCache.length} products');
+      debugPrint('[DataService] Loaded: ${_contactsCache.length} contacts, ${_dealsCache.length} deals, ${_relationsCache.length} relations, ${_productsCache.length} products');
     }
   }
 
@@ -445,4 +446,88 @@ class DataService {
         updatedAt: now.subtract(const Duration(days: 4)), probability: 50, tags: ['代理', '台湾']),
     ];
   }
+
+  /// 预设联系人关系数据
+  List<ContactRelation> _builtInRelations() => [
+    // 张伟(c-001) ↔ 王芳(c-005): 行业同行，都是医美渠道
+    ContactRelation(
+      id: 'rel-001', fromContactId: 'c-001', toContactId: 'c-005',
+      fromName: '张伟', toName: '王芳', relationType: '同行/同业',
+      strength: RelationStrength.strong, isBidirectional: true,
+      description: '华东医美圈核心人脉，互相推荐客户',
+      tags: ['商业伙伴', '行业联盟'],
+    ),
+    // Dr.田中(c-002) ↔ 山本真由美(c-007): 东京美容圈同业
+    ContactRelation(
+      id: 'rel-002', fromContactId: 'c-002', toContactId: 'c-007',
+      fromName: 'Dr. 田中美咲', toName: '山本真由美', relationType: '同行/同业',
+      strength: RelationStrength.normal, isBidirectional: true,
+      description: '东京美容医疗圈，偶尔转介客户',
+      tags: ['商业伙伴', '同事'],
+    ),
+    // 佐藤(c-004) → 田中(c-002): 佐藤介绍田中
+    ContactRelation(
+      id: 'rel-003', fromContactId: 'c-004', toContactId: 'c-002',
+      fromName: '佐藤健一', toName: 'Dr. 田中美咲', relationType: '介绍人-被介绍人',
+      strength: RelationStrength.strong, isBidirectional: false,
+      description: '佐藤理事将田中院长介绍给我们',
+      tags: ['引荐人'],
+    ),
+    // 佐藤(c-004) → 山本(c-007): 佐藤也介绍了山本
+    ContactRelation(
+      id: 'rel-004', fromContactId: 'c-004', toContactId: 'c-007',
+      fromName: '佐藤健一', toName: '山本真由美', relationType: '介绍人-被介绍人',
+      strength: RelationStrength.normal, isBidirectional: false,
+      description: '美容协会推荐银座Beauty Lab',
+      tags: ['引荐人', '行业联盟'],
+    ),
+    // 张伟(c-001) ↔ 李明(c-003): 上下游关系
+    ContactRelation(
+      id: 'rel-005', fromContactId: 'c-001', toContactId: 'c-003',
+      fromName: '张伟', toName: '李明', relationType: '客户-供应商',
+      strength: RelationStrength.normal, isBidirectional: true,
+      description: '张伟代理产品部分通过李明的电商渠道分销',
+      tags: ['上下游', '商业伙伴'],
+    ),
+    // Mike Chen(c-006) ↔ 林志远(c-010): 海外同业
+    ContactRelation(
+      id: 'rel-006', fromContactId: 'c-006', toContactId: 'c-010',
+      fromName: 'Mike Chen', toName: '林志远', relationType: '同行/同业',
+      strength: RelationStrength.weak, isBidirectional: true,
+      description: '北美-台湾保健品行业联系',
+      tags: ['商业伙伴'],
+    ),
+    // 王芳(c-005) → 赵大力(c-008): 王芳介绍赵大力
+    ContactRelation(
+      id: 'rel-007', fromContactId: 'c-005', toContactId: 'c-008',
+      fromName: '王芳', toName: '赵大力', relationType: '介绍人-被介绍人',
+      strength: RelationStrength.normal, isBidirectional: false,
+      description: '悦颜医美推荐成都康复堂作为线下渠道',
+      tags: ['引荐人', '上下游'],
+    ),
+    // 金相哲(c-009) ↔ Dr.田中(c-002): 中日韩美容医疗交流
+    ContactRelation(
+      id: 'rel-008', fromContactId: 'c-009', toContactId: 'c-002',
+      fromName: '金相哲', toName: 'Dr. 田中美咲', relationType: '同行/同业',
+      strength: RelationStrength.weak, isBidirectional: true,
+      description: '中日韩皮肤医疗学术交流认识',
+      tags: ['行业联盟', '同事'],
+    ),
+    // 张伟(c-001) ↔ 林志远(c-010): 两岸代理商联盟
+    ContactRelation(
+      id: 'rel-009', fromContactId: 'c-001', toContactId: 'c-010',
+      fromName: '张伟', toName: '林志远', relationType: '渠道伙伴',
+      strength: RelationStrength.strong, isBidirectional: true,
+      description: '华东+台湾联合代理战略伙伴',
+      tags: ['商业伙伴', '行业联盟'],
+    ),
+    // 佐藤(c-004) ↔ 金相哲(c-009): 行业协会交流
+    ContactRelation(
+      id: 'rel-010', fromContactId: 'c-004', toContactId: 'c-009',
+      fromName: '佐藤健一', toName: '金相哲', relationType: '行业协会',
+      strength: RelationStrength.weak, isBidirectional: true,
+      description: '亚洲美容医疗协会理事成员',
+      tags: ['行业联盟'],
+    ),
+  ];
 }

@@ -384,6 +384,16 @@ class _NetworkScreenState extends State<NetworkScreen> {
                       decoration: BoxDecoration(color: AppTheme.primaryPurple.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
                       child: Text(r.relationType, style: const TextStyle(color: AppTheme.primaryPurple, fontSize: 10)),
                     ),
+                    const SizedBox(height: 3),
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(color: r.strength.color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                        child: Text(r.strength.label, style: TextStyle(color: r.strength.color, fontSize: 9, fontWeight: FontWeight.w600)),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(r.isBidirectional ? Icons.sync_alt : Icons.arrow_forward, color: AppTheme.textSecondary, size: 10),
+                    ]),
                     if (r.tags.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Wrap(spacing: 3, runSpacing: 2, children: r.tags.take(3).map((tag) {
@@ -417,6 +427,8 @@ class _NetworkScreenState extends State<NetworkScreen> {
     final descCtrl = TextEditingController();
     final allContacts = crm.allContacts;
     final selectedTags = <String>{};
+    RelationStrength relationStrength = RelationStrength.normal;
+    bool isBidirectional = true;
 
     showModalBottomSheet(
       context: context, isScrollControlled: true, backgroundColor: AppTheme.cardBg,
@@ -452,9 +464,52 @@ class _NetworkScreenState extends State<NetworkScreen> {
                 onChanged: (v) => setModalState(() => to = v),
               ),
               const SizedBox(height: 8),
-              TextField(controller: typeCtrl, style: const TextStyle(color: AppTheme.textPrimary),
-                decoration: const InputDecoration(hintText: '关系类型（如：同行、合伙人、客户）', prefixIcon: Icon(Icons.category, color: AppTheme.textSecondary, size: 20))),
-              const SizedBox(height: 12),
+              // 关系类型下拉选择
+              DropdownButtonFormField<String>(
+                initialValue: typeCtrl.text.isNotEmpty ? typeCtrl.text : null,
+                decoration: const InputDecoration(labelText: '关系类型', prefixIcon: Icon(Icons.category, color: AppTheme.textSecondary, size: 20)),
+                dropdownColor: AppTheme.cardBgLight,
+                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                items: ContactRelation.presetRelationTypes.map((t) =>
+                  DropdownMenuItem(value: t, child: Text(t))).toList(),
+                onChanged: (v) => setModalState(() => typeCtrl.text = v ?? ''),
+              ),
+              const SizedBox(height: 8),
+              // 关系强度选择
+              const Text('关系强度', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
+              const SizedBox(height: 6),
+              Row(children: RelationStrength.values.map((s) {
+                final isSelected = relationStrength == s;
+                return Expanded(child: GestureDetector(
+                  onTap: () => setModalState(() => relationStrength = s),
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected ? s.color.withValues(alpha: 0.2) : AppTheme.cardBgLight,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: isSelected ? s.color : AppTheme.textSecondary.withValues(alpha: 0.2), width: isSelected ? 2 : 1),
+                    ),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(isSelected ? Icons.check_circle : Icons.circle_outlined, color: isSelected ? s.color : AppTheme.textSecondary, size: 18),
+                      const SizedBox(height: 2),
+                      Text(s.label, style: TextStyle(color: isSelected ? s.color : AppTheme.textSecondary, fontSize: 11, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                    ]),
+                  ),
+                ));
+              }).toList()),
+              const SizedBox(height: 8),
+              // 双向/单向开关
+              SwitchListTile(
+                title: Text(isBidirectional ? '双向关系 ↔' : '单向关系 →', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
+                subtitle: Text(isBidirectional ? 'A和B互为该关系' : '仅A对B为该关系', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                value: isBidirectional,
+                onChanged: (v) => setModalState(() => isBidirectional = v),
+                activeColor: AppTheme.primaryPurple,
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+              ),
+              const SizedBox(height: 4),
               // Tags selection
               const Text('关系标签 (可多选)', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
               const SizedBox(height: 8),
@@ -498,6 +553,7 @@ class _NetworkScreenState extends State<NetworkScreen> {
                         id: crm.generateId(), fromContactId: from!.id, toContactId: to!.id,
                         fromName: from!.name, toName: to!.name,
                         relationType: typeCtrl.text, description: descCtrl.text,
+                        strength: relationStrength, isBidirectional: isBidirectional,
                         tags: selectedTags.toList(),
                       ));
                       Navigator.pop(ctx);
@@ -521,6 +577,8 @@ class _NetworkScreenState extends State<NetworkScreen> {
     final typeCtrl = TextEditingController(text: relation.relationType);
     final descCtrl = TextEditingController(text: relation.description);
     final selectedTags = <String>{...relation.tags};
+    RelationStrength editStrength = relation.strength;
+    bool editBidirectional = relation.isBidirectional;
 
     showModalBottomSheet(
       context: context, isScrollControlled: true, backgroundColor: AppTheme.cardBg,
@@ -571,9 +629,51 @@ class _NetworkScreenState extends State<NetworkScreen> {
                 ]),
               ),
               const SizedBox(height: 12),
-              TextField(controller: typeCtrl, style: const TextStyle(color: AppTheme.textPrimary),
-                decoration: const InputDecoration(labelText: '关系类型')),
-              const SizedBox(height: 12),
+              // 关系类型下拉
+              DropdownButtonFormField<String>(
+                initialValue: typeCtrl.text.isNotEmpty ? typeCtrl.text : null,
+                decoration: const InputDecoration(labelText: '关系类型'),
+                dropdownColor: AppTheme.cardBgLight,
+                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                items: ContactRelation.presetRelationTypes.map((t) =>
+                  DropdownMenuItem(value: t, child: Text(t))).toList(),
+                onChanged: (v) => setModalState(() => typeCtrl.text = v ?? ''),
+              ),
+              const SizedBox(height: 8),
+              // 关系强度
+              const Text('关系强度', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
+              const SizedBox(height: 6),
+              Row(children: RelationStrength.values.map((s) {
+                final isSelected = editStrength == s;
+                return Expanded(child: GestureDetector(
+                  onTap: () => setModalState(() => editStrength = s),
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected ? s.color.withValues(alpha: 0.2) : AppTheme.cardBgLight,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: isSelected ? s.color : AppTheme.textSecondary.withValues(alpha: 0.2), width: isSelected ? 2 : 1),
+                    ),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(isSelected ? Icons.check_circle : Icons.circle_outlined, color: isSelected ? s.color : AppTheme.textSecondary, size: 18),
+                      const SizedBox(height: 2),
+                      Text(s.label, style: TextStyle(color: isSelected ? s.color : AppTheme.textSecondary, fontSize: 11, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                    ]),
+                  ),
+                ));
+              }).toList()),
+              const SizedBox(height: 8),
+              // 双向/单向
+              SwitchListTile(
+                title: Text(editBidirectional ? '双向关系 ↔' : '单向关系 →', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
+                value: editBidirectional,
+                onChanged: (v) => setModalState(() => editBidirectional = v),
+                activeColor: AppTheme.primaryPurple,
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+              ),
+              const SizedBox(height: 4),
               const Text('关系标签', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
               const SizedBox(height: 8),
               Wrap(spacing: 6, runSpacing: 6, children: ContactRelation.presetTags.map((tag) {
@@ -606,6 +706,8 @@ class _NetworkScreenState extends State<NetworkScreen> {
                   relation.relationType = typeCtrl.text;
                   relation.description = descCtrl.text;
                   relation.tags = selectedTags.toList();
+                  relation.strength = editStrength;
+                  relation.isBidirectional = editBidirectional;
                   crm.updateRelation(relation);
                   Navigator.pop(ctx);
                 },
@@ -692,7 +794,7 @@ class _NetworkPainter extends CustomPainter {
 
         final paint = Paint()
           ..color = lineColor.withValues(alpha: isHighlighted ? 0.7 : 0.15)
-          ..strokeWidth = isHighlighted ? 2.5 : 1
+          ..strokeWidth = isHighlighted ? (r.strength.value * 1.5 + 1) : 1
           ..style = PaintingStyle.stroke;
 
         final path = Path();
@@ -718,6 +820,23 @@ class _NetworkPainter extends CustomPainter {
           diamondPath.lineTo(diamondCenter.dx - ds, diamondCenter.dy);
           diamondPath.close();
           canvas.drawPath(diamondPath, diamondPaint);
+
+          // Arrow for unidirectional relations
+          if (!r.isBidirectional) {
+            final arrowAngle = atan2(toPos.dy - fromPos.dy, toPos.dx - fromPos.dx);
+            final arrowTip = Offset(
+              toPos.dx - 18 * cos(arrowAngle),
+              toPos.dy - 18 * sin(arrowAngle),
+            );
+            final arrowPaint = Paint()..color = lineColor.withValues(alpha: 0.9)..style = PaintingStyle.fill;
+            final arrowPath = Path();
+            const arrowSize = 6.0;
+            arrowPath.moveTo(arrowTip.dx + arrowSize * cos(arrowAngle), arrowTip.dy + arrowSize * sin(arrowAngle));
+            arrowPath.lineTo(arrowTip.dx + arrowSize * cos(arrowAngle + 2.5), arrowTip.dy + arrowSize * sin(arrowAngle + 2.5));
+            arrowPath.lineTo(arrowTip.dx + arrowSize * cos(arrowAngle - 2.5), arrowTip.dy + arrowSize * sin(arrowAngle - 2.5));
+            arrowPath.close();
+            canvas.drawPath(arrowPath, arrowPaint);
+          }
         }
       }
     }

@@ -12,6 +12,7 @@ import 'calendar_task_screen.dart';
 import 'team_screen.dart';
 import 'stats_dashboard_screen.dart';
 import 'profile_screen.dart';
+import 'smart_priority_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback? onLogout;
@@ -33,11 +34,12 @@ class _HomeScreenState extends State<HomeScreen> {
       const ProductInventoryScreen(),    // 1 产品
       const PipelineScreen(),            // 2 销售
       const ContactsScreen(),            // 3 人脉
-      const CalendarTaskScreen(),        // 4 任务
-      const TeamScreen(),                // 5 团队
-      const NetworkScreen(),             // 6 图谱
-      const StatsDashboardScreen(),      // 7 统计
-      ProfileScreen(onLogout: widget.onLogout), // 8 我的
+      const SmartPriorityScreen(),       // 4 智能
+      const CalendarTaskScreen(),        // 5 任务
+      const TeamScreen(),                // 6 团队
+      const NetworkScreen(),             // 7 图谱
+      const StatsDashboardScreen(),      // 8 统计
+      ProfileScreen(onLogout: widget.onLogout), // 9 我的
     ];
   }
 
@@ -47,15 +49,16 @@ class _HomeScreenState extends State<HomeScreen> {
     _NavDef(1, Icons.science_rounded, '产品'),
     _NavDef(2, Icons.view_kanban_rounded, '销售'),
     _NavDef(3, Icons.people_rounded, '人脉'),
+    _NavDef(4, Icons.auto_awesome, '智能'),
   ];
 
   // 下行导航项 (管理线 + 我的)
   static const _bottomRow = [
-    _NavDef(4, Icons.calendar_month, '任务'),
-    _NavDef(5, Icons.group_rounded, '团队'),
-    _NavDef(6, Icons.hub_rounded, '图谱'),
-    _NavDef(7, Icons.analytics_rounded, '统计'),
-    _NavDef(8, Icons.person_rounded, '我的'),
+    _NavDef(5, Icons.calendar_month, '任务'),
+    _NavDef(6, Icons.group_rounded, '团队'),
+    _NavDef(7, Icons.hub_rounded, '图谱'),
+    _NavDef(8, Icons.analytics_rounded, '统计'),
+    _NavDef(9, Icons.person_rounded, '我的'),
   ];
 
   @override

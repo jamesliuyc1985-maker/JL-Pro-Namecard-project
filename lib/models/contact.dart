@@ -149,6 +149,18 @@ class Contact {
       );
 }
 
+/// 关系强度
+enum RelationStrength {
+  strong('紧密', Color(0xFFE17055), 3),
+  normal('一般', Color(0xFF74B9FF), 2),
+  weak('疏远', Color(0xFF636E72), 1);
+
+  final String label;
+  final Color color;
+  final int value;
+  const RelationStrength(this.label, this.color, this.value);
+}
+
 /// 联系人之间的关系
 class ContactRelation {
   final String id;
@@ -157,6 +169,8 @@ class ContactRelation {
   String fromName;
   String toName;
   String relationType; // 同事、合伙人、客户-供应商、朋友、校友等
+  RelationStrength strength; // 关系强度
+  bool isBidirectional; // 是否双向关系
   String description;
   List<String> tags; // 关系标签（商业、私人、合作、竞争、上下游等）
   DateTime createdAt;
@@ -168,6 +182,8 @@ class ContactRelation {
     required this.fromName,
     required this.toName,
     required this.relationType,
+    this.strength = RelationStrength.normal,
+    this.isBidirectional = true,
     this.description = '',
     List<String>? tags,
     DateTime? createdAt,
@@ -181,6 +197,8 @@ class ContactRelation {
         'fromName': fromName,
         'toName': toName,
         'relationType': relationType,
+        'strength': strength.name,
+        'isBidirectional': isBidirectional,
         'description': description,
         'tags': tags,
         'createdAt': createdAt.toIso8601String(),
@@ -194,10 +212,21 @@ class ContactRelation {
         fromName: json['fromName'] as String? ?? '',
         toName: json['toName'] as String? ?? '',
         relationType: json['relationType'] as String? ?? '',
+        strength: RelationStrength.values.firstWhere(
+          (e) => e.name == json['strength'], orElse: () => RelationStrength.normal,
+        ),
+        isBidirectional: json['isBidirectional'] as bool? ?? true,
         description: json['description'] as String? ?? '',
         tags: List<String>.from(json['tags'] ?? []),
         createdAt: DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
       );
+
+  /// 预设关系类型
+  static const List<String> presetRelationTypes = [
+    '合伙人', '客户-供应商', '同行/同业', '上下级', '校友',
+    '朋友', '家族/亲属', '投资人-创业者', '介绍人-被介绍人', '导师-学生',
+    '渠道伙伴', '竞争对手', '行业协会',
+  ];
 
   /// 预定义关系标签
   static const List<String> presetTags = [
