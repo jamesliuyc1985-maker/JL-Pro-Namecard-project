@@ -30,35 +30,33 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _screens = [
-      const StatsDashboardScreen(),       // 0 统计
-      const PipelineScreen(),             // 1 销售
-      const ProductInventoryScreen(),     // 2 产品
-      const ProductionScreen(),           // 3 生产
-      const SmartPriorityScreen(),        // 4 智能
-      const ContactsScreen(),             // 5 人脉
-      const NetworkScreen(),              // 6 图谱
-      const TeamScreen(),                 // 7 团队
-      const CalendarTaskScreen(),         // 8 任务
-      ProfileScreen(onLogout: widget.onLogout), // 9 我的
+      const StatsDashboardScreen(),
+      const PipelineScreen(),
+      const ProductInventoryScreen(),
+      const ProductionScreen(),
+      const SmartPriorityScreen(),
+      const ContactsScreen(),
+      const NetworkScreen(),
+      const TeamScreen(),
+      const CalendarTaskScreen(),
+      ProfileScreen(onLogout: widget.onLogout),
     ];
   }
 
-  // 上行导航项 (业务线)
   static const _topRow = [
-    _NavDef(0, Icons.analytics_rounded, '统计'),
+    _NavDef(0, Icons.bar_chart_rounded, '统计'),
     _NavDef(1, Icons.view_kanban_rounded, '销售'),
-    _NavDef(2, Icons.science_rounded, '产品'),
-    _NavDef(3, Icons.precision_manufacturing, '生产'),
-    _NavDef(4, Icons.auto_awesome, '智能'),
+    _NavDef(2, Icons.science_outlined, '产品'),
+    _NavDef(3, Icons.precision_manufacturing_outlined, '生产'),
+    _NavDef(4, Icons.auto_awesome_outlined, '智能'),
   ];
 
-  // 下行导航项 (管理线 + 我的)
   static const _bottomRow = [
-    _NavDef(5, Icons.people_rounded, '人脉'),
-    _NavDef(6, Icons.hub_rounded, '图谱'),
-    _NavDef(7, Icons.group_rounded, '团队'),
-    _NavDef(8, Icons.calendar_month, '任务'),
-    _NavDef(9, Icons.person_rounded, '我的'),
+    _NavDef(5, Icons.people_outline, '人脉'),
+    _NavDef(6, Icons.hub_outlined, '图谱'),
+    _NavDef(7, Icons.group_outlined, '团队'),
+    _NavDef(8, Icons.calendar_month_outlined, '任务'),
+    _NavDef(9, Icons.person_outline, '我的'),
   ];
 
   @override
@@ -70,28 +68,22 @@ class _HomeScreenState extends State<HomeScreen> {
       ]),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: AppTheme.darkBg,
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 16, offset: const Offset(0, -4))],
+          color: AppTheme.navy,
+          border: Border(top: BorderSide(color: AppTheme.steel.withValues(alpha: 0.3))),
         ),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(4, 6, 4, 4),
+            padding: const EdgeInsets.fromLTRB(4, 4, 4, 2),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  children: _topRow.map((n) => Expanded(child: _navItem(n))).toList(),
-                ),
-                const SizedBox(height: 2),
+                Row(children: _topRow.map((n) => Expanded(child: _navItem(n))).toList()),
                 Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16),
-                  height: 0.5,
-                  color: AppTheme.textSecondary.withValues(alpha: 0.15),
+                  margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 1),
+                  height: 1,
+                  color: AppTheme.steel.withValues(alpha: 0.15),
                 ),
-                const SizedBox(height: 2),
-                Row(
-                  children: _bottomRow.map((n) => Expanded(child: _navItem(n))).toList(),
-                ),
+                Row(children: _bottomRow.map((n) => Expanded(child: _navItem(n))).toList()),
               ],
             ),
           ),
@@ -110,7 +102,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Container(
             padding: const EdgeInsets.all(6),
             child: Stack(clipBehavior: Clip.none, children: [
-              Icon(Icons.notifications_none, color: AppTheme.textSecondary.withValues(alpha: 0.6), size: 22),
+              const Icon(Icons.notifications_none, color: AppTheme.slate, size: 22),
               if (ns.unreadCount > 0)
                 Positioned(top: -4, right: -4, child: Container(
                   padding: const EdgeInsets.all(3),
@@ -126,8 +118,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _showNotificationPanel(BuildContext context, NotificationService ns) {
     showModalBottomSheet(
-      context: context, isScrollControlled: true, backgroundColor: AppTheme.cardBg,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      context: context, isScrollControlled: true, backgroundColor: AppTheme.navyLight,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(12))),
       builder: (ctx) {
         return Consumer<NotificationService>(builder: (context, ns, _) {
           final items = ns.notifications;
@@ -137,51 +129,32 @@ class _HomeScreenState extends State<HomeScreen> {
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Row(children: [
-                  const Icon(Icons.notifications, color: AppTheme.accentGold, size: 20),
-                  const SizedBox(width: 8),
-                  const Text('通知中心', style: TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Text('通知', style: TextStyle(color: AppTheme.offWhite, fontSize: 16, fontWeight: FontWeight.w600)),
                   const Spacer(),
                   if (ns.unreadCount > 0) TextButton(
                     onPressed: () { ns.markAllRead(); },
                     child: const Text('全部已读', style: TextStyle(fontSize: 12)),
                   ),
-                  IconButton(icon: const Icon(Icons.close, color: AppTheme.textSecondary, size: 20), onPressed: () => Navigator.pop(ctx)),
+                  IconButton(icon: const Icon(Icons.close, color: AppTheme.slate, size: 20), onPressed: () => Navigator.pop(ctx)),
                 ]),
               ),
               if (items.isEmpty)
-                const Padding(padding: EdgeInsets.all(40), child: Text('暂无通知', style: TextStyle(color: AppTheme.textSecondary)))
+                const Padding(padding: EdgeInsets.all(40), child: Text('暂无通知', style: TextStyle(color: AppTheme.slate)))
               else
                 Flexible(
-                  child: ListView.builder(
+                  child: ListView.separated(
                     shrinkWrap: true,
                     itemCount: items.length,
+                    separatorBuilder: (_, __) => Divider(height: 1, color: AppTheme.steel.withValues(alpha: 0.2)),
                     itemBuilder: (context, index) {
                       final n = items[index];
-                      return GestureDetector(
-                        onTap: () { ns.markRead(n.id); },
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: n.isRead ? AppTheme.cardBgLight : n.color.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(10),
-                            border: n.isRead ? null : Border.all(color: n.color.withValues(alpha: 0.3)),
-                          ),
-                          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(color: n.color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-                              child: Icon(n.icon, color: n.color, size: 16),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Text(n.title, style: TextStyle(color: AppTheme.textPrimary, fontWeight: n.isRead ? FontWeight.normal : FontWeight.bold, fontSize: 13)),
-                              const SizedBox(height: 2),
-                              Text(n.body, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11), maxLines: 2, overflow: TextOverflow.ellipsis),
-                            ])),
-                            Text(Formatters.timeAgo(n.createdAt), style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.6), fontSize: 9)),
-                          ]),
-                        ),
+                      return ListTile(
+                        dense: true,
+                        leading: Icon(n.icon, color: n.isRead ? AppTheme.slate : n.color, size: 18),
+                        title: Text(n.title, style: TextStyle(color: AppTheme.offWhite, fontWeight: n.isRead ? FontWeight.normal : FontWeight.w600, fontSize: 13)),
+                        subtitle: Text(n.body, style: const TextStyle(color: AppTheme.slate, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        trailing: Text(Formatters.timeAgo(n.createdAt), style: const TextStyle(color: AppTheme.slate, fontSize: 9)),
+                        onTap: () => ns.markRead(n.id),
                       );
                     },
                   ),
@@ -198,27 +171,27 @@ class _HomeScreenState extends State<HomeScreen> {
     return GestureDetector(
       onTap: () => setState(() => _currentIndex = nav.index),
       behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-        margin: const EdgeInsets.symmetric(horizontal: 1),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          gradient: isSelected ? LinearGradient(
-            colors: [AppTheme.brandDarkRed, AppTheme.brandGold],
-            begin: Alignment.topLeft, end: Alignment.bottomRight,
-          ) : null,
-        ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(nav.icon, color: isSelected ? Colors.white : AppTheme.textSecondary, size: 17),
+            Icon(nav.icon, color: isSelected ? AppTheme.gold : AppTheme.slate, size: 18),
             const SizedBox(height: 2),
             Text(nav.label, style: TextStyle(
-              color: isSelected ? Colors.white : AppTheme.textSecondary,
+              color: isSelected ? AppTheme.gold : AppTheme.slate,
               fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               fontSize: 9,
             )),
+            const SizedBox(height: 2),
+            // Underline indicator
+            Container(
+              width: 16, height: 1.5,
+              decoration: BoxDecoration(
+                color: isSelected ? AppTheme.gold : Colors.transparent,
+                borderRadius: BorderRadius.circular(1),
+              ),
+            ),
           ],
         ),
       ),

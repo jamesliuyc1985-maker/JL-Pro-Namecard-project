@@ -17,7 +17,6 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> with Si
   late TabController _tabCtrl;
   String _selectedCategory = 'all';
 
-  // Product image URLs mapped by category
   static const _productImages = {
     'exosome': 'https://sspark.genspark.ai/cfimages?u1=gQJ0%2FI61F8aniwhXmW3RCOtb2ddp%2BIkvgbC7uSVsjje5TY6kHHdQPw%2BFX0pCr5TsSpLSsbDs4eWYMJDVR%2FFZAjSEVv7H2zT35KTXrux0iEY5eavPlEp5xTtvMR0zx5sQIvyRD6SSeJwJP6BNzxz7kIebeN1oPBmfpBnWtYaphXqzk2qYywDvrib4XqOrSyCsmijp5I4%3D&u2=vdsQVGBgw%2FpPeDo2&width=2560',
     'nad': 'https://sspark.genspark.ai/cfimages?u1=sRtjvw4%2BttLmk7K%2FoqtAySxDHIfxfQxdrWD8dNNTPqpf7SfyCC70nmBNWp2kitq5LVhYo72q0eLJKLZc6SGQcCEn0xAr%2Bt%2F6GBJL&u2=CUZ%2FXXvVVY4pRp%2FA&width=2560',
@@ -25,550 +24,346 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> with Si
   };
 
   @override
-  void initState() {
-    super.initState();
-    _tabCtrl = TabController(length: 3, vsync: this);
-  }
-
+  void initState() { super.initState(); _tabCtrl = TabController(length: 3, vsync: this); }
   @override
-  void dispose() {
-    _tabCtrl.dispose();
-    super.dispose();
-  }
+  void dispose() { _tabCtrl.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<CrmProvider>(builder: (context, crm, _) {
-      return SafeArea(
-        child: Column(children: [
-          _buildBrandHeader(context, crm),
-          _buildSummaryRow(crm),
-          _buildTabBar(),
-          const SizedBox(height: 6),
-          Expanded(
-            child: TabBarView(controller: _tabCtrl, children: [
-              _buildProductCatalog(crm),
-              _buildStockOverview(crm),
-              _buildRecordsList(crm),
-            ]),
-          ),
-        ]),
-      );
+      return SafeArea(child: Column(children: [
+        _header(context, crm),
+        _summaryBar(crm),
+        _tabBar(),
+        Expanded(child: TabBarView(controller: _tabCtrl, children: [
+          _catalogTab(crm),
+          _stockTab(crm),
+          _recordsTab(crm),
+        ])),
+      ]));
     });
   }
 
-  Widget _buildBrandHeader(BuildContext context, CrmProvider crm) {
-    return Container(
+  // === Header ===
+  Widget _header(BuildContext context, CrmProvider crm) {
+    return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [AppTheme.brandDarkRed.withValues(alpha: 0.2), AppTheme.darkBg],
-          begin: Alignment.topCenter, end: Alignment.bottomCenter,
-        ),
-      ),
       child: Row(children: [
-        // Company logo
-        Container(
-          width: 40, height: 40,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: [BoxShadow(color: AppTheme.brandGold.withValues(alpha: 0.3), blurRadius: 8)],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Image.asset('assets/images/nd_logo.png', fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
-                decoration: BoxDecoration(gradient: AppTheme.gradient, borderRadius: BorderRadius.circular(10)),
-                child: const Icon(Icons.science_rounded, color: Colors.white, size: 20),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('产品 & 库存', style: TextStyle(color: AppTheme.textPrimary, fontSize: 20, fontWeight: FontWeight.bold)),
-          Text('RégénéColla® | Product Catalog', style: TextStyle(color: AppTheme.brandGoldLight.withValues(alpha: 0.7), fontSize: 10)),
+        const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('产品 & 库存', style: TextStyle(color: AppTheme.offWhite, fontSize: 20, fontWeight: FontWeight.w600)),
+          Text('Product & Inventory', style: TextStyle(color: AppTheme.slate, fontSize: 11)),
         ])),
-        IconButton(
-          icon: Container(
-            padding: const EdgeInsets.all(7),
-            decoration: BoxDecoration(color: AppTheme.success.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(10)),
-            child: const Icon(Icons.add_box, color: AppTheme.success, size: 18),
-          ),
-          tooltip: '入库/出库',
-          onPressed: () => _showAddRecordSheet(context, crm),
-        ),
+        _actionBtn(Icons.add, '入库/出库', () => _showAddRecordSheet(context, crm)),
       ]),
     );
   }
 
-  Widget _buildSummaryRow(CrmProvider crm) {
+  Widget _actionBtn(IconData icon, String tip, VoidCallback onTap) {
+    return IconButton(
+      tooltip: tip,
+      icon: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          border: Border.all(color: AppTheme.steel.withValues(alpha: 0.4)),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Icon(icon, color: AppTheme.gold, size: 18),
+      ),
+      onPressed: onTap,
+    );
+  }
+
+  // === Summary Bar ===
+  Widget _summaryBar(CrmProvider crm) {
     final stocks = crm.inventoryStocks;
-    final totalStock = stocks.fold<int>(0, (sum, s) => sum + s.currentStock);
+    final totalStock = stocks.fold<int>(0, (s, i) => s + i.currentStock);
     final lowStock = stocks.where((s) => s.currentStock > 0 && s.currentStock < 5).length;
     final outOfStock = stocks.where((s) => s.currentStock <= 0).length;
-    final productCount = crm.products.length;
     final activeProd = crm.activeProductions.length;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
       decoration: BoxDecoration(
-        color: AppTheme.cardBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.brandGold.withValues(alpha: 0.15)),
+        color: AppTheme.navyLight,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.steel.withValues(alpha: 0.2)),
       ),
       child: Row(children: [
-        Expanded(child: _summaryChipTap('$productCount', '产品', AppTheme.brandDarkRed, Icons.science, () {
-          _showDrilldown('产品列表 ($productCount)', AppTheme.brandDarkRed, Icons.science,
-            crm.products.map((p) => _drilldownItem(p.name, '${ProductCategory.label(p.category)} | ${p.specification}', AppTheme.brandDarkRed,
-              trailing: Formatters.currency(p.retailPrice))).toList());
-        })),
-        _goldDivider(),
-        Expanded(child: _summaryChipTap('$totalStock', '总库存', AppTheme.brandGold, Icons.inventory, () {
-          _showDrilldown('总库存明细', AppTheme.brandGold, Icons.inventory,
-            stocks.map((s) => _drilldownItem(s.productName, '当前库存', _stockColor(s.currentStock), trailing: '${s.currentStock}')).toList());
-        })),
-        _goldDivider(),
-        Expanded(child: _summaryChipTap('$lowStock', '低库存', AppTheme.warning, Icons.warning_amber, () {
-          final lowItems = stocks.where((s) => s.currentStock > 0 && s.currentStock < 5).toList();
-          _showDrilldown('低库存产品 (${lowItems.length})', AppTheme.warning, Icons.warning_amber,
-            lowItems.map((s) => _drilldownItem(s.productName, '库存不足, 建议补货', AppTheme.warning, trailing: '${s.currentStock}')).toList());
-        })),
-        _goldDivider(),
-        Expanded(child: _summaryChipTap('$outOfStock', '缺货', AppTheme.danger, Icons.error_outline, () {
-          final outItems = stocks.where((s) => s.currentStock <= 0).toList();
-          _showDrilldown('缺货产品 (${outItems.length})', AppTheme.danger, Icons.error_outline,
-            outItems.map((s) => _drilldownItem(s.productName, '已缺货! 急需补货', AppTheme.danger, trailing: '0')).toList());
-        })),
-        _goldDivider(),
-        Expanded(child: _summaryChipTap('$activeProd', '生产中', const Color(0xFF00CEC9), Icons.precision_manufacturing, () {
-          final activeList = crm.activeProductions;
-          _showDrilldown('生产中 (${activeList.length})', const Color(0xFF00CEC9), Icons.precision_manufacturing,
-            activeList.map((o) => _drilldownItem(o.productName, '${o.factoryName} | 数量${o.quantity}', const Color(0xFF00CEC9))).toList());
-        })),
+        _metric('${crm.products.length}', '产品', AppTheme.info, () => _drillProducts(crm)),
+        _divider(),
+        _metric('$totalStock', '总库存', AppTheme.gold, () => _drillStocks(crm, stocks)),
+        _divider(),
+        _metric('$lowStock', '低库存', AppTheme.warning, () => _drillLow(crm, stocks)),
+        _divider(),
+        _metric('$outOfStock', '缺货', AppTheme.danger, () => _drillOut(crm, stocks)),
+        _divider(),
+        _metric('$activeProd', '生产中', AppTheme.success, () => _drillProd(crm)),
       ]),
     );
   }
 
-  Widget _summaryChipTap(String value, String label, Color color, IconData icon, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(children: [
-        Icon(icon, color: color, size: 14),
-        const SizedBox(height: 3),
-        Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 15)),
-        Row(mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
-          Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 9)),
-          const SizedBox(width: 2),
-          Icon(Icons.open_in_new, size: 6, color: color.withValues(alpha: 0.5)),
+  Widget _metric(String val, String label, Color c, VoidCallback onTap) {
+    return Expanded(child: GestureDetector(onTap: onTap, child: Column(children: [
+      Text(val, style: TextStyle(color: c, fontWeight: FontWeight.bold, fontSize: 15)),
+      const SizedBox(height: 2),
+      Text(label, style: const TextStyle(color: AppTheme.slate, fontSize: 9)),
+    ])));
+  }
+
+  Widget _divider() => Container(width: 1, height: 28, color: AppTheme.steel.withValues(alpha: 0.2));
+
+  // === Drilldowns ===
+  void _drill(String title, IconData icon, List<Widget> items) {
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: AppTheme.navyLight,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(12))),
+      builder: (ctx) => ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.7),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Padding(padding: const EdgeInsets.all(16), child: Row(children: [
+            Icon(icon, color: AppTheme.gold, size: 18),
+            const SizedBox(width: 8),
+            Expanded(child: Text(title, style: const TextStyle(color: AppTheme.offWhite, fontSize: 15, fontWeight: FontWeight.w600))),
+            IconButton(icon: const Icon(Icons.close, color: AppTheme.slate, size: 18), onPressed: () => Navigator.pop(ctx)),
+          ])),
+          if (items.isEmpty) const Padding(padding: EdgeInsets.all(32), child: Text('无数据', style: TextStyle(color: AppTheme.slate)))
+          else Flexible(child: ListView(padding: const EdgeInsets.symmetric(horizontal: 12), children: [...items, const SizedBox(height: 16)])),
         ]),
+      ),
+    );
+  }
+
+  Widget _dItem(String title, String sub, {String? trail, Color trailColor = AppTheme.gold}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(color: AppTheme.navyMid, borderRadius: BorderRadius.circular(6)),
+      child: Row(children: [
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: const TextStyle(color: AppTheme.offWhite, fontSize: 12, fontWeight: FontWeight.w500)),
+          if (sub.isNotEmpty) Text(sub, style: const TextStyle(color: AppTheme.slate, fontSize: 10)),
+        ])),
+        if (trail != null) Text(trail, style: TextStyle(color: trailColor, fontWeight: FontWeight.bold, fontSize: 13)),
       ]),
     );
   }
 
-  Widget _goldDivider() => Container(
-    width: 1, height: 36, margin: const EdgeInsets.symmetric(horizontal: 2),
-    decoration: BoxDecoration(
-      gradient: LinearGradient(colors: [Colors.transparent, AppTheme.brandGold.withValues(alpha: 0.2), Colors.transparent], begin: Alignment.topCenter, end: Alignment.bottomCenter),
-    ),
-  );
+  void _drillProducts(CrmProvider crm) => _drill('产品列表 (${crm.products.length})', Icons.science_outlined,
+    crm.products.map((p) => _dItem(p.name, '${ProductCategory.label(p.category)} | ${p.specification}', trail: Formatters.currency(p.retailPrice))).toList());
+  void _drillStocks(CrmProvider crm, List<InventoryStock> stocks) => _drill('库存明细', Icons.inventory_2_outlined,
+    stocks.map((s) => _dItem(s.productName, s.productCode, trail: '${s.currentStock}', trailColor: _stockColor(s.currentStock))).toList());
+  void _drillLow(CrmProvider crm, List<InventoryStock> stocks) { final items = stocks.where((s) => s.currentStock > 0 && s.currentStock < 5).toList();
+    _drill('低库存 (${items.length})', Icons.warning_amber_outlined, items.map((s) => _dItem(s.productName, '建议补货', trail: '${s.currentStock}', trailColor: AppTheme.warning)).toList()); }
+  void _drillOut(CrmProvider crm, List<InventoryStock> stocks) { final items = stocks.where((s) => s.currentStock <= 0).toList();
+    _drill('缺货 (${items.length})', Icons.error_outline, items.map((s) => _dItem(s.productName, '急需补货', trail: '0', trailColor: AppTheme.danger)).toList()); }
+  void _drillProd(CrmProvider crm) => _drill('生产中 (${crm.activeProductions.length})', Icons.precision_manufacturing_outlined,
+    crm.activeProductions.map((o) => _dItem(o.productName, '${o.factoryName} | x${o.quantity}')).toList());
 
   Color _stockColor(int qty) => qty <= 0 ? AppTheme.danger : qty < 5 ? AppTheme.warning : AppTheme.success;
 
-  // === Drilldown ===
-  void _showDrilldown(String title, Color color, IconData icon, List<Widget> children) {
-    showModalBottomSheet(
-      context: context, isScrollControlled: true, backgroundColor: AppTheme.cardBg,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.75),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [color.withValues(alpha: 0.15), Colors.transparent]),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-            ),
-            child: Row(children: [
-              Icon(icon, color: color, size: 20),
-              const SizedBox(width: 8),
-              Expanded(child: Text(title, style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.bold))),
-              IconButton(icon: const Icon(Icons.close, color: AppTheme.textSecondary, size: 20), onPressed: () => Navigator.pop(ctx)),
-            ]),
-          ),
-          if (children.isEmpty) const Padding(padding: EdgeInsets.all(40), child: Text('无数据', style: TextStyle(color: AppTheme.textSecondary)))
-          else Flexible(child: ListView(padding: const EdgeInsets.symmetric(horizontal: 12), children: [...children, const SizedBox(height: 16)])),
-        ]),
-      ),
-    );
-  }
-
-  Widget _drilldownItem(String title, String subtitle, Color color, {String? trailing}) {
+  // === Tab Bar ===
+  Widget _tabBar() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: AppTheme.cardBgLight, borderRadius: BorderRadius.circular(10)),
-      child: Row(children: [
-        Container(width: 4, height: 30, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
-        const SizedBox(width: 10),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
-          if (subtitle.isNotEmpty) Text(subtitle, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
-        ])),
-        if (trailing != null) Text(trailing, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
-      ]),
-    );
-  }
-
-  Widget _buildTabBar() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: TabBar(
         controller: _tabCtrl,
-        indicator: BoxDecoration(gradient: AppTheme.gradient, borderRadius: BorderRadius.circular(12)),
-        labelColor: Colors.white,
-        unselectedLabelColor: AppTheme.textSecondary,
+        indicatorColor: AppTheme.gold,
+        indicatorWeight: 2,
+        labelColor: AppTheme.offWhite,
+        unselectedLabelColor: AppTheme.slate,
         labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-        dividerColor: Colors.transparent,
-        tabs: const [
-          Tab(text: '产品目录'),
-          Tab(text: '库存总览'),
-          Tab(text: '出入库记录'),
-        ],
+        dividerColor: AppTheme.steel.withValues(alpha: 0.2),
+        tabs: const [Tab(text: '产品目录'), Tab(text: '库存总览'), Tab(text: '出入库记录')],
       ),
     );
   }
 
-  // ========== Tab 1: Product Catalog ==========
-  Widget _buildProductCatalog(CrmProvider crm) {
-    final allProducts = crm.products;
-    final products = _selectedCategory == 'all'
-        ? allProducts
-        : allProducts.where((p) => p.category == _selectedCategory).toList();
-
+  // === Tab 1: Catalog ===
+  Widget _catalogTab(CrmProvider crm) {
+    final all = crm.products;
+    final products = _selectedCategory == 'all' ? all : all.where((p) => p.category == _selectedCategory).toList();
     return Column(children: [
-      _buildCategoryFilter(),
-      Padding(
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+      _categoryFilter(),
+      Padding(padding: const EdgeInsets.fromLTRB(20, 2, 20, 2),
         child: Row(children: [
-          Text('${products.length} 款产品', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-          const Spacer(),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              gradient: AppTheme.gradient,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Text('能道再生®', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w600)),
-          ),
+          Text('${products.length} 款产品', style: const TextStyle(color: AppTheme.slate, fontSize: 11)),
         ]),
       ),
-      Expanded(child: _buildProductList(products, crm)),
+      Expanded(child: products.isEmpty
+        ? const Center(child: Text('暂无产品', style: TextStyle(color: AppTheme.slate)))
+        : ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: products.length,
+            itemBuilder: (ctx, i) => _productCard(ctx, products[i], crm),
+          )),
     ]);
   }
 
-  Widget _buildCategoryFilter() {
-    final categories = [
-      {'key': 'all', 'label': '全部', 'icon': Icons.apps, 'color': AppTheme.brandDarkRed},
-      {'key': 'exosome', 'label': '外泌体', 'icon': Icons.bubble_chart, 'color': const Color(0xFF00B894)},
-      {'key': 'nad', 'label': 'NAD+', 'icon': Icons.flash_on, 'color': const Color(0xFFE17055)},
-      {'key': 'nmn', 'label': 'NMN', 'icon': Icons.medication, 'color': const Color(0xFF0984E3)},
+  Widget _categoryFilter() {
+    const cats = [
+      {'key': 'all', 'label': '全部'},
+      {'key': 'exosome', 'label': '外泌体'},
+      {'key': 'nad', 'label': 'NAD+'},
+      {'key': 'nmn', 'label': 'NMN'},
     ];
-
-    return SizedBox(
-      height: 42,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        children: categories.map((cat) {
-          final isSelected = _selectedCategory == cat['key'];
-          final color = cat['color'] as Color;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: FilterChip(
-              selected: isSelected,
-              label: Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(cat['icon'] as IconData, size: 13, color: isSelected ? Colors.white : color),
-                const SizedBox(width: 4),
-                Text(cat['label'] as String),
-              ]),
-              onSelected: (_) => setState(() => _selectedCategory = cat['key'] as String),
-              selectedColor: color,
-              backgroundColor: AppTheme.cardBgLight,
-              labelStyle: TextStyle(color: isSelected ? Colors.white : AppTheme.textPrimary, fontSize: 11),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildProductList(List<Product> products, CrmProvider crm) {
-    if (products.isEmpty) {
-      return const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(Icons.inventory_2, color: AppTheme.textSecondary, size: 48),
-        SizedBox(height: 12),
-        Text('暂无产品', style: TextStyle(color: AppTheme.textSecondary)),
-      ]));
-    }
-    return ListView.builder(
+    return SizedBox(height: 38, child: ListView(
+      scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: products.length,
-      itemBuilder: (context, index) => _productCard(context, products[index], crm),
-    );
+      children: cats.map((c) {
+        final sel = _selectedCategory == c['key'];
+        return Padding(padding: const EdgeInsets.only(right: 8), child: FilterChip(
+          selected: sel, label: Text(c['label']!),
+          onSelected: (_) => setState(() => _selectedCategory = c['key']!),
+          selectedColor: AppTheme.gold,
+          backgroundColor: AppTheme.navyMid,
+          labelStyle: TextStyle(color: sel ? AppTheme.navy : AppTheme.offWhite, fontSize: 11, fontWeight: sel ? FontWeight.w600 : FontWeight.normal),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+          side: BorderSide(color: sel ? AppTheme.gold : AppTheme.steel.withValues(alpha: 0.3)),
+        ));
+      }).toList(),
+    ));
   }
 
   Widget _productCard(BuildContext context, Product product, CrmProvider crm) {
-    Color catColor;
-    IconData catIcon;
-    switch (product.category) {
-      case 'exosome': catColor = const Color(0xFF00B894); catIcon = Icons.bubble_chart; break;
-      case 'nad': catColor = const Color(0xFFE17055); catIcon = Icons.flash_on; break;
-      case 'nmn': catColor = const Color(0xFF0984E3); catIcon = Icons.medication; break;
-      default: catColor = AppTheme.brandDarkRed; catIcon = Icons.science; break;
-    }
-
     final stock = crm.getProductStock(product.id);
-    final activeProd = crm.getProductionByProduct(product.id).where(
-      (p) => p.status != 'completed' && p.status != 'cancelled'
-    ).length;
-
-    Color stockColor = _stockColor(stock);
     final imageUrl = _productImages[product.category];
 
     return GestureDetector(
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProductDetailScreen(productId: product.id))),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppTheme.cardBg,
-          borderRadius: BorderRadius.circular(14),
-          border: Border(left: BorderSide(color: catColor, width: 3)),
+          color: AppTheme.navyLight,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppTheme.steel.withValues(alpha: 0.2)),
         ),
         child: Row(children: [
-          // Product image
-          if (imageUrl != null)
-            ClipRRect(
-              borderRadius: const BorderRadius.only(topLeft: Radius.circular(14), bottomLeft: Radius.circular(14)),
-              child: Image.network(imageUrl, width: 70, height: 80, fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
-                  width: 70, height: 80,
-                  decoration: BoxDecoration(color: catColor.withValues(alpha: 0.15)),
-                  child: Icon(catIcon, color: catColor, size: 28),
-                ),
-              ),
-            )
-          else
-            Container(
-              width: 70, height: 80, margin: const EdgeInsets.only(left: 3),
-              decoration: BoxDecoration(color: catColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
-              child: Icon(catIcon, color: catColor, size: 28),
-            ),
-          const SizedBox(width: 12),
-          Expanded(child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(product.name, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold, fontSize: 14)),
-              const SizedBox(height: 2),
-              Text(product.specification, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
-              const SizedBox(height: 6),
-              Row(children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: catColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
-                  child: Text(ProductCategory.label(product.category), style: TextStyle(color: catColor, fontSize: 9, fontWeight: FontWeight.w600)),
-                ),
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: stockColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
-                  child: Text('库存:$stock', style: TextStyle(color: stockColor, fontSize: 9, fontWeight: FontWeight.w600)),
-                ),
-                if (activeProd > 0) ...[
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(color: const Color(0xFF00CEC9).withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
-                    child: Text('生产中:$activeProd', style: const TextStyle(color: Color(0xFF00CEC9), fontSize: 9, fontWeight: FontWeight.w600)),
-                  ),
-                ],
-              ]),
-            ]),
-          )),
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text(Formatters.currency(product.retailPrice), style: const TextStyle(color: AppTheme.accentGold, fontWeight: FontWeight.bold, fontSize: 14)),
-              const SizedBox(height: 2),
-              Text('零售/瓶', style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.7), fontSize: 9)),
-            ]),
+          // Product thumbnail
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: imageUrl != null
+              ? Image.network(imageUrl, width: 56, height: 56, fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => _fallbackThumb(product.category))
+              : _fallbackThumb(product.category),
           ),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(product.name, style: const TextStyle(color: AppTheme.offWhite, fontWeight: FontWeight.w600, fontSize: 13)),
+            const SizedBox(height: 2),
+            Text(product.specification, style: const TextStyle(color: AppTheme.slate, fontSize: 11)),
+            const SizedBox(height: 4),
+            Row(children: [
+              _tag(ProductCategory.label(product.category), AppTheme.info),
+              const SizedBox(width: 6),
+              _tag('库存:$stock', _stockColor(stock)),
+            ]),
+          ])),
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text(Formatters.currency(product.retailPrice), style: const TextStyle(color: AppTheme.gold, fontWeight: FontWeight.bold, fontSize: 14)),
+            const SizedBox(height: 2),
+            const Text('零售/瓶', style: TextStyle(color: AppTheme.slate, fontSize: 9)),
+          ]),
         ]),
       ),
     );
   }
 
-  // ========== Tab 2: Stock Overview ==========
-  Widget _buildStockOverview(CrmProvider crm) {
+  Widget _fallbackThumb(String cat) {
+    return Container(width: 56, height: 56, decoration: BoxDecoration(color: AppTheme.navyMid, borderRadius: BorderRadius.circular(6)),
+      child: const Icon(Icons.science_outlined, color: AppTheme.slate, size: 24));
+  }
+
+  Widget _tag(String text, Color c) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(color: c.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(4)),
+      child: Text(text, style: TextStyle(color: c, fontSize: 9, fontWeight: FontWeight.w600)),
+    );
+  }
+
+  // === Tab 2: Stock Overview ===
+  Widget _stockTab(CrmProvider crm) {
     final stocks = crm.inventoryStocks;
-    if (stocks.isEmpty) {
-      return const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(Icons.inventory_2_outlined, color: AppTheme.textSecondary, size: 48),
-        SizedBox(height: 12),
-        Text('暂无库存数据', style: TextStyle(color: AppTheme.textSecondary)),
-      ]));
-    }
+    if (stocks.isEmpty) return const Center(child: Text('暂无库存数据', style: TextStyle(color: AppTheme.slate)));
 
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       itemCount: stocks.length,
-      itemBuilder: (context, index) {
-        final stock = stocks[index];
-        Color statusColor;
-        String statusText;
-        if (stock.currentStock <= 0) {
-          statusColor = AppTheme.danger;
-          statusText = '缺货';
-        } else if (stock.currentStock < 5) {
-          statusColor = AppTheme.warning;
-          statusText = '低库存';
-        } else {
-          statusColor = AppTheme.success;
-          statusText = '正常';
-        }
-
-        final activeProd = crm.getProductionByProduct(stock.productId).where(
-          (p) => p.status != 'completed' && p.status != 'cancelled'
-        ).toList();
-        int incomingQty = 0;
-        for (final p in activeProd) { incomingQty += p.quantity; }
-
+      itemBuilder: (ctx, i) {
+        final s = stocks[i];
+        final c = _stockColor(s.currentStock);
+        final label = s.currentStock <= 0 ? '缺货' : s.currentStock < 5 ? '低库存' : '正常';
         return Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.all(14),
+          margin: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: AppTheme.cardBg,
-            borderRadius: BorderRadius.circular(14),
-            border: Border(left: BorderSide(color: statusColor, width: 3)),
+            color: AppTheme.navyLight, borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppTheme.steel.withValues(alpha: 0.2)),
           ),
-          child: Column(children: [
-            Row(children: [
-              Container(
-                width: 48, height: 48,
-                decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
-                child: Center(child: Text('${stock.currentStock}', style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 18))),
+          child: Row(children: [
+            Container(
+              width: 42, height: 42,
+              decoration: BoxDecoration(color: c.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
+              child: Center(child: Text('${s.currentStock}', style: TextStyle(color: c, fontWeight: FontWeight.bold, fontSize: 16))),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(s.productName, style: const TextStyle(color: AppTheme.offWhite, fontWeight: FontWeight.w600, fontSize: 13)),
+              Text(s.productCode, style: const TextStyle(color: AppTheme.slate, fontSize: 11)),
+            ])),
+            GestureDetector(
+              onTap: () => _showQuickAdjustDialog(context, crm, s),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(border: Border.all(color: AppTheme.gold.withValues(alpha: 0.4)), borderRadius: BorderRadius.circular(4)),
+                child: const Text('调整', style: TextStyle(color: AppTheme.gold, fontSize: 11)),
               ),
-              const SizedBox(width: 14),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(stock.productName, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold, fontSize: 14)),
-                const SizedBox(height: 3),
-                Text(stock.productCode, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-              ])),
-              GestureDetector(
-                onTap: () => _showQuickAdjustDialog(context, crm, stock),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(color: AppTheme.brandGold.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-                  child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.tune, color: AppTheme.brandGold, size: 14),
-                    SizedBox(width: 4),
-                    Text('调整', style: TextStyle(color: AppTheme.brandGold, fontSize: 11, fontWeight: FontWeight.w600)),
-                  ]),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
-                child: Text(statusText, style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w600)),
-              ),
-            ]),
-            if (incomingQty > 0)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(color: const Color(0xFF00CEC9).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                  child: Row(children: [
-                    const Icon(Icons.precision_manufacturing, color: Color(0xFF00CEC9), size: 14),
-                    const SizedBox(width: 6),
-                    Text('生产中: ${activeProd.length} 单, 预计入库 $incomingQty 件',
-                      style: const TextStyle(color: Color(0xFF00CEC9), fontSize: 11)),
-                  ]),
-                ),
-              ),
+            ),
+            const SizedBox(width: 8),
+            _tag(label, c),
           ]),
         );
       },
     );
   }
 
-  // ========== Tab 3: Records ==========
-  Widget _buildRecordsList(CrmProvider crm) {
+  // === Tab 3: Records ===
+  Widget _recordsTab(CrmProvider crm) {
     final records = crm.inventoryRecords;
-    if (records.isEmpty) {
-      return const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(Icons.history, color: AppTheme.textSecondary, size: 48),
-        SizedBox(height: 12),
-        Text('暂无出入库记录', style: TextStyle(color: AppTheme.textSecondary)),
-      ]));
-    }
+    if (records.isEmpty) return const Center(child: Text('暂无出入库记录', style: TextStyle(color: AppTheme.slate)));
 
     final sorted = List<InventoryRecord>.from(records)..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       itemCount: sorted.length,
-      itemBuilder: (context, index) {
-        final r = sorted[index];
-        Color typeColor;
-        IconData typeIcon;
-        switch (r.type) {
-          case 'in': typeColor = AppTheme.success; typeIcon = Icons.arrow_downward; break;
-          case 'out': typeColor = AppTheme.danger; typeIcon = Icons.arrow_upward; break;
-          default: typeColor = AppTheme.warning; typeIcon = Icons.tune; break;
-        }
-
+      itemBuilder: (ctx, i) {
+        final r = sorted[i];
+        final isIn = r.type == 'in';
+        final isAdj = r.type == 'adjust';
+        final c = isIn ? AppTheme.success : isAdj ? AppTheme.warning : AppTheme.danger;
         return Dismissible(
           key: Key(r.id),
           direction: DismissDirection.endToStart,
-          background: Container(
-            alignment: Alignment.centerRight,
-            padding: const EdgeInsets.only(right: 20),
-            decoration: BoxDecoration(color: AppTheme.danger.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(14)),
-            child: const Icon(Icons.delete, color: AppTheme.danger),
-          ),
+          background: Container(alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 20),
+            child: const Icon(Icons.delete_outline, color: AppTheme.danger)),
           onDismissed: (_) => crm.deleteInventoryRecord(r.id),
           child: Container(
-            margin: const EdgeInsets.only(bottom: 8),
+            margin: const EdgeInsets.only(bottom: 4),
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(color: AppTheme.navyLight, borderRadius: BorderRadius.circular(6)),
             child: Row(children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: typeColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
-                child: Icon(typeIcon, color: typeColor, size: 18),
-              ),
-              const SizedBox(width: 12),
+              Icon(isIn ? Icons.arrow_downward : isAdj ? Icons.tune : Icons.arrow_upward, color: c, size: 16),
+              const SizedBox(width: 10),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(r.productName, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
-                const SizedBox(height: 2),
+                Text(r.productName, style: const TextStyle(color: AppTheme.offWhite, fontSize: 12, fontWeight: FontWeight.w500)),
                 Row(children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                    decoration: BoxDecoration(color: typeColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
-                    child: Text(InventoryRecord.typeLabel(r.type), style: TextStyle(color: typeColor, fontSize: 10)),
-                  ),
-                  const SizedBox(width: 8),
-                  if (r.reason.isNotEmpty) Flexible(child: Text(r.reason, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11), overflow: TextOverflow.ellipsis)),
+                  Text(InventoryRecord.typeLabel(r.type), style: TextStyle(color: c, fontSize: 10)),
+                  if (r.reason.isNotEmpty) ...[const SizedBox(width: 6), Flexible(child: Text(r.reason, style: const TextStyle(color: AppTheme.slate, fontSize: 10), overflow: TextOverflow.ellipsis))],
                 ]),
               ])),
-              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Text('${r.type == "out" ? "-" : "+"}${r.quantity}', style: TextStyle(color: typeColor, fontWeight: FontWeight.bold, fontSize: 16)),
-                Text(Formatters.dateShort(r.createdAt), style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
-              ]),
+              Text('${r.type == "out" ? "-" : "+"}${r.quantity}', style: TextStyle(color: c, fontWeight: FontWeight.bold, fontSize: 15)),
             ]),
           ),
         );
@@ -576,126 +371,101 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> with Si
     );
   }
 
-  // ========== Quick Adjust Dialog ==========
+  // === Quick Adjust Dialog ===
   void _showQuickAdjustDialog(BuildContext context, CrmProvider crm, InventoryStock stock) {
     final qtyCtrl = TextEditingController(text: '${stock.currentStock}');
     final reasonCtrl = TextEditingController();
-
     showDialog(context: context, builder: (ctx) {
       return AlertDialog(
-        backgroundColor: AppTheme.cardBg,
-        title: Row(children: [
-          const Icon(Icons.tune, color: AppTheme.brandGold, size: 22),
-          const SizedBox(width: 8),
-          Expanded(child: Text('调整 ${stock.productName}', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16))),
-        ]),
-        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('当前库存: ${stock.currentStock}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+        backgroundColor: AppTheme.navyLight,
+        title: Text('调整 ${stock.productName}', style: const TextStyle(color: AppTheme.offWhite, fontSize: 15)),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('当前库存: ${stock.currentStock}', style: const TextStyle(color: AppTheme.slate, fontSize: 12)),
           const SizedBox(height: 12),
-          TextField(controller: qtyCtrl, keyboardType: TextInputType.number,
-            style: const TextStyle(color: AppTheme.textPrimary, fontSize: 20, fontWeight: FontWeight.bold),
-            textAlign: TextAlign.center,
-            decoration: InputDecoration(labelText: '目标库存数量', filled: true, fillColor: AppTheme.cardBgLight,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
-          ),
-          const SizedBox(height: 10),
-          TextField(controller: reasonCtrl, style: const TextStyle(color: AppTheme.textPrimary),
+          TextField(controller: qtyCtrl, keyboardType: TextInputType.number, textAlign: TextAlign.center,
+            style: const TextStyle(color: AppTheme.offWhite, fontSize: 20, fontWeight: FontWeight.bold),
+            decoration: const InputDecoration(labelText: '目标库存')),
+          const SizedBox(height: 8),
+          TextField(controller: reasonCtrl, style: const TextStyle(color: AppTheme.offWhite),
             decoration: const InputDecoration(labelText: '调整原因', hintText: '盘点/退货/损耗...')),
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-          ElevatedButton(
-            onPressed: () {
-              final newQty = int.tryParse(qtyCtrl.text) ?? stock.currentStock;
-              if (newQty != stock.currentStock) {
-                crm.addInventoryRecord(InventoryRecord(id: crm.generateId(), productId: stock.productId,
-                  productName: stock.productName, productCode: stock.productCode, type: 'adjust',
-                  quantity: newQty, reason: reasonCtrl.text.isNotEmpty ? reasonCtrl.text : '手动调整',
-                  notes: '${stock.currentStock} -> $newQty'));
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text('${stock.productName} 库存: ${stock.currentStock} -> $newQty'), backgroundColor: AppTheme.success));
-                }
-              }
-              Navigator.pop(ctx);
-            },
-            child: const Text('确认调整'),
-          ),
+          ElevatedButton(onPressed: () {
+            final newQty = int.tryParse(qtyCtrl.text) ?? stock.currentStock;
+            if (newQty != stock.currentStock) {
+              crm.addInventoryRecord(InventoryRecord(id: crm.generateId(), productId: stock.productId,
+                productName: stock.productName, productCode: stock.productCode, type: 'adjust',
+                quantity: newQty, reason: reasonCtrl.text.isNotEmpty ? reasonCtrl.text : '手动调整',
+                notes: '${stock.currentStock} -> $newQty'));
+            }
+            Navigator.pop(ctx);
+          }, child: const Text('确认')),
         ],
       );
     });
   }
 
-  // ========== Add Record Sheet ==========
+  // === Add Record Sheet ===
   void _showAddRecordSheet(BuildContext context, CrmProvider crm) {
     String type = 'in';
     Product? selectedProduct;
     final qtyCtrl = TextEditingController(text: '1');
     final reasonCtrl = TextEditingController();
-    final notesCtrl = TextEditingController();
     final products = crm.products;
 
     showModalBottomSheet(
-      context: context, isScrollControlled: true, backgroundColor: AppTheme.cardBg,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) {
-        return StatefulBuilder(builder: (ctx, setModalState) {
-          return Padding(
-            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 20, right: 20, top: 20),
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('新增出入库', style: TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
-              Row(children: [
-                const Text('类型: ', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
-                ...['in', 'out', 'adjust'].map((t) {
-                  Color c;
-                  switch (t) { case 'in': c = AppTheme.success; break; case 'out': c = AppTheme.danger; break; default: c = AppTheme.warning; break; }
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(label: Text(InventoryRecord.typeLabel(t)), selected: type == t,
-                      onSelected: (_) => setModalState(() => type = t),
-                      selectedColor: c, backgroundColor: AppTheme.cardBgLight,
-                      labelStyle: TextStyle(color: type == t ? Colors.white : AppTheme.textPrimary, fontSize: 12)),
-                  );
-                }),
-              ]),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<Product>(
-                initialValue: selectedProduct,
-                decoration: const InputDecoration(labelText: '选择产品'),
-                dropdownColor: AppTheme.cardBgLight, style: const TextStyle(color: AppTheme.textPrimary),
-                items: products.map((p) => DropdownMenuItem(value: p, child: Text(p.name, style: const TextStyle(fontSize: 13)))).toList(),
-                onChanged: (v) => setModalState(() => selectedProduct = v),
-              ),
-              const SizedBox(height: 12),
-              Row(children: [
-                Expanded(child: TextField(controller: qtyCtrl, style: const TextStyle(color: AppTheme.textPrimary),
-                  keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '数量', prefixIcon: Icon(Icons.numbers, color: AppTheme.textSecondary, size: 20)))),
-                const SizedBox(width: 12),
-                Expanded(child: TextField(controller: reasonCtrl, style: const TextStyle(color: AppTheme.textPrimary),
-                  decoration: const InputDecoration(labelText: '原因', prefixIcon: Icon(Icons.note, color: AppTheme.textSecondary, size: 20)))),
-              ]),
-              const SizedBox(height: 12),
-              TextField(controller: notesCtrl, style: const TextStyle(color: AppTheme.textPrimary), decoration: const InputDecoration(labelText: '备注')),
-              const SizedBox(height: 16),
-              SizedBox(width: double.infinity, child: ElevatedButton(
-                onPressed: selectedProduct == null ? null : () {
-                  final qty = int.tryParse(qtyCtrl.text) ?? 0;
-                  if (qty <= 0) return;
-                  crm.addInventoryRecord(InventoryRecord(id: crm.generateId(), productId: selectedProduct!.id,
-                    productName: selectedProduct!.name, productCode: selectedProduct!.code, type: type,
-                    quantity: qty, reason: reasonCtrl.text, notes: notesCtrl.text));
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text('${InventoryRecord.typeLabel(type)}: ${selectedProduct!.name} x$qty'), backgroundColor: AppTheme.success));
-                },
-                child: const Text('确认'),
-              )),
-              const SizedBox(height: 16),
+      context: context, isScrollControlled: true, backgroundColor: AppTheme.navyLight,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(12))),
+      builder: (ctx) => StatefulBuilder(builder: (ctx, set) {
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 20, right: 20, top: 20),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('新增出入库', style: TextStyle(color: AppTheme.offWhite, fontSize: 16, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 12),
+            Row(children: ['in', 'out', 'adjust'].map((t) {
+              final sel = type == t;
+              return Padding(padding: const EdgeInsets.only(right: 8), child: ChoiceChip(
+                label: Text(InventoryRecord.typeLabel(t)),
+                selected: sel,
+                onSelected: (_) => set(() => type = t),
+                selectedColor: AppTheme.gold, backgroundColor: AppTheme.navyMid,
+                labelStyle: TextStyle(color: sel ? AppTheme.navy : AppTheme.offWhite, fontSize: 12),
+              ));
+            }).toList()),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<Product>(
+              initialValue: selectedProduct,
+              decoration: const InputDecoration(labelText: '选择产品'),
+              dropdownColor: AppTheme.navyMid, style: const TextStyle(color: AppTheme.offWhite),
+              items: products.map((p) => DropdownMenuItem(value: p, child: Text(p.name, style: const TextStyle(fontSize: 13)))).toList(),
+              onChanged: (v) => set(() => selectedProduct = v),
+            ),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(child: TextField(controller: qtyCtrl, keyboardType: TextInputType.number,
+                style: const TextStyle(color: AppTheme.offWhite),
+                decoration: const InputDecoration(labelText: '数量'))),
+              const SizedBox(width: 12),
+              Expanded(child: TextField(controller: reasonCtrl, style: const TextStyle(color: AppTheme.offWhite),
+                decoration: const InputDecoration(labelText: '原因'))),
             ]),
-          );
-        });
-      },
+            const SizedBox(height: 16),
+            SizedBox(width: double.infinity, child: ElevatedButton(
+              onPressed: selectedProduct == null ? null : () {
+                final qty = int.tryParse(qtyCtrl.text) ?? 0;
+                if (qty <= 0) return;
+                crm.addInventoryRecord(InventoryRecord(id: crm.generateId(), productId: selectedProduct!.id,
+                  productName: selectedProduct!.name, productCode: selectedProduct!.code, type: type,
+                  quantity: qty, reason: reasonCtrl.text));
+                Navigator.pop(ctx);
+              },
+              child: const Text('确认'),
+            )),
+            const SizedBox(height: 16),
+          ]),
+        );
+      }),
     );
   }
 }
