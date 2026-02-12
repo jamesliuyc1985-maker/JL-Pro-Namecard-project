@@ -153,12 +153,20 @@ class ContactsScreen extends StatelessWidget {
                 decoration: BoxDecoration(color: contact.industry.color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
                 child: Text(contact.industry.label, style: TextStyle(color: contact.industry.color, fontSize: 10, fontWeight: FontWeight.w600)),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 4),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                 decoration: BoxDecoration(color: contact.myRelation.color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
                 child: Text(contact.myRelation.label, style: TextStyle(color: contact.myRelation.color, fontSize: 10, fontWeight: FontWeight.w600)),
               ),
+              if (contact.nationality.isNotEmpty) ...[
+                const SizedBox(width: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(color: AppTheme.info.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
+                  child: Text(contact.nationality, style: const TextStyle(color: AppTheme.info, fontSize: 9, fontWeight: FontWeight.w600)),
+                ),
+              ],
               const Spacer(),
               Text(Formatters.timeAgo(contact.lastContactedAt), style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.7), fontSize: 11)),
             ]),

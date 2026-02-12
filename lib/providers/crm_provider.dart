@@ -285,6 +285,16 @@ class CrmProvider extends ChangeNotifier {
   Future<void> createOrderWithDeal(SalesOrder order) async {
     order.status = 'confirmed'; // 预定状态
     await _dataService.saveOrder(order);
+    // Determine deal stage from order's dealStage field
+    DealStage targetStage = DealStage.ordered;
+    if (order.dealStage.isNotEmpty) {
+      final found = DealStage.values.where((s) => s.label == order.dealStage);
+      if (found.isNotEmpty) targetStage = found.first;
+    }
+    double prob = 70;
+    if (targetStage == DealStage.paid) prob = 85;
+    else if (targetStage == DealStage.completed) prob = 100;
+    else if (targetStage.order < DealStage.ordered.order) prob = 40;
     // Create linked deal
     final deal = Deal(
       id: generateId(),
@@ -292,10 +302,10 @@ class CrmProvider extends ChangeNotifier {
       description: order.items.map((i) => '${i.productName} x${i.quantity}').join(', '),
       contactId: order.contactId,
       contactName: order.contactName,
-      stage: DealStage.ordered,
+      stage: targetStage,
       amount: order.totalAmount,
       orderId: order.id,
-      probability: 70,
+      probability: prob,
     );
     await _dataService.saveDeal(deal);
     _notify('新订单创建', '${order.contactName} 下单 ${order.items.length}项产品, 金额: ¥${order.totalAmount.toStringAsFixed(0)}',

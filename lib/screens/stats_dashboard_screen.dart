@@ -4,7 +4,9 @@ import 'package:fl_chart/fl_chart.dart';
 import '../providers/crm_provider.dart';
 import '../models/contact.dart';
 import '../models/deal.dart';
+import '../models/product.dart';
 import '../models/team.dart';
+import '../models/task.dart';
 import '../utils/theme.dart';
 import '../utils/formatters.dart';
 import 'contact_detail_screen.dart';
@@ -22,7 +24,7 @@ class _StatsDashboardScreenState extends State<StatsDashboardScreen> with Single
   bool _showSearch = false;
 
   @override
-  void initState() { super.initState(); _tabCtrl = TabController(length: 6, vsync: this); }
+  void initState() { super.initState(); _tabCtrl = TabController(length: 7, vsync: this); }
   @override
   void dispose() { _tabCtrl.dispose(); _searchCtrl.dispose(); super.dispose(); }
 
@@ -35,10 +37,11 @@ class _StatsDashboardScreenState extends State<StatsDashboardScreen> with Single
         _tabBar(),
         Expanded(child: TabBarView(controller: _tabCtrl, children: [
           _overviewTab(crm),
+          _dailyNewsTab(crm),
           _productionTab(crm),
           _inventoryTab(crm),
           _salesTab(crm),
-          _teamTab(crm),
+          _teamTaskTab(crm),
           _contactsTab(crm),
         ])),
       ]));
@@ -86,14 +89,12 @@ class _StatsDashboardScreenState extends State<StatsDashboardScreen> with Single
         controller: _tabCtrl,
         isScrollable: true,
         tabAlignment: TabAlignment.start,
-        indicatorColor: AppTheme.gold,
-        indicatorWeight: 2,
-        labelColor: AppTheme.offWhite,
-        unselectedLabelColor: AppTheme.slate,
+        indicatorColor: AppTheme.gold, indicatorWeight: 2,
+        labelColor: AppTheme.offWhite, unselectedLabelColor: AppTheme.slate,
         labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
         unselectedLabelStyle: const TextStyle(fontSize: 12),
         dividerColor: AppTheme.steel.withValues(alpha: 0.2),
-        tabs: const [Tab(text: '总览', height: 30), Tab(text: '生产', height: 30), Tab(text: '库存', height: 30), Tab(text: '销售', height: 30), Tab(text: '团队', height: 30), Tab(text: '人脉', height: 30)],
+        tabs: const [Tab(text: '总览', height: 30), Tab(text: '每日动态', height: 30), Tab(text: '生产', height: 30), Tab(text: '库存', height: 30), Tab(text: '销售', height: 30), Tab(text: '团队任务', height: 30), Tab(text: '人脉', height: 30)],
       ),
     );
   }
@@ -235,7 +236,173 @@ class _StatsDashboardScreenState extends State<StatsDashboardScreen> with Single
     ]);
   }
 
-  // === TAB 2: Production ===
+  // === TAB 2: 每日动态/新闻 ===
+  Widget _dailyNewsTab(CrmProvider crm) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final thisWeek = today.subtract(Duration(days: today.weekday - 1));
+
+    // 收集所有动态事件
+    final events = <_ActivityEvent>[];
+
+    // 交易动态
+    for (final d in crm.deals) {
+      if (d.updatedAt.isAfter(thisWeek)) {
+        events.add(_ActivityEvent(
+          time: d.updatedAt,
+          icon: Icons.trending_up,
+          color: _stageColor(d.stage),
+          title: '交易: ${d.title}',
+          subtitle: '${d.contactName} | ${d.stage.label} | ${Formatters.currency(d.amount)}',
+          type: 'deal',
+        ));
+      }
+    }
+
+    // 订单动态
+    for (final o in crm.orders) {
+      if (o.updatedAt.isAfter(thisWeek)) {
+        final c = o.status == 'completed' ? AppTheme.success : o.status == 'shipped' ? AppTheme.info : AppTheme.warning;
+        events.add(_ActivityEvent(
+          time: o.updatedAt,
+          icon: Icons.receipt_long,
+          color: c,
+          title: '订单: ${o.contactName}',
+          subtitle: '${SalesOrder.statusLabel(o.status)} | ${o.items.length}项 | ${Formatters.currency(o.totalAmount)}',
+          type: 'order',
+        ));
+      }
+    }
+
+    // 生产动态
+    for (final p in crm.productionOrders) {
+      if (p.updatedAt.isAfter(thisWeek)) {
+        events.add(_ActivityEvent(
+          time: p.updatedAt,
+          icon: Icons.factory,
+          color: const Color(0xFF9B59B6),
+          title: '生产: ${p.productName}',
+          subtitle: '${p.factoryName} | x${p.quantity} | ${p.status}',
+          type: 'production',
+        ));
+      }
+    }
+
+    // 任务动态
+    for (final t in crm.tasks) {
+      if (t.updatedAt.isAfter(thisWeek)) {
+        events.add(_ActivityEvent(
+          time: t.updatedAt,
+          icon: Icons.task_alt,
+          color: t.status == 'completed' ? AppTheme.success : AppTheme.warning,
+          title: '任务: ${t.title}',
+          subtitle: '${t.assigneeName} | ${Task.priorityLabel(t.priority)} | ${t.status == 'completed' ? '已完成' : '进行中'}',
+          type: 'task',
+        ));
+      }
+    }
+
+    // 新联系人
+    for (final c in crm.allContacts) {
+      if (c.createdAt.isAfter(thisWeek)) {
+        events.add(_ActivityEvent(
+          time: c.createdAt,
+          icon: Icons.person_add,
+          color: AppTheme.info,
+          title: '新人脉: ${c.name}',
+          subtitle: '${c.company} | ${c.myRelation.label}',
+          type: 'contact',
+        ));
+      }
+    }
+
+    events.sort((a, b) => b.time.compareTo(a.time));
+
+    // 按天分组
+    final todayEvents = events.where((e) => e.time.isAfter(today)).toList();
+    final yesterdayEvents = events.where((e) => e.time.isAfter(yesterday) && e.time.isBefore(today)).toList();
+    final earlierEvents = events.where((e) => e.time.isBefore(yesterday)).toList();
+
+    if (events.isEmpty) {
+      return const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Icon(Icons.newspaper, color: AppTheme.slate, size: 48),
+        SizedBox(height: 12),
+        Text('本周暂无动态', style: TextStyle(color: AppTheme.slate)),
+      ]));
+    }
+
+    return ListView(padding: const EdgeInsets.symmetric(horizontal: 16), children: [
+      const SizedBox(height: 8),
+      // 今日速报KPI
+      _summaryRow([
+        _KpiData('今日动态', '${todayEvents.length}', AppTheme.gold, () {}),
+        _KpiData('昨日', '${yesterdayEvents.length}', AppTheme.info, () {}),
+        _KpiData('本周总计', '${events.length}', AppTheme.success, () {}),
+      ]),
+      const SizedBox(height: 12),
+
+      if (todayEvents.isNotEmpty) ...[
+        _newsSection('今日动态 (${todayEvents.length})', Icons.today, AppTheme.gold),
+        ...todayEvents.map(_eventCard),
+        const SizedBox(height: 8),
+      ],
+
+      if (yesterdayEvents.isNotEmpty) ...[
+        _newsSection('昨日动态 (${yesterdayEvents.length})', Icons.history, AppTheme.info),
+        ...yesterdayEvents.map(_eventCard),
+        const SizedBox(height: 8),
+      ],
+
+      if (earlierEvents.isNotEmpty) ...[
+        _newsSection('更早 (${earlierEvents.length})', Icons.date_range, AppTheme.slate),
+        ...earlierEvents.take(15).map(_eventCard),
+      ],
+      const SizedBox(height: 30),
+    ]);
+  }
+
+  Widget _newsSection(String title, IconData icon, Color c) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(children: [
+        Icon(icon, color: c, size: 16),
+        const SizedBox(width: 6),
+        Text(title, style: TextStyle(color: c, fontWeight: FontWeight.w600, fontSize: 13)),
+      ]),
+    );
+  }
+
+  Widget _eventCard(_ActivityEvent event) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: AppTheme.navyLight, borderRadius: BorderRadius.circular(8)),
+      child: Row(children: [
+        Container(
+          width: 32, height: 32,
+          decoration: BoxDecoration(color: event.color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+          child: Icon(event.icon, color: event.color, size: 16),
+        ),
+        const SizedBox(width: 10),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(event.title, style: const TextStyle(color: AppTheme.offWhite, fontWeight: FontWeight.w600, fontSize: 12)),
+          Text(event.subtitle, style: const TextStyle(color: AppTheme.slate, fontSize: 10)),
+        ])),
+        Text(_timeLabel(event.time), style: TextStyle(color: AppTheme.slate.withValues(alpha: 0.8), fontSize: 9)),
+      ]),
+    );
+  }
+
+  String _timeLabel(DateTime t) {
+    final now = DateTime.now();
+    final diff = now.difference(t);
+    if (diff.inMinutes < 60) return '${diff.inMinutes}分钟前';
+    if (diff.inHours < 24) return '${diff.inHours}小时前';
+    return '${t.month}/${t.day} ${t.hour}:${t.minute.toString().padLeft(2, '0')}';
+  }
+
+  // === TAB 3: Production ===
   Widget _productionTab(CrmProvider crm) {
     final orders = crm.productionOrders;
     final ps = crm.productionStats;
@@ -291,7 +458,7 @@ class _StatsDashboardScreenState extends State<StatsDashboardScreen> with Single
     ]);
   }
 
-  // === TAB 3: Inventory ===
+  // === TAB 4: Inventory ===
   Widget _inventoryTab(CrmProvider crm) {
     final stocks = crm.inventoryStocks;
     final records = crm.inventoryRecords;
@@ -332,12 +499,17 @@ class _StatsDashboardScreenState extends State<StatsDashboardScreen> with Single
     ]);
   }
 
-  // === TAB 4: Sales ===
+  // === TAB 5: Sales - 含 Top 20 ===
   Widget _salesTab(CrmProvider crm) {
     final channelStats = crm.channelSalesStats;
     double totalSales = 0, completedSales = 0;
     int shippedCount = 0;
     for (final o in crm.orders) { totalSales += o.totalAmount; if (o.status == 'completed') completedSales += o.totalAmount; if (o.status == 'shipped') shippedCount++; }
+
+    // Top 20 排行
+    final sorted = List<Deal>.from(crm.deals.where((d) => d.stage != DealStage.lost))
+      ..sort((a, b) => b.amount.compareTo(a.amount));
+    final top20 = sorted.take(20).toList();
 
     return ListView(padding: const EdgeInsets.symmetric(horizontal: 16), children: [
       const SizedBox(height: 8),
@@ -364,44 +536,31 @@ class _StatsDashboardScreenState extends State<StatsDashboardScreen> with Single
         ));
       }).toList()),
       const SizedBox(height: 12),
-      _sec('交易排行 TOP 5'),
-      ...crm.deals.where((d) => d.stage != DealStage.lost).toList().asMap().entries.where((e) => e.key < 5).map((e) {
-        final d = (crm.deals.where((d) => d.stage != DealStage.lost).toList()..sort((a, b) => b.amount.compareTo(a.amount)))[e.key];
-        return _dItem(d.title, '${d.contactName} | ${d.stage.label}', trail: Formatters.currency(d.amount));
-      }),
-      const SizedBox(height: 30),
-    ]);
-  }
-
-  // === TAB 5: Team ===
-  Widget _teamTab(CrmProvider crm) {
-    final members = crm.teamMembers;
-    return ListView(padding: const EdgeInsets.symmetric(horizontal: 16), children: [
-      const SizedBox(height: 8),
-      _summaryRow([
-        _KpiData('总成员', '${members.length}', AppTheme.info, () {}),
-        _KpiData('活跃', '${members.where((m) => m.isActive).length}', AppTheme.success, () {}),
-        _KpiData('总任务', '${crm.tasks.length}', AppTheme.warning, () {}),
-        _KpiData('指派数', '${crm.assignments.length}', AppTheme.gold, () {}),
-      ]),
-      const SizedBox(height: 12),
-      _sec('成员工作量'),
-      ...members.map((m) {
-        final tasks = crm.getTasksByAssignee(m.id);
-        final assignments = crm.getAssignmentsByMember(m.id);
+      _sec('交易排行 TOP 20'),
+      ...top20.asMap().entries.map((e) {
+        final i = e.key;
+        final d = e.value;
+        final rankColor = i == 0 ? const Color(0xFFFFD700) : i == 1 ? const Color(0xFFC0C0C0) : i == 2 ? const Color(0xFFCD7F32) : AppTheme.slate;
         return Container(
-          margin: const EdgeInsets.only(bottom: 6),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: AppTheme.navyLight, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppTheme.steel.withValues(alpha: 0.2))),
+          margin: const EdgeInsets.only(bottom: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppTheme.navyLight, borderRadius: BorderRadius.circular(6),
+            border: i < 3 ? Border.all(color: rankColor.withValues(alpha: 0.3)) : null,
+          ),
           child: Row(children: [
-            Container(width: 32, height: 32,
-              decoration: BoxDecoration(color: AppTheme.gold.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
-              child: Center(child: Text(m.name.isNotEmpty ? m.name[0] : '?', style: const TextStyle(color: AppTheme.gold, fontWeight: FontWeight.bold)))),
-            const SizedBox(width: 10),
+            Container(
+              width: 24, height: 24,
+              decoration: BoxDecoration(color: rankColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(4)),
+              child: Center(child: Text('${i + 1}', style: TextStyle(color: rankColor, fontWeight: FontWeight.bold, fontSize: 11))),
+            ),
+            const SizedBox(width: 8),
+            if (d.isStarred) const Padding(padding: EdgeInsets.only(right: 4), child: Icon(Icons.star, color: AppTheme.gold, size: 12)),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(m.name, style: const TextStyle(color: AppTheme.offWhite, fontWeight: FontWeight.w600, fontSize: 13)),
-              Text('${TeamMember.roleLabel(m.role)} | 任务${tasks.length} | 人脉${assignments.length}', style: const TextStyle(color: AppTheme.slate, fontSize: 10)),
+              Text(d.title, style: const TextStyle(color: AppTheme.offWhite, fontSize: 11, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis),
+              Text('${d.contactName} | ${d.stage.label}', style: TextStyle(color: _stageColor(d.stage), fontSize: 9)),
             ])),
+            Text(Formatters.currency(d.amount), style: const TextStyle(color: AppTheme.gold, fontWeight: FontWeight.bold, fontSize: 12)),
           ]),
         );
       }),
@@ -409,7 +568,105 @@ class _StatsDashboardScreenState extends State<StatsDashboardScreen> with Single
     ]);
   }
 
-  // === TAB 6: Contacts ===
+  // === TAB 6: 团队任务 ===
+  Widget _teamTaskTab(CrmProvider crm) {
+    final members = crm.teamMembers;
+    final allTasks = crm.tasks;
+    final activeTasks = allTasks.where((t) => t.status != 'completed' && t.status != 'cancelled').toList();
+    final completedTasks = allTasks.where((t) => t.status == 'completed').toList();
+    final urgentTasks = allTasks.where((t) => t.priority == 'urgent' && t.status != 'completed').toList();
+    final overdueTasks = activeTasks.where((t) => t.dueDate.isBefore(DateTime.now())).toList();
+
+    return ListView(padding: const EdgeInsets.symmetric(horizontal: 16), children: [
+      const SizedBox(height: 8),
+      _summaryRow([
+        _KpiData('总任务', '${allTasks.length}', AppTheme.info, () {}),
+        _KpiData('进行中', '${activeTasks.length}', AppTheme.warning, () {}),
+        _KpiData('已完成', '${completedTasks.length}', AppTheme.success, () {}),
+        _KpiData('逾期', '${overdueTasks.length}', AppTheme.danger, () {}),
+      ]),
+      const SizedBox(height: 12),
+
+      // 紧急任务
+      if (urgentTasks.isNotEmpty) ...[
+        _sec('紧急任务 (${urgentTasks.length})'),
+        ...urgentTasks.map((t) => _taskCard(t, AppTheme.danger)),
+        const SizedBox(height: 8),
+      ],
+
+      // 逾期任务
+      if (overdueTasks.isNotEmpty) ...[
+        _sec('逾期任务 (${overdueTasks.length})'),
+        ...overdueTasks.where((t) => t.priority != 'urgent').map((t) => _taskCard(t, AppTheme.warning)),
+        const SizedBox(height: 8),
+      ],
+
+      // 成员任务分布
+      _sec('成员任务分布'),
+      ...members.map((m) {
+        final mTasks = crm.getTasksByAssignee(m.id);
+        final mActive = mTasks.where((t) => t.status != 'completed' && t.status != 'cancelled').length;
+        final mCompleted = mTasks.where((t) => t.status == 'completed').length;
+        final mOverdue = mTasks.where((t) => t.dueDate.isBefore(DateTime.now()) && t.status != 'completed').length;
+        double totalHours = 0;
+        for (final t in mTasks) { totalHours += t.estimatedHours; }
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: AppTheme.navyLight, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppTheme.steel.withValues(alpha: 0.2))),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Container(width: 28, height: 28,
+                decoration: BoxDecoration(color: AppTheme.gold.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
+                child: Center(child: Text(m.name.isNotEmpty ? m.name[0] : '?', style: const TextStyle(color: AppTheme.gold, fontWeight: FontWeight.bold, fontSize: 12)))),
+              const SizedBox(width: 8),
+              Expanded(child: Text(m.name, style: const TextStyle(color: AppTheme.offWhite, fontWeight: FontWeight.w600, fontSize: 13))),
+              Text('${TeamMember.roleLabel(m.role)}', style: const TextStyle(color: AppTheme.slate, fontSize: 10)),
+            ]),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(child: _miniKpi('进行中', '$mActive', AppTheme.warning)),
+              const SizedBox(width: 4),
+              Expanded(child: _miniKpi('已完成', '$mCompleted', AppTheme.success)),
+              const SizedBox(width: 4),
+              Expanded(child: _miniKpi('逾期', '$mOverdue', mOverdue > 0 ? AppTheme.danger : AppTheme.slate)),
+              const SizedBox(width: 4),
+              Expanded(child: _miniKpi('工时', '${totalHours.toStringAsFixed(0)}h', AppTheme.info)),
+            ]),
+          ]),
+        );
+      }),
+      const SizedBox(height: 30),
+    ]);
+  }
+
+  Widget _taskCard(Task t, Color accent) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppTheme.navyLight, borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: accent.withValues(alpha: 0.3)),
+      ),
+      child: Row(children: [
+        Container(width: 4, height: 32, decoration: BoxDecoration(color: accent, borderRadius: BorderRadius.circular(2))),
+        const SizedBox(width: 8),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(t.title, style: const TextStyle(color: AppTheme.offWhite, fontWeight: FontWeight.w600, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+          Row(children: [
+            Text(t.assigneeName, style: const TextStyle(color: AppTheme.slate, fontSize: 10)),
+            const SizedBox(width: 6),
+            Text('${Task.priorityLabel(t.priority)}', style: TextStyle(color: accent, fontSize: 10, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 6),
+            Text('${t.dueDate.month}/${t.dueDate.day}', style: TextStyle(color: t.dueDate.isBefore(DateTime.now()) ? AppTheme.danger : AppTheme.slate, fontSize: 10)),
+          ]),
+        ])),
+      ]),
+    );
+  }
+
+  // === TAB 7: Contacts ===
   Widget _contactsTab(CrmProvider crm) {
     final contacts = crm.allContacts;
     final relations = crm.relations;
@@ -418,12 +675,26 @@ class _StatsDashboardScreenState extends State<StatsDashboardScreen> with Single
     final cool = contacts.where((c) => c.strength == RelationshipStrength.cool).length;
     final cold = contacts.where((c) => c.strength == RelationshipStrength.cold).length;
 
+    // 业务关系统计
+    final agents = contacts.where((c) => c.myRelation == MyRelationType.agent).length;
+    final clinics = contacts.where((c) => c.myRelation == MyRelationType.clinic).length;
+    final retailers = contacts.where((c) => c.myRelation == MyRelationType.retailer).length;
+
     return ListView(padding: const EdgeInsets.symmetric(horizontal: 16), children: [
       const SizedBox(height: 8),
       _summaryRow([
         _KpiData('总人脉', '${contacts.length}', AppTheme.info, () {}),
         _KpiData('关系网', '${relations.length}', AppTheme.gold, () {}),
         _KpiData('销售线索', '${crm.contactsWithSales.length}', AppTheme.warning, () {}),
+      ]),
+      const SizedBox(height: 12),
+      _sec('业务渠道分布'),
+      Row(children: [
+        Expanded(child: _miniKpi('代理商', '$agents', const Color(0xFFFF6348))),
+        const SizedBox(width: 6),
+        Expanded(child: _miniKpi('诊所', '$clinics', const Color(0xFF1ABC9C))),
+        const SizedBox(width: 6),
+        Expanded(child: _miniKpi('零售商', '$retailers', const Color(0xFFE056A0))),
       ]),
       const SizedBox(height: 12),
       _sec('热度分布'),
@@ -533,4 +804,14 @@ class _KpiData {
   final Color color;
   final VoidCallback onTap;
   _KpiData(this.label, this.value, this.color, this.onTap);
+}
+
+class _ActivityEvent {
+  final DateTime time;
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  final String type;
+  _ActivityEvent({required this.time, required this.icon, required this.color, required this.title, required this.subtitle, required this.type});
 }

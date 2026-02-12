@@ -113,6 +113,13 @@ class SalesOrder {
   double totalAmount;
   String currency;
   String notes;
+  String deliveryAddress; // 配送地址
+  String shippingMethod; // 配送方式: express, sea, air, pickup
+  String paymentTerms; // 付款条件: prepaid, cod, net30, net60
+  String dealStage; // 关联的交易阶段
+  String contactPhone; // 客户电话
+  String contactCompany; // 客户公司
+  DateTime? expectedDeliveryDate; // 预计交付日期
   DateTime createdAt;
   DateTime updatedAt;
 
@@ -126,6 +133,13 @@ class SalesOrder {
     this.totalAmount = 0,
     this.currency = 'JPY',
     this.notes = '',
+    this.deliveryAddress = '',
+    this.shippingMethod = '',
+    this.paymentTerms = '',
+    this.dealStage = '',
+    this.contactPhone = '',
+    this.contactCompany = '',
+    this.expectedDeliveryDate,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) : items = items ?? [],
@@ -149,6 +163,13 @@ class SalesOrder {
     'total_amount': totalAmount,
     'currency': currency,
     'notes': notes,
+    'delivery_address': deliveryAddress,
+    'shipping_method': shippingMethod,
+    'payment_terms': paymentTerms,
+    'deal_stage': dealStage,
+    'contact_phone': contactPhone,
+    'contact_company': contactCompany,
+    'expected_delivery_date': expectedDeliveryDate?.toIso8601String(),
     'created_at': createdAt.toIso8601String(),
     'updated_at': updatedAt.toIso8601String(),
   };
@@ -169,6 +190,13 @@ class SalesOrder {
       totalAmount: (json['total_amount'] as num?)?.toDouble() ?? 0,
       currency: json['currency'] as String? ?? 'JPY',
       notes: json['notes'] as String? ?? '',
+      deliveryAddress: json['delivery_address'] as String? ?? '',
+      shippingMethod: json['shipping_method'] as String? ?? '',
+      paymentTerms: json['payment_terms'] as String? ?? '',
+      dealStage: json['deal_stage'] as String? ?? '',
+      contactPhone: json['contact_phone'] as String? ?? '',
+      contactCompany: json['contact_company'] as String? ?? '',
+      expectedDeliveryDate: json['expected_delivery_date'] != null ? DateTime.tryParse(json['expected_delivery_date']) : null,
       createdAt: DateTime.tryParse(json['created_at'] ?? '') ?? DateTime.now(),
       updatedAt: DateTime.tryParse(json['updated_at'] ?? '') ?? DateTime.now(),
     );
@@ -182,6 +210,35 @@ class SalesOrder {
       case 'completed': return '已完成';
       case 'cancelled': return '已取消';
       default: return s;
+    }
+  }
+
+  static String priceTypeLabel(String pt) {
+    switch (pt) {
+      case 'agent': return '代理价';
+      case 'clinic': return '诊所价';
+      case 'retail': return '零售价';
+      default: return pt;
+    }
+  }
+
+  static String shippingLabel(String s) {
+    switch (s) {
+      case 'express': return '快递';
+      case 'sea': return '海运';
+      case 'air': return '空运';
+      case 'pickup': return '自提';
+      default: return s.isEmpty ? '未指定' : s;
+    }
+  }
+
+  static String paymentLabel(String s) {
+    switch (s) {
+      case 'prepaid': return '预付款';
+      case 'cod': return '货到付款';
+      case 'net30': return 'Net 30天';
+      case 'net60': return 'Net 60天';
+      default: return s.isEmpty ? '未指定' : s;
     }
   }
 }

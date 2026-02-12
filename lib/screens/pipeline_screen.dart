@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/crm_provider.dart';
 import '../models/deal.dart';
+import '../models/contact.dart';
 import '../models/product.dart';
 import '../models/team.dart';
 import '../utils/theme.dart';
@@ -19,9 +20,8 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
   final _searchCtrl = TextEditingController();
   bool _showSearch = false;
 
-  // 4 tabs: 全管线 | 按阶段 | 财务收款 | 员工业绩
   @override
-  void initState() { super.initState(); _tabController = TabController(length: 4, vsync: this); }
+  void initState() { super.initState(); _tabController = TabController(length: 5, vsync: this); }
   @override
   void dispose() { _tabController.dispose(); _searchCtrl.dispose(); super.dispose(); }
 
@@ -47,6 +47,7 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
         Expanded(child: TabBarView(controller: _tabController, children: [
           _allPipelineTab(crm),
           _stageTab(crm),
+          _top20Tab(crm),
           _financeTab(crm),
           _staffSalesTab(crm),
         ])),
@@ -104,7 +105,6 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
     final completedDeals = crm.deals.where((d) => d.stage == DealStage.completed);
     double closedVal = 0;
     for (final d in completedDeals) { closedVal += d.amount; }
-    // 财务: 已收款
     double collected = 0;
     for (final o in crm.orders.where((o) => o.status == 'completed')) { collected += o.totalAmount; }
 
@@ -137,9 +137,10 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
       controller: _tabController,
       indicatorColor: AppTheme.gold, indicatorWeight: 2,
       labelColor: AppTheme.gold, unselectedLabelColor: AppTheme.slate,
-      labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+      labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11),
+      isScrollable: true, tabAlignment: TabAlignment.start,
       dividerColor: AppTheme.steel.withValues(alpha: 0.2),
-      tabs: const [Tab(text: '全管线'), Tab(text: '按阶段'), Tab(text: '财务收款'), Tab(text: '员工业绩')],
+      tabs: const [Tab(text: '全管线'), Tab(text: '按阶段'), Tab(text: 'TOP 20'), Tab(text: '财务收款'), Tab(text: '员工业绩')],
     );
   }
 
@@ -200,7 +201,70 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
     }).toList());
   }
 
-  // ====== TAB 3: 财务收款 ======
+  // ====== TAB 3: TOP 20 交易排行 ======
+  Widget _top20Tab(CrmProvider crm) {
+    final sorted = List<Deal>.from(crm.deals.where((d) => d.stage != DealStage.lost))
+      ..sort((a, b) => b.amount.compareTo(a.amount));
+    final top20 = _filtered(sorted).take(20).toList();
+    if (top20.isEmpty) return const Center(child: Text('暂无交易数据', style: TextStyle(color: AppTheme.slate)));
+
+    double maxAmount = top20.isNotEmpty ? top20.first.amount : 1;
+    if (maxAmount == 0) maxAmount = 1;
+
+    return ListView(padding: const EdgeInsets.all(12), children: [
+      Container(
+        padding: const EdgeInsets.all(12),
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(color: AppTheme.navyLight, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppTheme.gold.withValues(alpha: 0.3))),
+        child: Row(children: [
+          const Icon(Icons.emoji_events, color: AppTheme.gold, size: 20),
+          const SizedBox(width: 8),
+          Text('交易排行 TOP ${top20.length}', style: const TextStyle(color: AppTheme.gold, fontWeight: FontWeight.bold, fontSize: 14)),
+          const Spacer(),
+          Text('总计 ${Formatters.currency(top20.fold(0.0, (sum, d) => sum + d.amount))}', style: const TextStyle(color: AppTheme.offWhite, fontSize: 12)),
+        ]),
+      ),
+      ...top20.asMap().entries.map((e) {
+        final i = e.key;
+        final d = e.value;
+        final c = _color(d.stage);
+        final ratio = d.amount / maxAmount;
+        final rankColor = i == 0 ? const Color(0xFFFFD700) : i == 1 ? const Color(0xFFC0C0C0) : i == 2 ? const Color(0xFFCD7F32) : AppTheme.slate;
+        return Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppTheme.navyLight, borderRadius: BorderRadius.circular(8),
+            border: i < 3 ? Border.all(color: rankColor.withValues(alpha: 0.4)) : null,
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Container(
+                width: 28, height: 28,
+                decoration: BoxDecoration(color: rankColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(6)),
+                child: Center(child: Text('${i + 1}', style: TextStyle(color: rankColor, fontWeight: FontWeight.bold, fontSize: 13))),
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  if (d.isStarred) const Padding(padding: EdgeInsets.only(right: 4), child: Icon(Icons.star, color: AppTheme.gold, size: 14)),
+                  Expanded(child: Text(d.title, style: const TextStyle(color: AppTheme.offWhite, fontWeight: FontWeight.w600, fontSize: 13), overflow: TextOverflow.ellipsis)),
+                ]),
+                Text('${d.contactName} | ${d.stage.label}', style: TextStyle(color: c, fontSize: 10)),
+              ])),
+              Text(Formatters.currency(d.amount), style: const TextStyle(color: AppTheme.gold, fontWeight: FontWeight.bold, fontSize: 14)),
+            ]),
+            const SizedBox(height: 6),
+            ClipRRect(borderRadius: BorderRadius.circular(2),
+              child: LinearProgressIndicator(value: ratio.clamp(0.02, 1.0), backgroundColor: AppTheme.steel.withValues(alpha: 0.2), valueColor: AlwaysStoppedAnimation(c), minHeight: 3)),
+          ]),
+        );
+      }),
+      const SizedBox(height: 30),
+    ]);
+  }
+
+  // ====== TAB 4: 财务收款 ======
   Widget _financeTab(CrmProvider crm) {
     final orders = crm.orders;
     double totalAmount = 0, collected = 0, pending = 0;
@@ -212,7 +276,6 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
     }
 
     return ListView(padding: const EdgeInsets.all(12), children: [
-      // KPI Row
       Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(color: AppTheme.navyLight, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppTheme.steel.withValues(alpha: 0.2))),
@@ -227,11 +290,9 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
         ]),
       ),
       const SizedBox(height: 12),
-      // 按客户应收账款
-      Padding(padding: const EdgeInsets.only(bottom: 6), child: Text('客户应收账款', style: const TextStyle(color: AppTheme.offWhite, fontSize: 14, fontWeight: FontWeight.w600))),
+      const Padding(padding: EdgeInsets.only(bottom: 6), child: Text('客户应收账款', style: TextStyle(color: AppTheme.offWhite, fontSize: 14, fontWeight: FontWeight.w600))),
       ..._customerReceivables(crm),
       const SizedBox(height: 12),
-      // 订单列表
       Padding(padding: const EdgeInsets.only(bottom: 6), child: Text('订单明细 (${orders.length})', style: const TextStyle(color: AppTheme.offWhite, fontSize: 14, fontWeight: FontWeight.w600))),
       ...orders.map((o) => _orderCard(crm, o)),
       const SizedBox(height: 30),
@@ -275,41 +336,153 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
     }).toList();
   }
 
+  // 订单卡片 - 展示详细信息
   Widget _orderCard(CrmProvider crm, SalesOrder o) {
     final c = _orderColor(o.status);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: AppTheme.navyLight, borderRadius: BorderRadius.circular(6)),
-      child: Row(children: [
-        Container(width: 4, height: 36, decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(2))),
-        const SizedBox(width: 10),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(o.contactName, style: const TextStyle(color: AppTheme.offWhite, fontWeight: FontWeight.w500, fontSize: 12)),
-          Text('${o.items.length}项 | ${SalesOrder.statusLabel(o.status)}', style: TextStyle(color: c, fontSize: 10)),
-        ])),
-        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Text(Formatters.currency(o.totalAmount), style: const TextStyle(color: AppTheme.gold, fontWeight: FontWeight.bold, fontSize: 13)),
-          if (o.status == 'confirmed' || o.status == 'shipped')
-            GestureDetector(
-              onTap: () {
-                if (o.status == 'confirmed') { crm.shipOrder(o.id); }
-                else {
-                  // Mark as completed (collected)
-                  o.status = 'completed';
-                  o.updatedAt = DateTime.now();
-                  crm.updateOrder(o);
-                }
-                setState(() {});
-              },
-              child: Container(
-                margin: const EdgeInsets.only(top: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(color: c.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
-                child: Text(o.status == 'confirmed' ? '出货' : '确认收款', style: TextStyle(color: c, fontSize: 9, fontWeight: FontWeight.w600)),
-              ),
+    return GestureDetector(
+      onTap: () => _showOrderDetail(o),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: AppTheme.navyLight, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppTheme.steel.withValues(alpha: 0.15))),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Container(width: 4, height: 44, decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(2))),
+            const SizedBox(width: 10),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Expanded(child: Text(o.contactName, style: const TextStyle(color: AppTheme.offWhite, fontWeight: FontWeight.w600, fontSize: 13))),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: c.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                  child: Text(SalesOrder.statusLabel(o.status), style: TextStyle(color: c, fontSize: 9, fontWeight: FontWeight.w600)),
+                ),
+              ]),
+              const SizedBox(height: 2),
+              Text('${o.items.length}项产品 | ${SalesOrder.priceTypeLabel(o.priceType)} | ${Formatters.dateShort(o.createdAt)}', style: const TextStyle(color: AppTheme.slate, fontSize: 10)),
+            ])),
+            const SizedBox(width: 8),
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text(Formatters.currency(o.totalAmount), style: const TextStyle(color: AppTheme.gold, fontWeight: FontWeight.bold, fontSize: 14)),
+              if (o.status == 'confirmed' || o.status == 'shipped')
+                GestureDetector(
+                  onTap: () {
+                    if (o.status == 'confirmed') { crm.shipOrder(o.id); }
+                    else { o.status = 'completed'; o.updatedAt = DateTime.now(); crm.updateOrder(o); }
+                    setState(() {});
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(top: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(color: c.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                    child: Text(o.status == 'confirmed' ? '出货' : '确认收款', style: TextStyle(color: c, fontSize: 9, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+            ]),
+          ]),
+          // 产品明细
+          const SizedBox(height: 8),
+          ...o.items.map((item) => Padding(
+            padding: const EdgeInsets.only(left: 14, bottom: 2),
+            child: Row(children: [
+              const Icon(Icons.inventory_2, color: AppTheme.slate, size: 12),
+              const SizedBox(width: 6),
+              Expanded(child: Text(item.productName, style: const TextStyle(color: AppTheme.silver, fontSize: 10), overflow: TextOverflow.ellipsis)),
+              Text('x${item.quantity}', style: const TextStyle(color: AppTheme.slate, fontSize: 10)),
+              const SizedBox(width: 8),
+              Text(Formatters.currency(item.subtotal), style: const TextStyle(color: AppTheme.gold, fontSize: 10)),
+            ]),
+          )),
+          // 额外详情行
+          if (o.shippingMethod.isNotEmpty || o.paymentTerms.isNotEmpty || o.deliveryAddress.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 14, top: 4),
+              child: Wrap(spacing: 8, children: [
+                if (o.shippingMethod.isNotEmpty) _miniTag(Icons.local_shipping, SalesOrder.shippingLabel(o.shippingMethod), AppTheme.info),
+                if (o.paymentTerms.isNotEmpty) _miniTag(Icons.payment, SalesOrder.paymentLabel(o.paymentTerms), AppTheme.warning),
+                if (o.deliveryAddress.isNotEmpty) _miniTag(Icons.location_on, '已填地址', AppTheme.success),
+              ]),
             ),
         ]),
+      ),
+    );
+  }
+
+  Widget _miniTag(IconData icon, String text, Color c) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(color: c.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, color: c, size: 10),
+        const SizedBox(width: 3),
+        Text(text, style: TextStyle(color: c, fontSize: 9)),
+      ]),
+    );
+  }
+
+  // 订单详情弹窗
+  void _showOrderDetail(SalesOrder o) {
+    final c = _orderColor(o.status);
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: AppTheme.navyLight,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(12))),
+      builder: (ctx) => ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.8),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Padding(padding: const EdgeInsets.all(16), child: Row(children: [
+            Container(width: 4, height: 24, decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(2))),
+            const SizedBox(width: 8),
+            const Expanded(child: Text('订单详情', style: TextStyle(color: AppTheme.offWhite, fontSize: 16, fontWeight: FontWeight.w600))),
+            Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3), decoration: BoxDecoration(color: c.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
+              child: Text(SalesOrder.statusLabel(o.status), style: TextStyle(color: c, fontSize: 11, fontWeight: FontWeight.w600))),
+            const SizedBox(width: 8),
+            IconButton(icon: const Icon(Icons.close, color: AppTheme.slate, size: 18), onPressed: () => Navigator.pop(ctx)),
+          ])),
+          Flexible(child: ListView(padding: const EdgeInsets.symmetric(horizontal: 16), children: [
+            _detailRow('订单编号', o.id.substring(0, 8).toUpperCase()),
+            _detailRow('客户', o.contactName),
+            if (o.contactCompany.isNotEmpty) _detailRow('公司', o.contactCompany),
+            if (o.contactPhone.isNotEmpty) _detailRow('电话', o.contactPhone),
+            _detailRow('价格类型', SalesOrder.priceTypeLabel(o.priceType)),
+            if (o.dealStage.isNotEmpty) _detailRow('交易阶段', o.dealStage),
+            _detailRow('创建日期', Formatters.dateShort(o.createdAt)),
+            if (o.shippingMethod.isNotEmpty) _detailRow('配送方式', SalesOrder.shippingLabel(o.shippingMethod)),
+            if (o.paymentTerms.isNotEmpty) _detailRow('付款条件', SalesOrder.paymentLabel(o.paymentTerms)),
+            if (o.deliveryAddress.isNotEmpty) _detailRow('配送地址', o.deliveryAddress),
+            if (o.expectedDeliveryDate != null) _detailRow('预计交付', Formatters.dateShort(o.expectedDeliveryDate!)),
+            if (o.notes.isNotEmpty) _detailRow('备注', o.notes),
+            const SizedBox(height: 12),
+            const Padding(padding: EdgeInsets.only(bottom: 6), child: Text('产品明细', style: TextStyle(color: AppTheme.offWhite, fontSize: 13, fontWeight: FontWeight.w600))),
+            ...o.items.map((item) => Container(
+              margin: const EdgeInsets.only(bottom: 4),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: AppTheme.navyMid, borderRadius: BorderRadius.circular(6)),
+              child: Row(children: [
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(item.productName, style: const TextStyle(color: AppTheme.offWhite, fontSize: 12, fontWeight: FontWeight.w500)),
+                  Text('单价: ${Formatters.currency(item.unitPrice)} | 数量: ${item.quantity}', style: const TextStyle(color: AppTheme.slate, fontSize: 10)),
+                ])),
+                Text(Formatters.currency(item.subtotal), style: const TextStyle(color: AppTheme.gold, fontWeight: FontWeight.bold, fontSize: 13)),
+              ]),
+            )),
+            const Divider(color: AppTheme.steel, height: 20),
+            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              const Text('合计: ', style: TextStyle(color: AppTheme.slate, fontSize: 14)),
+              Text(Formatters.currency(o.totalAmount), style: const TextStyle(color: AppTheme.gold, fontSize: 20, fontWeight: FontWeight.bold)),
+            ]),
+            const SizedBox(height: 20),
+          ])),
+        ]),
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(children: [
+        SizedBox(width: 80, child: Text(label, style: const TextStyle(color: AppTheme.slate, fontSize: 11))),
+        Expanded(child: Text(value, style: const TextStyle(color: AppTheme.offWhite, fontSize: 12))),
       ]),
     );
   }
@@ -320,15 +493,13 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
     Text(label, style: const TextStyle(color: AppTheme.slate, fontSize: 9)),
   ]));
 
-  // ====== TAB 4: 员工业绩 ======
+  // ====== TAB 5: 员工业绩 ======
   Widget _staffSalesTab(CrmProvider crm) {
     final members = crm.teamMembers;
-    // Calculate sales per team member (by assigned contacts → deals)
     final memberSales = <String, Map<String, dynamic>>{};
     for (final m in members) {
       memberSales[m.id] = {'name': m.name, 'role': m.role, 'dealCount': 0, 'totalAmount': 0.0, 'closedAmount': 0.0, 'orderCount': 0};
     }
-    // Map: assigned contacts → deals
     for (final a in crm.assignments) {
       final ms = memberSales[a.memberId];
       if (ms == null) continue;
@@ -341,8 +512,6 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
       final orders = crm.getOrdersByContact(a.contactId);
       ms['orderCount'] = (ms['orderCount'] as int) + orders.length;
     }
-    // Also count deals by owner (if deal.contactName matches)
-    // Fallback: distribute all deals proportionally if no assignments
     if (crm.assignments.isEmpty && members.isNotEmpty) {
       for (final d in crm.deals) {
         final ms = memberSales[members.first.id]!;
@@ -390,7 +559,7 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
     ]);
   }
 
-  // ====== Shared ======
+  // ====== Deal Card - 阶段切换后立即更新 ======
   Widget _dealCard(BuildContext context, CrmProvider crm, Deal deal) {
     final c = _color(deal.stage);
     return Container(
@@ -398,7 +567,7 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppTheme.navyLight, borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.steel.withValues(alpha: 0.2)),
+        border: Border.all(color: deal.isStarred ? AppTheme.gold.withValues(alpha: 0.4) : AppTheme.steel.withValues(alpha: 0.2)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
@@ -408,13 +577,22 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
             child: Text(deal.stage.label, style: TextStyle(color: c, fontSize: 9, fontWeight: FontWeight.w600)),
           ),
           const SizedBox(width: 6),
+          if (deal.isStarred) const Padding(padding: EdgeInsets.only(right: 4), child: Icon(Icons.star, color: AppTheme.gold, size: 14)),
           Expanded(child: Text(deal.title, style: const TextStyle(color: AppTheme.offWhite, fontWeight: FontWeight.w600, fontSize: 13), overflow: TextOverflow.ellipsis)),
           PopupMenuButton<DealStage>(
             icon: const Icon(Icons.swap_horiz, color: AppTheme.slate, size: 16),
             color: AppTheme.navyMid,
-            onSelected: (s) => crm.moveDealStage(deal.id, s),
+            onSelected: (s) async {
+              // 立即更新本地UI
+              await crm.moveDealStage(deal.id, s);
+              setState(() {}); // 强制刷新当前页面
+            },
             itemBuilder: (_) => DealStage.values.where((s) => s != deal.stage).map((s) => PopupMenuItem(value: s,
-              child: Text(s.label, style: const TextStyle(color: AppTheme.offWhite, fontSize: 12)))).toList(),
+              child: Row(children: [
+                Container(width: 8, height: 8, decoration: BoxDecoration(color: _color(s), shape: BoxShape.circle)),
+                const SizedBox(width: 8),
+                Text(s.label, style: const TextStyle(color: AppTheme.offWhite, fontSize: 12)),
+              ]))).toList(),
           ),
         ]),
         Text(deal.contactName, style: const TextStyle(color: AppTheme.slate, fontSize: 11)),
@@ -445,6 +623,7 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(color: AppTheme.navyMid, borderRadius: BorderRadius.circular(6)),
       child: Row(children: [
+        if (deal.isStarred) const Padding(padding: EdgeInsets.only(right: 4), child: Icon(Icons.star, color: AppTheme.gold, size: 12)),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(deal.title, style: const TextStyle(color: AppTheme.offWhite, fontSize: 11, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis),
           Text(deal.contactName, style: const TextStyle(color: AppTheme.slate, fontSize: 10)),
@@ -496,15 +675,23 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
     }
   }
 
-  // ========== New Order Sheet ==========
+  // ========== New Order Sheet - 增强版 ==========
   void _showNewOrderSheet(BuildContext context, CrmProvider crm) {
     String? selectedContactId;
     String selectedContactName = '';
+    String selectedContactCompany = '';
+    String selectedContactPhone = '';
     final contacts = crm.allContacts;
     final products = crm.products;
     final selectedProducts = <String, int>{};
     String priceType = 'retail';
+    String selectedStage = 'ordered';
+    String shippingMethod = '';
+    String paymentTerms = '';
+    DateTime? expectedDate;
     final qtyControllers = <String, TextEditingController>{};
+    final addressCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
 
     showModalBottomSheet(
       context: context, isScrollControlled: true, backgroundColor: AppTheme.navyLight,
@@ -519,71 +706,183 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
         }
 
         return Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 20, right: 20, top: 20),
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 16, right: 16, top: 16),
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.85),
+            constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.9),
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
                 const Text('新增订单', style: TextStyle(color: AppTheme.offWhite, fontSize: 16, fontWeight: FontWeight.w600)),
                 const Spacer(),
                 IconButton(icon: const Icon(Icons.close, color: AppTheme.slate), onPressed: () => Navigator.pop(ctx)),
               ]),
-              Text('下单 = 预定 (不扣库存), 出货时才扣', style: TextStyle(color: AppTheme.info.withValues(alpha: 0.8), fontSize: 10)),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                value: selectedContactId,
-                decoration: const InputDecoration(labelText: '选择客户'),
-                dropdownColor: AppTheme.navyMid, style: const TextStyle(color: AppTheme.offWhite),
-                items: contacts.map((c) => DropdownMenuItem(value: c.id, child: Text('${c.name} - ${c.company}', style: const TextStyle(fontSize: 12)))).toList(),
-                onChanged: (v) => set(() { selectedContactId = v; selectedContactName = contacts.firstWhere((c) => c.id == v).name; }),
-              ),
-              const SizedBox(height: 8),
-              Row(children: ['agent', 'clinic', 'retail'].map((pt) {
-                final labels = {'agent': '代理', 'clinic': '诊所', 'retail': '零售'};
-                final sel = priceType == pt;
-                return Padding(padding: const EdgeInsets.only(right: 6), child: ChoiceChip(
-                  label: Text(labels[pt]!, style: TextStyle(fontSize: 11, color: sel ? AppTheme.navy : AppTheme.offWhite)),
-                  selected: sel, onSelected: (_) => set(() => priceType = pt),
-                  selectedColor: AppTheme.gold, backgroundColor: AppTheme.navyMid,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact,
-                ));
-              }).toList()),
               const SizedBox(height: 6),
-              Flexible(child: ListView(shrinkWrap: true, children: products.map((p) {
-                final qty = selectedProducts[p.id] ?? 0;
-                double up;
-                switch (priceType) { case 'agent': up = p.agentPrice; break; case 'clinic': up = p.clinicPrice; break; default: up = p.retailPrice; break; }
-                final stock = crm.getProductStock(p.id);
-                qtyControllers.putIfAbsent(p.id, () => TextEditingController(text: qty > 0 ? '$qty' : ''));
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 4),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: qty > 0 ? AppTheme.gold.withValues(alpha: 0.06) : AppTheme.navyMid,
-                    borderRadius: BorderRadius.circular(6),
-                    border: qty > 0 ? Border.all(color: AppTheme.gold.withValues(alpha: 0.3)) : null,
+              Flexible(child: ListView(shrinkWrap: true, children: [
+                // 选择客户
+                DropdownButtonFormField<String>(
+                  value: selectedContactId,
+                  decoration: const InputDecoration(labelText: '选择客户', contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                  dropdownColor: AppTheme.navyMid, style: const TextStyle(color: AppTheme.offWhite, fontSize: 12),
+                  items: contacts.map((c) {
+                    final relLabel = c.myRelation.isMedChannel ? ' [${c.myRelation.label}]' : '';
+                    return DropdownMenuItem(value: c.id, child: Text('${c.name}$relLabel - ${c.company}', style: const TextStyle(fontSize: 11)));
+                  }).toList(),
+                  onChanged: (v) {
+                    set(() {
+                      selectedContactId = v;
+                      final contact = contacts.firstWhere((c) => c.id == v);
+                      selectedContactName = contact.name;
+                      selectedContactCompany = contact.company;
+                      selectedContactPhone = contact.phone;
+                      // 根据业务关系自动匹配价格
+                      if (contact.myRelation == MyRelationType.agent) priceType = 'agent';
+                      else if (contact.myRelation == MyRelationType.clinic) priceType = 'clinic';
+                      else if (contact.myRelation == MyRelationType.retailer) priceType = 'retail';
+                    });
+                  },
+                ),
+                const SizedBox(height: 8),
+
+                // 业务关系 → 价格类型 (自动匹配但可手动修改)
+                const Text('价格类型', style: TextStyle(color: AppTheme.slate, fontSize: 11)),
+                const SizedBox(height: 4),
+                Row(children: ['agent', 'clinic', 'retail'].map((pt) {
+                  final labels = {'agent': '代理', 'clinic': '诊所', 'retail': '零售'};
+                  final sel = priceType == pt;
+                  return Padding(padding: const EdgeInsets.only(right: 6), child: ChoiceChip(
+                    label: Text(labels[pt]!, style: TextStyle(fontSize: 10, color: sel ? AppTheme.navy : AppTheme.offWhite)),
+                    selected: sel, onSelected: (_) => set(() => priceType = pt),
+                    selectedColor: AppTheme.gold, backgroundColor: AppTheme.navyMid,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact,
+                  ));
+                }).toList()),
+                const SizedBox(height: 8),
+
+                // 交易阶段选择
+                const Text('交易阶段', style: TextStyle(color: AppTheme.slate, fontSize: 11)),
+                const SizedBox(height: 4),
+                Wrap(spacing: 4, runSpacing: 4, children: DealStage.values.where((s) => s != DealStage.lost).map((s) {
+                  final sel = selectedStage == s.name;
+                  return ChoiceChip(
+                    label: Text(s.label, style: TextStyle(fontSize: 9, color: sel ? AppTheme.navy : AppTheme.offWhite)),
+                    selected: sel, onSelected: (_) => set(() => selectedStage = s.name),
+                    selectedColor: _color(s), backgroundColor: AppTheme.navyMid,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact,
+                  );
+                }).toList()),
+                const SizedBox(height: 8),
+
+                // 产品列表
+                const Text('选择产品', style: TextStyle(color: AppTheme.slate, fontSize: 11)),
+                const SizedBox(height: 4),
+                ...products.map((p) {
+                  final qty = selectedProducts[p.id] ?? 0;
+                  double up;
+                  switch (priceType) { case 'agent': up = p.agentPrice; break; case 'clinic': up = p.clinicPrice; break; default: up = p.retailPrice; break; }
+                  final stock = crm.getProductStock(p.id);
+                  qtyControllers.putIfAbsent(p.id, () => TextEditingController(text: qty > 0 ? '$qty' : ''));
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 3),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: qty > 0 ? AppTheme.gold.withValues(alpha: 0.06) : AppTheme.navyMid,
+                      borderRadius: BorderRadius.circular(6),
+                      border: qty > 0 ? Border.all(color: AppTheme.gold.withValues(alpha: 0.3)) : null,
+                    ),
+                    child: Row(children: [
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(p.name, style: const TextStyle(color: AppTheme.offWhite, fontSize: 11, fontWeight: FontWeight.w500)),
+                        Row(children: [
+                          Text(Formatters.currency(up), style: const TextStyle(color: AppTheme.gold, fontSize: 10)),
+                          const SizedBox(width: 6),
+                          Text('库存:$stock', style: TextStyle(color: stock <= 0 ? AppTheme.danger : AppTheme.slate, fontSize: 9)),
+                        ]),
+                      ])),
+                      SizedBox(width: 52, height: 30, child: TextField(
+                        controller: qtyControllers[p.id], keyboardType: TextInputType.number, textAlign: TextAlign.center,
+                        style: const TextStyle(color: AppTheme.offWhite, fontSize: 12, fontWeight: FontWeight.bold),
+                        decoration: InputDecoration(hintText: '0', hintStyle: const TextStyle(color: AppTheme.slate, fontSize: 11),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                          filled: true, fillColor: AppTheme.navyLight,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(4), borderSide: BorderSide.none)),
+                        onChanged: (v) { final n = int.tryParse(v) ?? 0; set(() { if (n > 0) selectedProducts[p.id] = n; else selectedProducts.remove(p.id); }); },
+                      )),
+                    ]),
+                  );
+                }),
+                const SizedBox(height: 8),
+
+                // 配送方式
+                const Text('配送方式', style: TextStyle(color: AppTheme.slate, fontSize: 11)),
+                const SizedBox(height: 4),
+                Row(children: ['express', 'sea', 'air', 'pickup'].map((s) {
+                  final sel = shippingMethod == s;
+                  return Padding(padding: const EdgeInsets.only(right: 6), child: ChoiceChip(
+                    label: Text(SalesOrder.shippingLabel(s), style: TextStyle(fontSize: 10, color: sel ? AppTheme.navy : AppTheme.offWhite)),
+                    selected: sel, onSelected: (_) => set(() => shippingMethod = s),
+                    selectedColor: AppTheme.info, backgroundColor: AppTheme.navyMid,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact,
+                  ));
+                }).toList()),
+                const SizedBox(height: 8),
+
+                // 付款条件
+                const Text('付款条件', style: TextStyle(color: AppTheme.slate, fontSize: 11)),
+                const SizedBox(height: 4),
+                Row(children: ['prepaid', 'cod', 'net30', 'net60'].map((p) {
+                  final sel = paymentTerms == p;
+                  return Padding(padding: const EdgeInsets.only(right: 6), child: ChoiceChip(
+                    label: Text(SalesOrder.paymentLabel(p), style: TextStyle(fontSize: 10, color: sel ? AppTheme.navy : AppTheme.offWhite)),
+                    selected: sel, onSelected: (_) => set(() => paymentTerms = p),
+                    selectedColor: AppTheme.warning, backgroundColor: AppTheme.navyMid,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact,
+                  ));
+                }).toList()),
+                const SizedBox(height: 8),
+
+                // 预计交付日期
+                GestureDetector(
+                  onTap: () async {
+                    final picked = await showDatePicker(context: ctx, initialDate: DateTime.now().add(const Duration(days: 14)),
+                      firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 365)));
+                    if (picked != null) set(() => expectedDate = picked);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: AppTheme.navyMid, borderRadius: BorderRadius.circular(6)),
+                    child: Row(children: [
+                      const Icon(Icons.calendar_today, color: AppTheme.slate, size: 16),
+                      const SizedBox(width: 8),
+                      Text(expectedDate != null ? '预计交付: ${Formatters.dateShort(expectedDate!)}' : '选择预计交付日期', style: TextStyle(color: expectedDate != null ? AppTheme.offWhite : AppTheme.slate, fontSize: 11)),
+                    ]),
                   ),
-                  child: Row(children: [
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(p.name, style: const TextStyle(color: AppTheme.offWhite, fontSize: 12, fontWeight: FontWeight.w500)),
-                      Row(children: [
-                        Text(Formatters.currency(up), style: const TextStyle(color: AppTheme.gold, fontSize: 10)),
-                        const SizedBox(width: 6),
-                        Text('库存:$stock', style: TextStyle(color: stock <= 0 ? AppTheme.danger : AppTheme.slate, fontSize: 10)),
-                      ]),
-                    ])),
-                    SizedBox(width: 56, height: 32, child: TextField(
-                      controller: qtyControllers[p.id], keyboardType: TextInputType.number, textAlign: TextAlign.center,
-                      style: const TextStyle(color: AppTheme.offWhite, fontSize: 13, fontWeight: FontWeight.bold),
-                      decoration: InputDecoration(hintText: '0', hintStyle: const TextStyle(color: AppTheme.slate, fontSize: 12),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                        filled: true, fillColor: AppTheme.navyLight,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(4), borderSide: BorderSide.none)),
-                      onChanged: (v) { final n = int.tryParse(v) ?? 0; set(() { if (n > 0) selectedProducts[p.id] = n; else selectedProducts.remove(p.id); }); },
-                    )),
-                  ]),
-                );
-              }).toList())),
+                ),
+                const SizedBox(height: 8),
+
+                // 配送地址
+                TextField(
+                  controller: addressCtrl,
+                  style: const TextStyle(color: AppTheme.offWhite, fontSize: 12),
+                  decoration: InputDecoration(
+                    labelText: '配送地址', labelStyle: const TextStyle(fontSize: 11),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    filled: true, fillColor: AppTheme.navyMid,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
+                  ),
+                ),
+                const SizedBox(height: 6),
+
+                // 备注
+                TextField(
+                  controller: notesCtrl,
+                  style: const TextStyle(color: AppTheme.offWhite, fontSize: 12),
+                  decoration: InputDecoration(
+                    labelText: '备注', labelStyle: const TextStyle(fontSize: 11),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    filled: true, fillColor: AppTheme.navyMid,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
+                  ),
+                ),
+              ])),
               const SizedBox(height: 6),
               Row(children: [
                 const Text('合计: ', style: TextStyle(color: AppTheme.slate, fontSize: 13)),
@@ -598,10 +897,26 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
                     switch (priceType) { case 'agent': up = p.agentPrice; break; case 'clinic': up = p.clinicPrice; break; default: up = p.retailPrice; break; }
                     return OrderItem(productId: p.id, productName: p.name, productCode: p.code, quantity: e.value, unitPrice: up, subtotal: up * e.value);
                   }).toList();
-                  crm.createOrderWithDeal(SalesOrder(id: crm.generateId(), contactId: selectedContactId!, contactName: selectedContactName, items: items, totalAmount: total, priceType: priceType));
+                  final dealStage = DealStage.values.firstWhere((s) => s.name == selectedStage, orElse: () => DealStage.ordered);
+                  crm.createOrderWithDeal(SalesOrder(
+                    id: crm.generateId(),
+                    contactId: selectedContactId!,
+                    contactName: selectedContactName,
+                    contactCompany: selectedContactCompany,
+                    contactPhone: selectedContactPhone,
+                    items: items,
+                    totalAmount: total,
+                    priceType: priceType,
+                    dealStage: dealStage.label,
+                    shippingMethod: shippingMethod,
+                    paymentTerms: paymentTerms,
+                    deliveryAddress: addressCtrl.text,
+                    notes: notesCtrl.text,
+                    expectedDeliveryDate: expectedDate,
+                  ));
                   Navigator.pop(ctx);
                 },
-                child: const Text('下单 (预定)'),
+                child: const Text('创建订单'),
               )),
               const SizedBox(height: 12),
             ]),

@@ -20,13 +20,14 @@ class _AddContactScreenState extends State<AddContactScreen> {
   final _emailCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
+  final _nationalityCtrl = TextEditingController();
   Industry _industry = Industry.other;
   RelationshipStrength _strength = RelationshipStrength.cool;
   MyRelationType _myRelation = MyRelationType.other;
 
   @override
   void dispose() {
-    for (final c in [_nameCtrl, _readingCtrl, _companyCtrl, _positionCtrl, _phoneCtrl, _emailCtrl, _addressCtrl, _notesCtrl]) {
+    for (final c in [_nameCtrl, _readingCtrl, _companyCtrl, _positionCtrl, _phoneCtrl, _emailCtrl, _addressCtrl, _notesCtrl, _nationalityCtrl]) {
       c.dispose();
     }
     super.dispose();
@@ -47,6 +48,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
             _field(_phoneCtrl, '电话', Icons.phone, keyboard: TextInputType.phone),
             _field(_emailCtrl, '邮箱', Icons.email, keyboard: TextInputType.emailAddress),
             _field(_addressCtrl, '地址', Icons.location_on),
+            _field(_nationalityCtrl, '国籍', Icons.flag),
             const SizedBox(height: 16),
             const Text('行业', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
@@ -109,7 +111,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
       final crm = context.read<CrmProvider>();
       crm.addContact(Contact(id: crm.generateId(), name: _nameCtrl.text, nameReading: _readingCtrl.text, company: _companyCtrl.text,
         position: _positionCtrl.text, phone: _phoneCtrl.text, email: _emailCtrl.text, address: _addressCtrl.text,
-        industry: _industry, strength: _strength, myRelation: _myRelation, notes: _notesCtrl.text));
+        industry: _industry, strength: _strength, myRelation: _myRelation, notes: _notesCtrl.text, nationality: _nationalityCtrl.text));
       Navigator.pop(context);
     }
   }

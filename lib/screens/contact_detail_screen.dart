@@ -146,6 +146,7 @@ class ContactDetailScreen extends StatelessWidget {
         if (contact.phone.isNotEmpty) _infoRowTappable(Icons.phone, contact.phone, AppTheme.primaryBlue, () => _makeCall(context, contact.phone)),
         if (contact.email.isNotEmpty) _infoRowTappable(Icons.email, contact.email, AppTheme.primaryPurple, () => _sendEmail(context, contact.email, contact.name)),
         if (contact.address.isNotEmpty) _infoRow(Icons.location_on, contact.address, AppTheme.success),
+        if (contact.nationality.isNotEmpty) _infoRow(Icons.flag, '国籍: ${contact.nationality}', AppTheme.info),
         if (contact.referredBy.isNotEmpty) _infoRow(Icons.handshake, '引荐人: ${contact.referredBy}', AppTheme.warning),
       ]),
     );

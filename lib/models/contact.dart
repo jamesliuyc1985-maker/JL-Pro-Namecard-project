@@ -72,6 +72,7 @@ class Contact {
   List<String> tags;
   String? avatarUrl;
   String? businessCategory; // agent, clinic, retail
+  String nationality; // 国籍
 
   Contact({
     required this.id,
@@ -92,6 +93,7 @@ class Contact {
     List<String>? tags,
     this.avatarUrl,
     this.businessCategory,
+    this.nationality = '',
   })  : createdAt = createdAt ?? DateTime.now(),
         lastContactedAt = lastContactedAt ?? DateTime.now(),
         tags = tags ?? [];
@@ -115,6 +117,7 @@ class Contact {
         'tags': tags,
         'avatarUrl': avatarUrl,
         'businessCategory': businessCategory,
+        'nationality': nationality,
       };
 
   factory Contact.fromJson(Map<String, dynamic> json) => Contact(
@@ -146,6 +149,7 @@ class Contact {
         tags: List<String>.from(json['tags'] ?? []),
         avatarUrl: json['avatarUrl'] as String?,
         businessCategory: json['businessCategory'] as String?,
+        nationality: json['nationality'] as String? ?? '',
       );
 }
 

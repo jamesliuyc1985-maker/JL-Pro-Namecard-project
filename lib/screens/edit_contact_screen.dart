@@ -22,6 +22,7 @@ class _EditContactScreenState extends State<EditContactScreen> {
   late TextEditingController _addressCtrl;
   late TextEditingController _notesCtrl;
   late TextEditingController _tagsCtrl;
+  late TextEditingController _nationalityCtrl;
   late Industry _industry;
   late RelationshipStrength _strength;
   late MyRelationType _myRelation;
@@ -30,7 +31,7 @@ class _EditContactScreenState extends State<EditContactScreen> {
   @override
   void dispose() {
     if (_initialized) {
-      for (final c in [_nameCtrl, _readingCtrl, _companyCtrl, _positionCtrl, _phoneCtrl, _emailCtrl, _addressCtrl, _notesCtrl, _tagsCtrl]) {
+      for (final c in [_nameCtrl, _readingCtrl, _companyCtrl, _positionCtrl, _phoneCtrl, _emailCtrl, _addressCtrl, _notesCtrl, _tagsCtrl, _nationalityCtrl]) {
         c.dispose();
       }
     }
@@ -48,6 +49,7 @@ class _EditContactScreenState extends State<EditContactScreen> {
     _addressCtrl = TextEditingController(text: contact.address);
     _notesCtrl = TextEditingController(text: contact.notes);
     _tagsCtrl = TextEditingController(text: contact.tags.join(', '));
+    _nationalityCtrl = TextEditingController(text: contact.nationality);
     _industry = contact.industry;
     _strength = contact.strength;
     _myRelation = contact.myRelation;
@@ -98,6 +100,7 @@ class _EditContactScreenState extends State<EditContactScreen> {
               _field(_phoneCtrl, '电话', Icons.phone, keyboard: TextInputType.phone),
               _field(_emailCtrl, '邮箱', Icons.email, keyboard: TextInputType.emailAddress),
               _field(_addressCtrl, '地址', Icons.location_on),
+              _field(_nationalityCtrl, '国籍', Icons.flag),
               const SizedBox(height: 16),
               const Text('行业', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
@@ -190,6 +193,7 @@ class _EditContactScreenState extends State<EditContactScreen> {
       contact.phone = _phoneCtrl.text;
       contact.email = _emailCtrl.text;
       contact.address = _addressCtrl.text;
+      contact.nationality = _nationalityCtrl.text;
       contact.industry = _industry;
       contact.strength = _strength;
       contact.myRelation = _myRelation;
