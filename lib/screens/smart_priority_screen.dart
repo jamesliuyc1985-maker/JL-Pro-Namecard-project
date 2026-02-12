@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/crm_provider.dart';
 import '../models/deal.dart';
 import '../models/contact.dart';
+import '../models/product.dart';
 import '../utils/theme.dart';
 import '../utils/formatters.dart';
 import 'contact_detail_screen.dart';
@@ -21,7 +22,7 @@ class _SmartPriorityScreenState extends State<SmartPriorityScreen> with SingleTi
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 3, vsync: this);
+    _tabCtrl = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -37,6 +38,11 @@ class _SmartPriorityScreenState extends State<SmartPriorityScreen> with SingleTi
       final contactScores = _scoreContactPriority(crm);
       final starredDeals = crm.starredDeals;
 
+      final upcomingOrders = crm.upcomingDeliveryOrders;
+      final overdueOrders = crm.overdueOrders;
+      final unpaidOrders = crm.unpaidOrders;
+      final deliveryAlertCount = upcomingOrders.length + overdueOrders.length;
+
       return SafeArea(child: Column(children: [
         _buildHeader(dealScores, contactScores, starredDeals),
         _buildSummaryCards(dealScores, contactScores, crm),
@@ -46,6 +52,7 @@ class _SmartPriorityScreenState extends State<SmartPriorityScreen> with SingleTi
           labelColor: AppTheme.accentGold,
           unselectedLabelColor: AppTheme.textSecondary,
           labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+          isScrollable: true, tabAlignment: TabAlignment.start,
           tabs: [
             Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.star, size: 14),
@@ -62,12 +69,18 @@ class _SmartPriorityScreenState extends State<SmartPriorityScreen> with SingleTi
               const SizedBox(width: 4),
               Text('人脉 (${contactScores.length})'),
             ])),
+            Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.local_shipping, size: 14, color: deliveryAlertCount > 0 ? AppTheme.danger : null),
+              const SizedBox(width: 4),
+              Text('交付($deliveryAlertCount)', style: TextStyle(color: deliveryAlertCount > 0 ? AppTheme.danger : null)),
+            ])),
           ],
         ),
         Expanded(child: TabBarView(controller: _tabCtrl, children: [
           _buildStarredTab(crm, starredDeals),
           _buildDealPriorityList(crm, dealScores),
           _buildContactPriorityList(crm, contactScores),
+          _buildDeliveryTab(crm, upcomingOrders, overdueOrders, unpaidOrders),
         ])),
       ]));
     });
@@ -573,6 +586,109 @@ class _SmartPriorityScreenState extends State<SmartPriorityScreen> with SingleTi
           ],
         ]),
       ),
+    );
+  }
+
+  // ========== 交付智能判断Tab ==========
+  Widget _buildDeliveryTab(CrmProvider crm, List<SalesOrder> upcoming, List<SalesOrder> overdue, List<SalesOrder> unpaid) {
+    return ListView(padding: const EdgeInsets.all(12), children: [
+      // 逾期警报
+      if (overdue.isNotEmpty) ...[        Container(
+          padding: const EdgeInsets.all(12), margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(color: AppTheme.danger.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppTheme.danger.withValues(alpha: 0.4))),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              const Icon(Icons.warning_amber, color: AppTheme.danger, size: 18),
+              const SizedBox(width: 6),
+              Text('逾期未交付 (${overdue.length})', style: const TextStyle(color: AppTheme.danger, fontWeight: FontWeight.bold, fontSize: 14)),
+            ]),
+            const SizedBox(height: 8),
+            ...overdue.map((o) => _deliveryOrderCard(o, isOverdue: true)),
+          ]),
+        ),
+      ],
+      // 7天内到期
+      if (upcoming.isNotEmpty) ...[        Container(
+          padding: const EdgeInsets.all(12), margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(color: AppTheme.warning.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppTheme.warning.withValues(alpha: 0.4))),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              const Icon(Icons.schedule, color: AppTheme.warning, size: 18),
+              const SizedBox(width: 6),
+              Text('7天内交付 (${upcoming.length})', style: const TextStyle(color: AppTheme.warning, fontWeight: FontWeight.bold, fontSize: 14)),
+            ]),
+            const SizedBox(height: 8),
+            ...upcoming.where((o) => !overdue.contains(o)).map((o) => _deliveryOrderCard(o, isOverdue: false)),
+          ]),
+        ),
+      ],
+      // 待收款
+      if (unpaid.isNotEmpty) ...[        Container(
+          padding: const EdgeInsets.all(12), margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(color: AppTheme.info.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppTheme.info.withValues(alpha: 0.3))),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              const Icon(Icons.account_balance_wallet, color: AppTheme.info, size: 18),
+              const SizedBox(width: 6),
+              Text('待收款 (${unpaid.length})', style: const TextStyle(color: AppTheme.info, fontWeight: FontWeight.bold, fontSize: 14)),
+              const Spacer(),
+              Text(Formatters.currency(unpaid.fold(0.0, (sum, o) => sum + o.unpaidAmount)),
+                style: const TextStyle(color: AppTheme.accentGold, fontWeight: FontWeight.bold, fontSize: 13)),
+            ]),
+            const SizedBox(height: 8),
+            ...unpaid.take(10).map((o) => _unpaidOrderCard(o)),
+          ]),
+        ),
+      ],
+      if (overdue.isEmpty && upcoming.isEmpty && unpaid.isEmpty)
+        const Center(child: Padding(padding: EdgeInsets.all(40),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.check_circle, color: AppTheme.success, size: 48),
+            SizedBox(height: 12),
+            Text('所有订单状态正常', style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+          ]))),
+      const SizedBox(height: 30),
+    ]);
+  }
+
+  Widget _deliveryOrderCard(SalesOrder o, {required bool isOverdue}) {
+    final now = DateTime.now();
+    final days = o.expectedDeliveryDate != null ? o.expectedDeliveryDate!.difference(now).inDays : 0;
+    final color = isOverdue ? AppTheme.danger : AppTheme.warning;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6), padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.04), borderRadius: BorderRadius.circular(8)),
+      child: Row(children: [
+        Container(width: 4, height: 36, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
+        const SizedBox(width: 10),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(o.contactName, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 12)),
+          Text('${o.items.length}项产品 | ${SalesOrder.statusLabel(o.status)} | ${SalesOrder.trackingStatusLabel(o.trackingStatus)}',
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+        ])),
+        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text(isOverdue ? '逾期${-days}天' : '${days}天后', style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
+          Text(Formatters.currency(o.totalAmount), style: const TextStyle(color: AppTheme.accentGold, fontSize: 10)),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _unpaidOrderCard(SalesOrder o) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4), padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(color: AppTheme.cardBgLight, borderRadius: BorderRadius.circular(6)),
+      child: Row(children: [
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(o.contactName, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 11, fontWeight: FontWeight.w500)),
+          Text('${PaymentStatus.label(o.paymentStatus)} | 已收${Formatters.currency(o.paidAmount)}',
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 9)),
+        ])),
+        Text(Formatters.currency(o.unpaidAmount), style: const TextStyle(color: AppTheme.warning, fontWeight: FontWeight.bold, fontSize: 12)),
+      ]),
     );
   }
 

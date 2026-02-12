@@ -12,6 +12,8 @@ import '../services/data_service.dart';
 import '../services/notification_service.dart';
 import '../services/sync_service.dart';
 
+/// CrmProvider v22: 即时UI刷新 + DataService统一持久化
+/// 核心: DataService.CRUD已自动持久化到Hive+Firestore, 无需重复调用SyncService
 class CrmProvider extends ChangeNotifier {
   final DataService _dataService;
   final SyncService _syncService;
@@ -84,22 +86,28 @@ class CrmProvider extends ChangeNotifier {
   int get pendingWriteCount => _syncService.pendingWriteCount;
   DateTime? get lastSyncTime => _syncService.lastSyncTime;
 
+  /// 刷新所有本地缓存 → notifyListeners (即时UI更新)
+  void _refreshAll() {
+    _contacts = _dataService.getAllContacts();
+    _deals = _dataService.getAllDeals();
+    _interactions = _dataService.getAllInteractions();
+    _relations = _dataService.getAllRelations();
+    _products = _dataService.getAllProducts();
+    _orders = _dataService.getAllOrders();
+    _inventoryRecords = _dataService.getAllInventory();
+    _teamMembers = _dataService.getAllTeamMembers();
+    _tasks = _dataService.getAllTasks();
+    _assignments = _dataService.getAllAssignments();
+    _factories = _dataService.getAllFactories();
+    _productionOrders = _dataService.getAllProductionOrders();
+    notifyListeners();
+  }
+
   Future<void> loadAll() async {
     _isLoading = true;
     notifyListeners();
     try {
-      _contacts = _dataService.getAllContacts();
-      _deals = _dataService.getAllDeals();
-      _interactions = _dataService.getAllInteractions();
-      _relations = _dataService.getAllRelations();
-      _products = _dataService.getAllProducts();
-      _orders = _dataService.getAllOrders();
-      _inventoryRecords = _dataService.getAllInventory();
-      _teamMembers = _dataService.getAllTeamMembers();
-      _tasks = _dataService.getAllTasks();
-      _assignments = _dataService.getAllAssignments();
-      _factories = _dataService.getAllFactories();
-      _productionOrders = _dataService.getAllProductionOrders();
+      _refreshAll();
       _syncStatus = null;
     } catch (e) {
       _syncStatus = 'Loading failed: $e';
@@ -113,11 +121,9 @@ class CrmProvider extends ChangeNotifier {
     _syncStatus = '正在同步...';
     notifyListeners();
     try {
-      // 1. SyncService: Hive ↔ Firestore 双向同步
       await _syncService.syncFromCloud();
-      // 2. DataService: 内存缓存从云端拉取
       await _dataService.syncFromCloud();
-      await loadAll();
+      _refreshAll();
       _syncStatus = '同步成功 (${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, "0")})';
     } catch (e) {
       _syncStatus = '同步失败: $e';
@@ -126,7 +132,6 @@ class CrmProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 全量推送本地数据到云端
   Future<void> pushToCloud() async {
     _isLoading = true;
     _syncStatus = '正在上传...';
@@ -153,73 +158,61 @@ class CrmProvider extends ChangeNotifier {
 
   Map<String, dynamic> get stats => _dataService.getStats();
 
-  // Contact (with Hive sync)
+  // Contact (DataService已自动Hive+Firestore持久化)
   Future<void> addContact(Contact contact) async {
     await _dataService.saveContact(contact);
-    await _syncService.put('contacts', contact.id, contact.toJson());
-    await loadAll();
+    _refreshAll();
   }
   Future<void> updateContact(Contact contact) async {
     await _dataService.saveContact(contact);
-    await _syncService.put('contacts', contact.id, contact.toJson());
-    await loadAll();
+    _refreshAll();
   }
   Future<void> deleteContact(String id) async {
     await _dataService.deleteContact(id);
-    await _syncService.delete('contacts', id);
-    await loadAll();
+    _refreshAll();
   }
   Contact? getContact(String id) => _dataService.getContact(id);
 
-  // Relations (with Hive sync)
+  // Relations
   List<ContactRelation> getRelationsForContact(String contactId) =>
       _relations.where((r) => r.fromContactId == contactId || r.toContactId == contactId).toList();
   Future<void> addRelation(ContactRelation relation) async {
     await _dataService.saveRelation(relation);
-    await _syncService.put('relations', relation.id, relation.toJson());
-    await loadAll();
+    _refreshAll();
   }
   Future<void> updateRelation(ContactRelation relation) async {
     await _dataService.saveRelation(relation);
-    await _syncService.put('relations', relation.id, relation.toJson());
-    await loadAll();
+    _refreshAll();
   }
   Future<void> deleteRelation(String id) async {
     await _dataService.deleteRelation(id);
-    await _syncService.delete('relations', id);
-    await loadAll();
+    _refreshAll();
   }
 
-  // Deal (with Hive sync)
+  // Deal
   List<Deal> getDealsByStage(DealStage stage) => _deals.where((d) => d.stage == stage).toList();
   List<Deal> getDealsByContact(String contactId) => _deals.where((d) => d.contactId == contactId).toList();
   Future<void> addDeal(Deal deal) async {
     await _dataService.saveDeal(deal);
-    await _syncService.put('deals', deal.id, deal.toJson());
-    await loadAll();
+    _refreshAll();
   }
   Future<void> updateDeal(Deal deal) async {
     await _dataService.saveDeal(deal);
-    await _syncService.put('deals', deal.id, deal.toJson());
-    await loadAll();
+    _refreshAll();
   }
   Future<void> deleteDeal(String id) async {
     await _dataService.deleteDeal(id);
-    await _syncService.delete('deals', id);
-    await loadAll();
+    _refreshAll();
   }
 
-  /// 标记/取消重点项目
   Future<void> toggleDealStar(String dealId) async {
     final deal = _deals.firstWhere((d) => d.id == dealId);
     deal.isStarred = !deal.isStarred;
     deal.updatedAt = DateTime.now();
     await _dataService.saveDeal(deal);
-    await _syncService.put('deals', deal.id, deal.toJson());
-    notifyListeners();
+    _refreshAll();
   }
 
-  /// 获取重点标记的Deal
   List<Deal> get starredDeals => _deals.where((d) => d.isStarred).toList();
 
   Future<void> moveDealStage(String dealId, DealStage newStage) async {
@@ -232,7 +225,7 @@ class CrmProvider extends ChangeNotifier {
     await _dataService.saveDeal(deal);
     _notify('管线变动', '${deal.contactName}: $oldLabel → ${newStage.label} | ¥${deal.amount.toStringAsFixed(0)}',
       NotificationType.pipelineChange, relatedId: dealId);
-    await loadAll();
+    _refreshAll();
   }
 
   // Interaction
@@ -245,47 +238,44 @@ class CrmProvider extends ChangeNotifier {
       contact.lastContactedAt = DateTime.now();
       await _dataService.saveContact(contact);
     }
-    await loadAll();
+    _refreshAll();
   }
-  Future<void> deleteInteraction(String id) async { await _dataService.deleteInteraction(id); await loadAll(); }
+  Future<void> deleteInteraction(String id) async {
+    await _dataService.deleteInteraction(id);
+    _refreshAll();
+  }
 
-  // Product (with Hive sync)
+  // Product
   Product? getProduct(String id) => _dataService.getProduct(id);
   List<Product> getProductsByCategory(String category) => _products.where((p) => p.category == category).toList();
   Future<void> addProduct(Product product) async {
     await _dataService.saveProduct(product);
-    await _syncService.put('products', product.id, product.toJson());
-    await loadAll();
+    _refreshAll();
   }
   Future<void> deleteProduct(String id) async {
     await _dataService.deleteProduct(id);
-    await _syncService.delete('products', id);
-    await loadAll();
+    _refreshAll();
   }
 
-  // Sales Order (with Hive sync)
+  // Sales Order (即时刷新)
   List<SalesOrder> getOrdersByContact(String contactId) => _orders.where((o) => o.contactId == contactId).toList();
   Future<void> addOrder(SalesOrder order) async {
     await _dataService.saveOrder(order);
-    await _syncService.put('sales_orders', order.id, order.toJson());
-    await loadAll();
+    _refreshAll();
   }
   Future<void> updateOrder(SalesOrder order) async {
     await _dataService.saveOrder(order);
-    await _syncService.put('sales_orders', order.id, order.toJson());
-    await loadAll();
+    _refreshAll();
   }
   Future<void> deleteOrder(String id) async {
     await _dataService.deleteOrder(id);
-    await _syncService.delete('sales_orders', id);
-    await loadAll();
+    _refreshAll();
   }
 
-  // Create order + deal (预定模式: 不扣库存, 出货时才扣)
+  /// 创建订单+Deal (预定模式: 不扣库存, 出货时才扣) - 即时刷新
   Future<void> createOrderWithDeal(SalesOrder order) async {
-    order.status = 'confirmed'; // 预定状态
+    order.status = 'confirmed';
     await _dataService.saveOrder(order);
-    // Determine deal stage from order's dealStage field
     DealStage targetStage = DealStage.ordered;
     if (order.dealStage.isNotEmpty) {
       final found = DealStage.values.where((s) => s.label == order.dealStage);
@@ -295,7 +285,6 @@ class CrmProvider extends ChangeNotifier {
     if (targetStage == DealStage.paid) prob = 85;
     else if (targetStage == DealStage.completed) prob = 100;
     else if (targetStage.order < DealStage.ordered.order) prob = 40;
-    // Create linked deal
     final deal = Deal(
       id: generateId(),
       title: '订单: ${order.contactName}',
@@ -310,16 +299,16 @@ class CrmProvider extends ChangeNotifier {
     await _dataService.saveDeal(deal);
     _notify('新订单创建', '${order.contactName} 下单 ${order.items.length}项产品, 金额: ¥${order.totalAmount.toStringAsFixed(0)}',
       NotificationType.orderCreated, relatedId: order.id);
-    await loadAll();
+    // 立即刷新所有模块
+    _refreshAll();
   }
 
-  /// 出货: 扣减库存 + 更新订单状态 + 推进管线
+  /// 出货: 扣减库存 + 更新订单状态 + 推进管线 - 即时刷新
   Future<void> shipOrder(String orderId) async {
     final order = _orders.firstWhere((o) => o.id == orderId);
     order.status = 'shipped';
     order.updatedAt = DateTime.now();
     await _dataService.saveOrder(order);
-    // 出货时扣减库存
     for (final item in order.items) {
       await _dataService.addInventoryRecord(InventoryRecord(
         id: generateId(),
@@ -331,7 +320,6 @@ class CrmProvider extends ChangeNotifier {
         reason: '出货 - ${order.contactName}',
       ));
     }
-    // 同步推进关联Deal
     final linkedDeal = _deals.where((d) => d.orderId == orderId).toList();
     for (final deal in linkedDeal) {
       deal.stage = DealStage.shipped;
@@ -340,11 +328,9 @@ class CrmProvider extends ChangeNotifier {
     }
     _notify('订单已出货', '${order.contactName} 的订单已出货，库存已扣减',
       NotificationType.orderShipped, relatedId: orderId);
-    _inventoryRecords = _dataService.getAllInventory();
-    await loadAll();
+    _refreshAll();
   }
 
-  /// 预定数量(已下单未出货)
   int getReservedStock(String productId) {
     int reserved = 0;
     for (final o in _orders) {
@@ -357,7 +343,6 @@ class CrmProvider extends ChangeNotifier {
     return reserved;
   }
 
-  /// 联系人销售统计
   Map<String, dynamic> getContactSalesStats(String contactId) {
     final contactOrders = _orders.where((o) => o.contactId == contactId).toList();
     double totalAmount = 0;
@@ -388,7 +373,6 @@ class CrmProvider extends ChangeNotifier {
     };
   }
 
-  /// 有销售线索的联系人ID集合
   Set<String> get contactsWithSales {
     final ids = <String>{};
     for (final o in _orders) { ids.add(o.contactId); }
@@ -401,13 +385,11 @@ class CrmProvider extends ChangeNotifier {
       _inventoryRecords.where((r) => r.productId == productId).toList();
   Future<void> addInventoryRecord(InventoryRecord record) async {
     await _dataService.addInventoryRecord(record);
-    _inventoryRecords = _dataService.getAllInventory();
-    notifyListeners();
+    _refreshAll();
   }
   Future<void> deleteInventoryRecord(String id) async {
     await _dataService.deleteInventoryRecord(id);
-    _inventoryRecords = _dataService.getAllInventory();
-    notifyListeners();
+    _refreshAll();
   }
 
   int getProductStock(String productId) {
@@ -419,18 +401,15 @@ class CrmProvider extends ChangeNotifier {
   TeamMember? getTeamMember(String id) => _dataService.getTeamMember(id);
   Future<void> addTeamMember(TeamMember member) async {
     await _dataService.addTeamMember(member);
-    _teamMembers = _dataService.getAllTeamMembers();
-    notifyListeners();
+    _refreshAll();
   }
   Future<void> updateTeamMember(TeamMember member) async {
     await _dataService.updateTeamMember(member);
-    _teamMembers = _dataService.getAllTeamMembers();
-    notifyListeners();
+    _refreshAll();
   }
   Future<void> deleteTeamMember(String id) async {
     await _dataService.deleteTeamMember(id);
-    _teamMembers = _dataService.getAllTeamMembers();
-    notifyListeners();
+    _refreshAll();
   }
 
   // Task
@@ -443,18 +422,15 @@ class CrmProvider extends ChangeNotifier {
 
   Future<void> addTask(Task task) async {
     await _dataService.addTask(task);
-    _tasks = _dataService.getAllTasks();
-    notifyListeners();
+    _refreshAll();
   }
   Future<void> updateTask(Task task) async {
     await _dataService.updateTask(task);
-    _tasks = _dataService.getAllTasks();
-    notifyListeners();
+    _refreshAll();
   }
   Future<void> deleteTask(String id) async {
     await _dataService.deleteTask(id);
-    _tasks = _dataService.getAllTasks();
-    notifyListeners();
+    _refreshAll();
   }
 
   // Contact Assignment
@@ -465,18 +441,15 @@ class CrmProvider extends ChangeNotifier {
 
   Future<void> addAssignment(ContactAssignment assignment) async {
     await _dataService.addAssignment(assignment);
-    _assignments = _dataService.getAllAssignments();
-    notifyListeners();
+    _refreshAll();
   }
   Future<void> updateAssignment(ContactAssignment assignment) async {
     await _dataService.updateAssignment(assignment);
-    _assignments = _dataService.getAllAssignments();
-    notifyListeners();
+    _refreshAll();
   }
   Future<void> deleteAssignment(String id) async {
     await _dataService.deleteAssignment(id);
-    _assignments = _dataService.getAllAssignments();
-    notifyListeners();
+    _refreshAll();
   }
 
   String generateId() => _dataService.generateId();
@@ -487,18 +460,15 @@ class CrmProvider extends ChangeNotifier {
 
   Future<void> addFactory(ProductionFactory factory) async {
     await _dataService.addFactory(factory);
-    _factories = _dataService.getAllFactories();
-    notifyListeners();
+    _refreshAll();
   }
   Future<void> updateFactory(ProductionFactory factory) async {
     await _dataService.updateFactory(factory);
-    _factories = _dataService.getAllFactories();
-    notifyListeners();
+    _refreshAll();
   }
   Future<void> deleteFactory(String id) async {
     await _dataService.deleteFactory(id);
-    _factories = _dataService.getAllFactories();
-    notifyListeners();
+    _refreshAll();
   }
 
   // ========== Production Order ==========
@@ -513,25 +483,19 @@ class CrmProvider extends ChangeNotifier {
 
   Future<void> addProductionOrder(ProductionOrder order) async {
     await _dataService.addProductionOrder(order);
-    _productionOrders = _dataService.getAllProductionOrders();
-    notifyListeners();
+    _refreshAll();
   }
 
   Future<void> updateProductionOrder(ProductionOrder order) async {
     await _dataService.updateProductionOrder(order);
-    _productionOrders = _dataService.getAllProductionOrders();
-    notifyListeners();
+    _refreshAll();
   }
 
   Future<void> deleteProductionOrder(String id) async {
     await _dataService.deleteProductionOrder(id);
-    _productionOrders = _dataService.getAllProductionOrders();
-    notifyListeners();
+    _refreshAll();
   }
 
-  /// 生产状态推进 + 三方联动
-  /// planned -> materials -> producing -> quality -> completed
-  /// completed 时自动创建入库记录
   Future<void> moveProductionStatus(String orderId, String newStatus) async {
     final order = _productionOrders.firstWhere((p) => p.id == orderId);
     order.status = newStatus;
@@ -543,7 +507,6 @@ class CrmProvider extends ChangeNotifier {
 
     if (newStatus == ProductionStatus.completed) {
       order.completedDate = DateTime.now();
-      // 三方联动: 生产完成 -> 自动入库
       if (!order.inventoryLinked) {
         final invId = generateId();
         final record = InventoryRecord(
@@ -559,18 +522,15 @@ class CrmProvider extends ChangeNotifier {
         await _dataService.addInventoryRecord(record);
         order.inventoryLinked = true;
         order.linkedInventoryId = invId;
-        _inventoryRecords = _dataService.getAllInventory();
         _notify('生产完成', '${order.productName} x${order.quantity} 已完成生产并入库 (工厂: ${order.factoryName})',
           NotificationType.productionComplete, relatedId: order.id);
       }
     }
 
     await _dataService.updateProductionOrder(order);
-    _productionOrders = _dataService.getAllProductionOrders();
-    notifyListeners();
+    _refreshAll();
   }
 
-  /// 按渠道(代理/诊所/零售)的销售统计
   Map<String, Map<String, dynamic>> get channelSalesStats {
     final result = <String, Map<String, dynamic>>{
       'agent': {'label': '代理', 'orders': 0, 'amount': 0.0, 'shipped': 0, 'completed': 0},
@@ -587,7 +547,6 @@ class CrmProvider extends ChangeNotifier {
     return result;
   }
 
-  /// 按管线阶段的Deal统计
   Map<DealStage, Map<String, dynamic>> get pipelineStageStats {
     final result = <DealStage, Map<String, dynamic>>{};
     for (final stage in DealStage.values) {
@@ -599,7 +558,6 @@ class CrmProvider extends ChangeNotifier {
     return result;
   }
 
-  /// 生产统计
   Map<String, dynamic> get productionStats {
     final active = activeProductions;
     int totalPlanned = 0;
@@ -614,5 +572,32 @@ class CrmProvider extends ChangeNotifier {
       'totalCompletedQty': totalCompleted,
       'factoryCount': _factories.where((f) => f.isActive).length,
     };
+  }
+
+  /// 获取临近交货的订单(智能模块用)
+  List<SalesOrder> get upcomingDeliveryOrders {
+    final now = DateTime.now();
+    return _orders.where((o) =>
+      o.expectedDeliveryDate != null &&
+      o.status != 'completed' && o.status != 'cancelled' &&
+      o.expectedDeliveryDate!.difference(now).inDays <= 7
+    ).toList()..sort((a, b) => (a.expectedDeliveryDate ?? now).compareTo(b.expectedDeliveryDate ?? now));
+  }
+
+  /// 逾期未交付订单
+  List<SalesOrder> get overdueOrders {
+    final now = DateTime.now();
+    return _orders.where((o) =>
+      o.expectedDeliveryDate != null &&
+      o.expectedDeliveryDate!.isBefore(now) &&
+      o.status != 'completed' && o.status != 'cancelled' && o.status != 'shipped'
+    ).toList();
+  }
+
+  /// 待收款订单
+  List<SalesOrder> get unpaidOrders {
+    return _orders.where((o) =>
+      !o.isFullyPaid && o.status != 'cancelled' && o.status != 'draft'
+    ).toList()..sort((a, b) => b.unpaidAmount.compareTo(a.unpaidAmount));
   }
 }

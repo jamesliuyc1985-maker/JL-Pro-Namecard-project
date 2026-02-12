@@ -40,6 +40,9 @@ void main() async {
   final dataService = DataService();
   await dataService.init();
 
+  // 3.5 从 Hive 恢复持久化数据（如果有）
+  await dataService.loadFromHive(syncService);
+
   // 4. 如果 Firebase 可用，启用双向同步
   if (_firebaseReady) {
     dataService.enableFirestore();

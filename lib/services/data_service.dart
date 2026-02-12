@@ -10,8 +10,10 @@ import '../models/team.dart';
 import '../models/task.dart';
 import '../models/contact_assignment.dart';
 import '../models/factory.dart';
+import '../services/sync_service.dart';
 
-/// DataService: Local-first + 可选 Firestore 云同步
+/// DataService v22: 全量CRUD → Hive持久化 + Firestore云同步
+/// 核心修改: 每个CRUD操作自动写入Hive，防止更新后数据消失
 class DataService {
   static const _uuid = Uuid();
 
@@ -37,47 +39,79 @@ class DataService {
   List<ContactRelation> _relationsCache = [];
   List<Product> _productsCache = [];
   List<SalesOrder> _ordersCache = [];
-  final List<InventoryRecord> _inventoryCache = [];
-  final List<TeamMember> _teamCache = [];
-  final List<Task> _taskCache = [];
-  final List<ContactAssignment> _assignmentCache = [];
-  final List<ProductionFactory> _factoryCache = [];
-  final List<ProductionOrder> _productionCache = [];
+  List<InventoryRecord> _inventoryCache = [];
+  List<TeamMember> _teamCache = [];
+  List<Task> _taskCache = [];
+  List<ContactAssignment> _assignmentCache = [];
+  List<ProductionFactory> _factoryCache = [];
+  List<ProductionOrder> _productionCache = [];
 
-  // ========== Team CRUD ==========
+  // SyncService reference for Hive persistence
+  SyncService? _syncService;
+  void setSyncService(SyncService s) => _syncService = s;
+
+  /// 通用Hive持久化辅助 - 每次CRUD自动调用
+  Future<void> _persistToHive(String collection, String docId, Map<String, dynamic> data) async {
+    try {
+      await _syncService?.put(collection, docId, data);
+    } catch (e) {
+      if (kDebugMode) debugPrint('[DataService] Hive persist error ($collection/$docId): $e');
+    }
+  }
+
+  Future<void> _deleteFromHive(String collection, String docId) async {
+    try {
+      await _syncService?.delete(collection, docId);
+    } catch (e) {
+      if (kDebugMode) debugPrint('[DataService] Hive delete error ($collection/$docId): $e');
+    }
+  }
+
+  // ========== Team CRUD (with Hive) ==========
   List<TeamMember> getAllTeamMembers() => List.from(_teamCache);
   TeamMember? getTeamMember(String id) {
     try { return _teamCache.firstWhere((m) => m.id == id); } catch (_) { return null; }
   }
   Future<void> addTeamMember(TeamMember member) async {
     _teamCache.add(member);
+    await _persistToHive('team', member.id, member.toJson());
+    _firestoreWrite('team', member.id, member.toJson());
   }
   Future<void> updateTeamMember(TeamMember member) async {
     final idx = _teamCache.indexWhere((m) => m.id == member.id);
     if (idx >= 0) _teamCache[idx] = member;
+    await _persistToHive('team', member.id, member.toJson());
+    _firestoreWrite('team', member.id, member.toJson());
   }
   Future<void> deleteTeamMember(String id) async {
     _teamCache.removeWhere((m) => m.id == id);
+    await _deleteFromHive('team', id);
+    _firestoreDelete('team', id);
   }
 
-  // ========== Task CRUD ==========
+  // ========== Task CRUD (with Hive) ==========
   List<Task> getAllTasks() => List.from(_taskCache);
-  List<Task> getTasksByAssignee(String assigneeId) =>
-      _taskCache.where((t) => t.assigneeId == assigneeId).toList();
+  List<Task> getTasksByAssignee(String assigneeId) => _taskCache.where((t) => t.assigneeId == assigneeId).toList();
   List<Task> getTasksByDate(DateTime date) =>
       _taskCache.where((t) => t.dueDate.year == date.year && t.dueDate.month == date.month && t.dueDate.day == date.day).toList();
   Future<void> addTask(Task task) async {
     _taskCache.add(task);
+    await _persistToHive('tasks', task.id, task.toJson());
+    _firestoreWrite('tasks', task.id, task.toJson());
   }
   Future<void> updateTask(Task task) async {
     final idx = _taskCache.indexWhere((t) => t.id == task.id);
     if (idx >= 0) _taskCache[idx] = task;
+    await _persistToHive('tasks', task.id, task.toJson());
+    _firestoreWrite('tasks', task.id, task.toJson());
   }
   Future<void> deleteTask(String id) async {
     _taskCache.removeWhere((t) => t.id == id);
+    await _deleteFromHive('tasks', id);
+    _firestoreDelete('tasks', id);
   }
 
-  // ========== Contact Assignment CRUD ==========
+  // ========== Contact Assignment CRUD (with Hive) ==========
   List<ContactAssignment> getAllAssignments() => List.from(_assignmentCache);
   List<ContactAssignment> getAssignmentsByContact(String contactId) =>
       _assignmentCache.where((a) => a.contactId == contactId).toList();
@@ -85,61 +119,74 @@ class DataService {
       _assignmentCache.where((a) => a.memberId == memberId).toList();
   Future<void> addAssignment(ContactAssignment assignment) async {
     _assignmentCache.add(assignment);
+    await _persistToHive('assignments', assignment.id, assignment.toJson());
+    _firestoreWrite('assignments', assignment.id, assignment.toJson());
   }
   Future<void> updateAssignment(ContactAssignment assignment) async {
     final idx = _assignmentCache.indexWhere((a) => a.id == assignment.id);
     if (idx >= 0) _assignmentCache[idx] = assignment;
+    await _persistToHive('assignments', assignment.id, assignment.toJson());
+    _firestoreWrite('assignments', assignment.id, assignment.toJson());
   }
   Future<void> deleteAssignment(String id) async {
     _assignmentCache.removeWhere((a) => a.id == id);
+    await _deleteFromHive('assignments', id);
+    _firestoreDelete('assignments', id);
   }
 
-  // ========== Factory CRUD ==========
+  // ========== Factory CRUD (with Hive) ==========
   List<ProductionFactory> getAllFactories() => List.from(_factoryCache);
   ProductionFactory? getFactory(String id) {
     try { return _factoryCache.firstWhere((f) => f.id == id); } catch (_) { return null; }
   }
   Future<void> addFactory(ProductionFactory factory) async {
     _factoryCache.add(factory);
+    await _persistToHive('factories', factory.id, factory.toJson());
+    _firestoreWrite('factories', factory.id, factory.toJson());
   }
   Future<void> updateFactory(ProductionFactory factory) async {
     final idx = _factoryCache.indexWhere((f) => f.id == factory.id);
     if (idx >= 0) _factoryCache[idx] = factory;
+    await _persistToHive('factories', factory.id, factory.toJson());
+    _firestoreWrite('factories', factory.id, factory.toJson());
   }
   Future<void> deleteFactory(String id) async {
     _factoryCache.removeWhere((f) => f.id == id);
+    await _deleteFromHive('factories', id);
+    _firestoreDelete('factories', id);
   }
 
-  // ========== ProductionOrder CRUD ==========
+  // ========== ProductionOrder CRUD (with Hive) ==========
   List<ProductionOrder> getAllProductionOrders() => List.from(_productionCache);
   ProductionOrder? getProductionOrder(String id) {
     try { return _productionCache.firstWhere((p) => p.id == id); } catch (_) { return null; }
   }
-  List<ProductionOrder> getProductionByFactory(String factoryId) =>
-      _productionCache.where((p) => p.factoryId == factoryId).toList();
-  List<ProductionOrder> getProductionByProduct(String productId) =>
-      _productionCache.where((p) => p.productId == productId).toList();
-  List<ProductionOrder> getProductionByStatus(String status) =>
-      _productionCache.where((p) => p.status == status).toList();
-  List<ProductionOrder> getActiveProductions() =>
-      _productionCache.where((p) => ProductionStatus.activeStatuses.contains(p.status)).toList();
+  List<ProductionOrder> getProductionByFactory(String factoryId) => _productionCache.where((p) => p.factoryId == factoryId).toList();
+  List<ProductionOrder> getProductionByProduct(String productId) => _productionCache.where((p) => p.productId == productId).toList();
+  List<ProductionOrder> getProductionByStatus(String status) => _productionCache.where((p) => p.status == status).toList();
+  List<ProductionOrder> getActiveProductions() => _productionCache.where((p) => ProductionStatus.activeStatuses.contains(p.status)).toList();
   Future<void> addProductionOrder(ProductionOrder order) async {
     _productionCache.add(order);
+    await _persistToHive('production', order.id, order.toJson());
+    _firestoreWrite('production', order.id, order.toJson());
   }
   Future<void> updateProductionOrder(ProductionOrder order) async {
     final idx = _productionCache.indexWhere((p) => p.id == order.id);
     if (idx >= 0) _productionCache[idx] = order;
+    await _persistToHive('production', order.id, order.toJson());
+    _firestoreWrite('production', order.id, order.toJson());
   }
   Future<void> deleteProductionOrder(String id) async {
     _productionCache.removeWhere((p) => p.id == id);
+    await _deleteFromHive('production', id);
+    _firestoreDelete('production', id);
   }
 
   // ========== Completed Tasks History ==========
   List<Task> getCompletedTasks() =>
       _taskCache.where((t) => t.phase == TaskPhase.completed).toList()
         ..sort((a, b) => (b.completedAt ?? b.updatedAt).compareTo(a.completedAt ?? a.updatedAt));
-  List<Task> getTasksByPhase(TaskPhase phase) =>
-      _taskCache.where((t) => t.phase == phase).toList();
+  List<Task> getTasksByPhase(TaskPhase phase) => _taskCache.where((t) => t.phase == phase).toList();
   Map<String, double> getWorkloadStats() {
     final stats = <String, double>{};
     for (final t in _taskCache) {
@@ -148,20 +195,87 @@ class DataService {
     return stats;
   }
 
-  // ========== Init (纯本地，加载种子数据) ==========
+  // ========== Init: Hive优先 → 种子数据兜底 ==========
   Future<void> init() async {
+    // 先加载种子数据作为基础
     _productsCache = _builtInProducts();
     _factoryCache.addAll(_builtInFactories());
     _teamCache.addAll(_builtInTeam());
     _contactsCache = _builtInContacts();
     _dealsCache = _builtInDeals();
     _relationsCache = _builtInRelations();
+
     if (kDebugMode) {
-      debugPrint('[DataService] Loaded: ${_contactsCache.length} contacts, ${_dealsCache.length} deals, ${_relationsCache.length} relations, ${_productsCache.length} products');
+      debugPrint('[DataService] Seed loaded: ${_contactsCache.length} contacts, ${_dealsCache.length} deals');
     }
   }
 
-  // ========== Contact CRUD ==========
+  /// 从 Hive 恢复持久化数据（替换种子数据）
+  /// 在 SyncService.init() 之后调用
+  Future<void> loadFromHive(SyncService sync) async {
+    _syncService = sync;
+
+    // 尝试从 Hive 加载每个集合，如果有数据则替换种子数据
+    _contactsCache = _loadCollection<Contact>(sync, 'contacts', Contact.fromJson) ?? _contactsCache;
+    _dealsCache = _loadCollection<Deal>(sync, 'deals', Deal.fromJson) ?? _dealsCache;
+    _interactionsCache = _loadCollection<Interaction>(sync, 'interactions', Interaction.fromJson) ?? _interactionsCache;
+    _relationsCache = _loadCollection<ContactRelation>(sync, 'relations', ContactRelation.fromJson) ?? _relationsCache;
+    _productsCache = _loadCollection<Product>(sync, 'products', Product.fromJson) ?? _productsCache;
+    _ordersCache = _loadCollection<SalesOrder>(sync, 'sales_orders', SalesOrder.fromJson) ?? _ordersCache;
+
+    // 对于还没持久化的集合（team/task/factory/inventory/assignment/production），保留种子数据
+    final hiveTeam = _loadCollection<TeamMember>(sync, 'team', TeamMember.fromJson);
+    if (hiveTeam != null && hiveTeam.isNotEmpty) {
+      _teamCache.clear();
+      _teamCache.addAll(hiveTeam);
+    }
+    final hiveFactories = _loadCollection<ProductionFactory>(sync, 'factories', ProductionFactory.fromJson);
+    if (hiveFactories != null && hiveFactories.isNotEmpty) {
+      _factoryCache.clear();
+      _factoryCache.addAll(hiveFactories);
+    }
+    final hiveTasks = _loadCollection<Task>(sync, 'tasks', Task.fromJson);
+    if (hiveTasks != null && hiveTasks.isNotEmpty) {
+      _taskCache.clear();
+      _taskCache.addAll(hiveTasks);
+    }
+    final hiveAssignments = _loadCollection<ContactAssignment>(sync, 'assignments', ContactAssignment.fromJson);
+    if (hiveAssignments != null && hiveAssignments.isNotEmpty) {
+      _assignmentCache.clear();
+      _assignmentCache.addAll(hiveAssignments);
+    }
+    final hiveInventory = _loadCollection<InventoryRecord>(sync, 'inventory', InventoryRecord.fromJson);
+    if (hiveInventory != null && hiveInventory.isNotEmpty) {
+      _inventoryCache.clear();
+      _inventoryCache.addAll(hiveInventory);
+    }
+    final hiveProduction = _loadCollection<ProductionOrder>(sync, 'production', ProductionOrder.fromJson);
+    if (hiveProduction != null && hiveProduction.isNotEmpty) {
+      _productionCache.clear();
+      _productionCache.addAll(hiveProduction);
+    }
+
+    if (kDebugMode) {
+      debugPrint('[DataService] After Hive merge: ${_contactsCache.length} contacts, ${_dealsCache.length} deals, ${_ordersCache.length} orders, ${_inventoryCache.length} inventory, ${_taskCache.length} tasks');
+    }
+  }
+
+  /// 从 SyncService (Hive) 加载集合
+  List<T>? _loadCollection<T>(SyncService sync, String collection, T Function(Map<String, dynamic>) fromJson) {
+    try {
+      final rawList = sync.getAll(collection);
+      if (rawList.isEmpty) return null;
+      final items = rawList.map((m) {
+        try { return fromJson(m); } catch (_) { return null; }
+      }).whereType<T>().toList();
+      return items.isNotEmpty ? items : null;
+    } catch (e) {
+      if (kDebugMode) debugPrint('[DataService] Failed to load $collection from Hive: $e');
+      return null;
+    }
+  }
+
+  // ========== Contact CRUD (with Hive) ==========
   List<Contact> getAllContacts() => List.from(_contactsCache);
   Contact? getContact(String id) {
     try { return _contactsCache.firstWhere((c) => c.id == id); } catch (_) { return null; }
@@ -169,58 +283,66 @@ class DataService {
   Future<void> saveContact(Contact contact) async {
     final idx = _contactsCache.indexWhere((c) => c.id == contact.id);
     if (idx >= 0) { _contactsCache[idx] = contact; } else { _contactsCache.add(contact); }
+    await _persistToHive('contacts', contact.id, contact.toJson());
     _firestoreWrite('contacts', contact.id, contact.toJson());
   }
   Future<void> deleteContact(String id) async {
     _contactsCache.removeWhere((c) => c.id == id);
     _interactionsCache.removeWhere((i) => i.contactId == id);
     _relationsCache.removeWhere((r) => r.fromContactId == id || r.toContactId == id);
+    await _deleteFromHive('contacts', id);
     _firestoreDelete('contacts', id);
   }
 
-  // ========== Relation CRUD ==========
+  // ========== Relation CRUD (with Hive) ==========
   List<ContactRelation> getAllRelations() => List.from(_relationsCache);
   List<ContactRelation> getRelationsForContact(String contactId) =>
       _relationsCache.where((r) => r.fromContactId == contactId || r.toContactId == contactId).toList();
   Future<void> saveRelation(ContactRelation relation) async {
     final idx = _relationsCache.indexWhere((r) => r.id == relation.id);
     if (idx >= 0) { _relationsCache[idx] = relation; } else { _relationsCache.add(relation); }
+    await _persistToHive('relations', relation.id, relation.toJson());
     _firestoreWrite('relations', relation.id, relation.toJson());
   }
   Future<void> deleteRelation(String id) async {
     _relationsCache.removeWhere((r) => r.id == id);
+    await _deleteFromHive('relations', id);
     _firestoreDelete('relations', id);
   }
 
-  // ========== Deal CRUD ==========
+  // ========== Deal CRUD (with Hive) ==========
   List<Deal> getAllDeals() => List.from(_dealsCache);
   List<Deal> getDealsByStage(DealStage stage) => _dealsCache.where((d) => d.stage == stage).toList();
   List<Deal> getDealsByContact(String contactId) => _dealsCache.where((d) => d.contactId == contactId).toList();
   Future<void> saveDeal(Deal deal) async {
     final idx = _dealsCache.indexWhere((d) => d.id == deal.id);
     if (idx >= 0) { _dealsCache[idx] = deal; } else { _dealsCache.add(deal); }
+    await _persistToHive('deals', deal.id, deal.toJson());
     _firestoreWrite('deals', deal.id, deal.toJson());
   }
   Future<void> deleteDeal(String id) async {
     _dealsCache.removeWhere((d) => d.id == id);
+    await _deleteFromHive('deals', id);
     _firestoreDelete('deals', id);
   }
 
-  // ========== Interaction CRUD ==========
+  // ========== Interaction CRUD (with Hive) ==========
   List<Interaction> getAllInteractions() => List.from(_interactionsCache);
   List<Interaction> getInteractionsByContact(String contactId) =>
       _interactionsCache.where((i) => i.contactId == contactId).toList();
   Future<void> saveInteraction(Interaction interaction) async {
     final idx = _interactionsCache.indexWhere((i) => i.id == interaction.id);
     if (idx >= 0) { _interactionsCache[idx] = interaction; } else { _interactionsCache.add(interaction); }
+    await _persistToHive('interactions', interaction.id, interaction.toJson());
     _firestoreWrite('interactions', interaction.id, interaction.toJson());
   }
   Future<void> deleteInteraction(String id) async {
     _interactionsCache.removeWhere((i) => i.id == id);
+    await _deleteFromHive('interactions', id);
     _firestoreDelete('interactions', id);
   }
 
-  // ========== Product CRUD ==========
+  // ========== Product CRUD (with Hive) ==========
   List<Product> getAllProducts() => List.from(_productsCache);
   List<Product> getProductsByCategory(String category) => _productsCache.where((p) => p.category == category).toList();
   Product? getProduct(String id) {
@@ -229,43 +351,49 @@ class DataService {
   Future<void> saveProduct(Product product) async {
     final idx = _productsCache.indexWhere((p) => p.id == product.id);
     if (idx >= 0) { _productsCache[idx] = product; } else { _productsCache.add(product); }
+    await _persistToHive('products', product.id, product.toJson());
     _firestoreWrite('products', product.id, product.toJson());
   }
   Future<void> deleteProduct(String id) async {
     _productsCache.removeWhere((p) => p.id == id);
+    await _deleteFromHive('products', id);
     _firestoreDelete('products', id);
   }
 
-  // ========== Sales Order CRUD ==========
+  // ========== Sales Order CRUD (with Hive) ==========
   List<SalesOrder> getAllOrders() => List.from(_ordersCache);
   List<SalesOrder> getOrdersByContact(String contactId) => _ordersCache.where((o) => o.contactId == contactId).toList();
   Future<void> saveOrder(SalesOrder order) async {
     final idx = _ordersCache.indexWhere((o) => o.id == order.id);
     if (idx >= 0) { _ordersCache[idx] = order; } else { _ordersCache.add(order); }
+    await _persistToHive('sales_orders', order.id, order.toJson());
     _firestoreWrite('sales_orders', order.id, order.toJson());
   }
   Future<void> deleteOrder(String id) async {
     _ordersCache.removeWhere((o) => o.id == id);
+    await _deleteFromHive('sales_orders', id);
     _firestoreDelete('sales_orders', id);
   }
 
-  // ========== Inventory CRUD ==========
+  // ========== Inventory CRUD (with Hive) ==========
   List<InventoryRecord> getAllInventory() => List.from(_inventoryCache);
   List<InventoryRecord> getInventoryByProduct(String productId) =>
       _inventoryCache.where((r) => r.productId == productId).toList();
   Future<void> addInventoryRecord(InventoryRecord record) async {
     _inventoryCache.add(record);
+    await _persistToHive('inventory', record.id, record.toJson());
+    _firestoreWrite('inventory', record.id, record.toJson());
   }
   Future<void> deleteInventoryRecord(String id) async {
     _inventoryCache.removeWhere((r) => r.id == id);
+    await _deleteFromHive('inventory', id);
+    _firestoreDelete('inventory', id);
   }
 
   List<InventoryStock> getInventoryStocks() {
     final stockMap = <String, InventoryStock>{};
     for (final p in _productsCache) {
-      stockMap[p.id] = InventoryStock(
-        productId: p.id, productName: p.name, productCode: p.code, currentStock: 0,
-      );
+      stockMap[p.id] = InventoryStock(productId: p.id, productName: p.name, productCode: p.code, currentStock: 0);
     }
     for (final r in _inventoryCache) {
       final stock = stockMap[r.productId];
@@ -295,6 +423,13 @@ class DataService {
     for (final c in contacts) { industryCount[c.industry] = (industryCount[c.industry] ?? 0) + 1; }
     final stageCount = <DealStage, int>{};
     for (final d in deals) { stageCount[d.stage] = (stageCount[d.stage] ?? 0) + 1; }
+    // 收款统计
+    double totalPaid = 0;
+    int paidOrderCount = 0;
+    for (final o in _ordersCache) {
+      totalPaid += o.paidAmount;
+      if (o.isFullyPaid) paidOrderCount++;
+    }
     return {
       'totalContacts': contacts.length, 'activeDeals': activeDeals.length,
       'pipelineValue': pipelineValue, 'closedValue': closedValue,
@@ -304,6 +439,7 @@ class DataService {
       'hotContacts': contacts.where((c) => c.strength == RelationshipStrength.hot).length,
       'totalProducts': _productsCache.length, 'totalOrders': _ordersCache.length,
       'completedOrders': orderCount, 'salesTotal': salesTotal,
+      'totalPaid': totalPaid, 'paidOrderCount': paidOrderCount,
       'totalInventoryRecords': _inventoryCache.length,
       'totalFactories': _factoryCache.length,
       'activeFactories': _factoryCache.where((f) => f.isActive).length,
@@ -316,8 +452,6 @@ class DataService {
   String generateId() => _uuid.v4();
 
   // ========== Firestore 辅助方法 ==========
-
-  /// 后台写入 Firestore（不阻塞 UI）
   void _firestoreWrite(String collection, String docId, Map<String, dynamic> data) {
     if (!_firestoreEnabled || _db == null) return;
     _db!.collection(collection).doc(docId).set(data).catchError((e) {
@@ -332,12 +466,11 @@ class DataService {
     });
   }
 
-  /// 从 Firestore 拉取数据到本地缓存（每个集合独立超时，失败保留本地数据）
+  /// 从 Firestore 拉取数据到本地缓存
   Future<void> syncFromCloud() async {
     if (!_firestoreEnabled || _db == null) return;
     const t = Duration(seconds: 5);
     try {
-      // 联系人
       try {
         final snap = await _db!.collection('contacts').get().timeout(t);
         if (snap.docs.isNotEmpty) {
@@ -346,7 +479,6 @@ class DataService {
           }).whereType<Contact>().toList();
         }
       } catch (_) {}
-      // Deal
       try {
         final snap = await _db!.collection('deals').get().timeout(t);
         if (snap.docs.isNotEmpty) {
@@ -355,7 +487,6 @@ class DataService {
           }).whereType<Deal>().toList();
         }
       } catch (_) {}
-      // Relations
       try {
         final snap = await _db!.collection('relations').get().timeout(t);
         if (snap.docs.isNotEmpty) {
@@ -364,7 +495,6 @@ class DataService {
           }).whereType<ContactRelation>().toList();
         }
       } catch (_) {}
-      // Products
       try {
         final snap = await _db!.collection('products').get().timeout(t);
         if (snap.docs.isNotEmpty) {
@@ -373,47 +503,75 @@ class DataService {
           }).whereType<Product>().toList();
         }
       } catch (_) {}
+      try {
+        final snap = await _db!.collection('sales_orders').get().timeout(t);
+        if (snap.docs.isNotEmpty) {
+          _ordersCache = snap.docs.map((d) {
+            try { return SalesOrder.fromJson(d.data()); } catch (_) { return null; }
+          }).whereType<SalesOrder>().toList();
+        }
+      } catch (_) {}
+      try {
+        final snap = await _db!.collection('inventory').get().timeout(t);
+        if (snap.docs.isNotEmpty) {
+          _inventoryCache = snap.docs.map((d) {
+            try { return InventoryRecord.fromJson(d.data()); } catch (_) { return null; }
+          }).whereType<InventoryRecord>().toList();
+        }
+      } catch (_) {}
 
       if (kDebugMode) {
-        debugPrint('[DataService] Cloud sync: ${_contactsCache.length} contacts, ${_dealsCache.length} deals, ${_relationsCache.length} relations');
+        debugPrint('[DataService] Cloud sync: ${_contactsCache.length} contacts, ${_dealsCache.length} deals, ${_ordersCache.length} orders');
       }
     } catch (e) {
       if (kDebugMode) debugPrint('[DataService] syncFromCloud error: $e');
     }
   }
 
-  // ========== Built-in Product Catalog ==========
+  // ========== 按PDF定价表更新的产品目录 (Regenecolla製品定価表) ==========
   List<Product> _builtInProducts() => [
     Product(id: 'prod-exo-001', code: 'NS-EX0-001', name: '外泌体冻干粉 300亿', nameJa: 'エクソソーム凍結乾燥粉末 300億単位', category: 'exosome',
-      description: '高纯度外泌体冻干粉，含300亿单位外泌体粒子。适用于肌肤再生、抗老化治疗。',
-      specification: '300億単位/瓶', unitsPerBox: 5, agentPrice: 30000, clinicPrice: 40000, retailPrice: 100000,
+      description: '高纯度外泌体冻干粉，含300亿单位外泌体粒子(臍帯由来)。适用于肌肤再生、抗老化治疗。',
+      specification: '300億単位/瓶', unitsPerBox: 5,
+      agentPrice: 30000, clinicPrice: 40000, retailPrice: 100000,
       agentTotalPrice: 150000, clinicTotalPrice: 200000, retailTotalPrice: 500000,
-      storageMethod: '2-8°C 冷藏保存', shelfLife: '2年', usage: '静脉注射/点滴/局部注射', notes: '代理折扣30%、诊所折扣40%'),
+      storageMethod: '2-8°C 冷藏保存', shelfLife: '2年', usage: '静脉注射/点滴/局部注射',
+      notes: '代理折扣30%、诊所折扣40% | 点滴/注射用フリーズドライシリーズ'),
     Product(id: 'prod-exo-002', code: 'NS-EX0-002', name: '外泌体冻干粉 500亿', nameJa: 'エクソソーム凍結乾燥粉末 500億単位', category: 'exosome',
-      description: '高浓度外泌体冻干粉，含500亿单位外泌体粒子。',
-      specification: '500億単位/瓶', unitsPerBox: 5, agentPrice: 45000, clinicPrice: 60000, retailPrice: 150000,
+      description: '高浓度外泌体冻干粉，含500亿单位外泌体粒子(臍帯由来)。',
+      specification: '500億単位/瓶', unitsPerBox: 5,
+      agentPrice: 45000, clinicPrice: 60000, retailPrice: 150000,
       agentTotalPrice: 225000, clinicTotalPrice: 300000, retailTotalPrice: 750000,
-      storageMethod: '2-8°C 冷藏保存', shelfLife: '2年', usage: '静脉注射/点滴/局部注射', notes: '代理折扣30%、诊所折扣40%'),
+      storageMethod: '2-8°C 冷藏保存', shelfLife: '2年', usage: '静脉注射/点滴/局部注射',
+      notes: '代理折扣30%、诊所折扣40%'),
     Product(id: 'prod-exo-003', code: 'NS-EX0-003', name: '外泌体冻干粉 1000亿', nameJa: 'エクソソーム凍結乾燥粉末 1000億単位', category: 'exosome',
-      description: '超高浓度外泌体冻干粉，含1000亿单位外泌体粒子。顶级配方。',
-      specification: '1000億単位/瓶', unitsPerBox: 5, agentPrice: 105000, clinicPrice: 140000, retailPrice: 350000,
+      description: '超高浓度外泌体冻干粉，含1000亿单位外泌体粒子(臍帯由来)。顶级配方。',
+      specification: '1000億単位/瓶', unitsPerBox: 5,
+      agentPrice: 105000, clinicPrice: 140000, retailPrice: 350000,
       agentTotalPrice: 525000, clinicTotalPrice: 700000, retailTotalPrice: 1750000,
-      storageMethod: '2-8°C 冷藏保存', shelfLife: '2年', usage: '静脉注射/点滴/局部注射', notes: '代理折扣30%、诊所折扣40%'),
+      storageMethod: '2-8°C 冷藏保存', shelfLife: '2年', usage: '静脉注射/点滴/局部注射',
+      notes: '代理折扣30%、诊所折扣40%'),
     Product(id: 'prod-nad-001', code: 'NS-NAD-001', name: 'NAD+ 注射液 250mg', nameJa: 'NAD+ 注射液 250mg', category: 'nad',
       description: '高纯度NAD+注射液，每瓶含250mg NAD+。促进细胞能量代谢。',
-      specification: '250mg/瓶', unitsPerBox: 5, agentPrice: 12000, clinicPrice: 16000, retailPrice: 40000,
+      specification: '250mg/瓶', unitsPerBox: 5,
+      agentPrice: 12000, clinicPrice: 16000, retailPrice: 40000,
       agentTotalPrice: 60000, clinicTotalPrice: 80000, retailTotalPrice: 200000,
-      storageMethod: '2-8°C 冷藏保存', shelfLife: '2年', usage: '静脉注射/点滴', notes: '代理折扣30%、诊所折扣40%'),
-    Product(id: 'prod-nmn-001', code: 'NS-NMN-001', name: 'NMN 点鼻/吸入', nameJa: 'NMN 点鼻・吸入', category: 'nmn',
-      description: 'NMN点鼻/吸入制剂。生物利用度高。',
-      specification: '点鼻/吸入型', unitsPerBox: 1, agentPrice: 22000, clinicPrice: 32000, retailPrice: 60000,
+      storageMethod: '2-8°C 冷藏保存', shelfLife: '2年', usage: '静脉注射/点滴',
+      notes: '代理折扣30%、诊所折扣40%'),
+    Product(id: 'prod-nmn-001', code: 'NS-NMN-001', name: 'NMN 点鼻/吸入 700mg', nameJa: 'NMN 点鼻・吸入 700mg', category: 'nmn',
+      description: 'NMN700mg点鼻/吸入制剂。4バイアルNMN + 4バイアル溶剤。生物利用度高。',
+      specification: '4バイアルNMN+4バイアル溶剤', unitsPerBox: 1,
+      agentPrice: 22000, clinicPrice: 32000, retailPrice: 60000,
       agentTotalPrice: 22000, clinicTotalPrice: 32000, retailTotalPrice: 60000,
-      storageMethod: '常温保存', shelfLife: '2年', usage: '点鼻/吸入使用', notes: 'NMN 700mg配合'),
-    Product(id: 'prod-nmn-002', code: 'NS-NMN-002', name: 'NMN 胶囊', nameJa: 'NMN カプセル', category: 'nmn',
-      description: 'NMN口服胶囊。每粒含高纯度NMN。',
-      specification: '胶囊型', unitsPerBox: 1, agentPrice: 9000, clinicPrice: 12000, retailPrice: 30000,
-      agentTotalPrice: 9000, clinicTotalPrice: 12000, retailTotalPrice: 30000,
-      storageMethod: '常温保存', shelfLife: '2年', usage: '每日1-2粒，口服'),
+      storageMethod: '常温保存', shelfLife: '2年', usage: '点鼻/吸入使用',
+      notes: 'NMN 700mg配合 | 包装: 4バイアルNMN＋4バイアル溶剤'),
+    Product(id: 'prod-nmn-002', code: 'NS-NMN-002', name: 'NMN 胶囊 15000', nameJa: 'NMNサプリメント15000 カプセル', category: 'nmn',
+      description: 'NMN口服胶囊 (NMNサプリメント15000)。每盒含高纯度NMN。',
+      specification: 'カプセル/盒', unitsPerBox: 1,
+      agentPrice: 9000, clinicPrice: 12000, retailPrice: 30000,
+      agentTotalPrice: 9000, clinicTotalPrice: 12000, retailTotalPrice: 20000,
+      storageMethod: '常温保存', shelfLife: '2年', usage: '每日1-2粒，口服',
+      notes: 'NMNサプリメント15000 | 销售总价¥20,000(PDF定价)'),
   ];
 
   List<ProductionFactory> _builtInFactories() => [
@@ -538,87 +696,16 @@ class DataService {
     ];
   }
 
-  /// 预设联系人关系数据
   List<ContactRelation> _builtInRelations() => [
-    // 张伟(c-001) ↔ 王芳(c-005): 行业同行，都是医美渠道
-    ContactRelation(
-      id: 'rel-001', fromContactId: 'c-001', toContactId: 'c-005',
-      fromName: '张伟', toName: '王芳', relationType: '同行/同业',
-      strength: RelationStrength.strong, isBidirectional: true,
-      description: '华东医美圈核心人脉，互相推荐客户',
-      tags: ['商业伙伴', '行业联盟'],
-    ),
-    // Dr.田中(c-002) ↔ 山本真由美(c-007): 东京美容圈同业
-    ContactRelation(
-      id: 'rel-002', fromContactId: 'c-002', toContactId: 'c-007',
-      fromName: 'Dr. 田中美咲', toName: '山本真由美', relationType: '同行/同业',
-      strength: RelationStrength.normal, isBidirectional: true,
-      description: '东京美容医疗圈，偶尔转介客户',
-      tags: ['商业伙伴', '同事'],
-    ),
-    // 佐藤(c-004) → 田中(c-002): 佐藤介绍田中
-    ContactRelation(
-      id: 'rel-003', fromContactId: 'c-004', toContactId: 'c-002',
-      fromName: '佐藤健一', toName: 'Dr. 田中美咲', relationType: '介绍人-被介绍人',
-      strength: RelationStrength.strong, isBidirectional: false,
-      description: '佐藤理事将田中院长介绍给我们',
-      tags: ['引荐人'],
-    ),
-    // 佐藤(c-004) → 山本(c-007): 佐藤也介绍了山本
-    ContactRelation(
-      id: 'rel-004', fromContactId: 'c-004', toContactId: 'c-007',
-      fromName: '佐藤健一', toName: '山本真由美', relationType: '介绍人-被介绍人',
-      strength: RelationStrength.normal, isBidirectional: false,
-      description: '美容协会推荐银座Beauty Lab',
-      tags: ['引荐人', '行业联盟'],
-    ),
-    // 张伟(c-001) ↔ 李明(c-003): 上下游关系
-    ContactRelation(
-      id: 'rel-005', fromContactId: 'c-001', toContactId: 'c-003',
-      fromName: '张伟', toName: '李明', relationType: '客户-供应商',
-      strength: RelationStrength.normal, isBidirectional: true,
-      description: '张伟代理产品部分通过李明的电商渠道分销',
-      tags: ['上下游', '商业伙伴'],
-    ),
-    // Mike Chen(c-006) ↔ 林志远(c-010): 海外同业
-    ContactRelation(
-      id: 'rel-006', fromContactId: 'c-006', toContactId: 'c-010',
-      fromName: 'Mike Chen', toName: '林志远', relationType: '同行/同业',
-      strength: RelationStrength.weak, isBidirectional: true,
-      description: '北美-台湾保健品行业联系',
-      tags: ['商业伙伴'],
-    ),
-    // 王芳(c-005) → 赵大力(c-008): 王芳介绍赵大力
-    ContactRelation(
-      id: 'rel-007', fromContactId: 'c-005', toContactId: 'c-008',
-      fromName: '王芳', toName: '赵大力', relationType: '介绍人-被介绍人',
-      strength: RelationStrength.normal, isBidirectional: false,
-      description: '悦颜医美推荐成都康复堂作为线下渠道',
-      tags: ['引荐人', '上下游'],
-    ),
-    // 金相哲(c-009) ↔ Dr.田中(c-002): 中日韩美容医疗交流
-    ContactRelation(
-      id: 'rel-008', fromContactId: 'c-009', toContactId: 'c-002',
-      fromName: '金相哲', toName: 'Dr. 田中美咲', relationType: '同行/同业',
-      strength: RelationStrength.weak, isBidirectional: true,
-      description: '中日韩皮肤医疗学术交流认识',
-      tags: ['行业联盟', '同事'],
-    ),
-    // 张伟(c-001) ↔ 林志远(c-010): 两岸代理商联盟
-    ContactRelation(
-      id: 'rel-009', fromContactId: 'c-001', toContactId: 'c-010',
-      fromName: '张伟', toName: '林志远', relationType: '渠道伙伴',
-      strength: RelationStrength.strong, isBidirectional: true,
-      description: '华东+台湾联合代理战略伙伴',
-      tags: ['商业伙伴', '行业联盟'],
-    ),
-    // 佐藤(c-004) ↔ 金相哲(c-009): 行业协会交流
-    ContactRelation(
-      id: 'rel-010', fromContactId: 'c-004', toContactId: 'c-009',
-      fromName: '佐藤健一', toName: '金相哲', relationType: '行业协会',
-      strength: RelationStrength.weak, isBidirectional: true,
-      description: '亚洲美容医疗协会理事成员',
-      tags: ['行业联盟'],
-    ),
+    ContactRelation(id: 'rel-001', fromContactId: 'c-001', toContactId: 'c-005', fromName: '张伟', toName: '王芳', relationType: '同行/同业', strength: RelationStrength.strong, isBidirectional: true, description: '华东医美圈核心人脉，互相推荐客户', tags: ['商业伙伴', '行业联盟']),
+    ContactRelation(id: 'rel-002', fromContactId: 'c-002', toContactId: 'c-007', fromName: 'Dr. 田中美咲', toName: '山本真由美', relationType: '同行/同业', strength: RelationStrength.normal, isBidirectional: true, description: '东京美容医疗圈，偶尔转介客户', tags: ['商业伙伴', '同事']),
+    ContactRelation(id: 'rel-003', fromContactId: 'c-004', toContactId: 'c-002', fromName: '佐藤健一', toName: 'Dr. 田中美咲', relationType: '介绍人-被介绍人', strength: RelationStrength.strong, isBidirectional: false, description: '佐藤理事将田中院长介绍给我们', tags: ['引荐人']),
+    ContactRelation(id: 'rel-004', fromContactId: 'c-004', toContactId: 'c-007', fromName: '佐藤健一', toName: '山本真由美', relationType: '介绍人-被介绍人', strength: RelationStrength.normal, isBidirectional: false, description: '美容协会推荐银座Beauty Lab', tags: ['引荐人', '行业联盟']),
+    ContactRelation(id: 'rel-005', fromContactId: 'c-001', toContactId: 'c-003', fromName: '张伟', toName: '李明', relationType: '客户-供应商', strength: RelationStrength.normal, isBidirectional: true, description: '张伟代理产品部分通过李明的电商渠道分销', tags: ['上下游', '商业伙伴']),
+    ContactRelation(id: 'rel-006', fromContactId: 'c-006', toContactId: 'c-010', fromName: 'Mike Chen', toName: '林志远', relationType: '同行/同业', strength: RelationStrength.weak, isBidirectional: true, description: '北美-台湾保健品行业联系', tags: ['商业伙伴']),
+    ContactRelation(id: 'rel-007', fromContactId: 'c-005', toContactId: 'c-008', fromName: '王芳', toName: '赵大力', relationType: '介绍人-被介绍人', strength: RelationStrength.normal, isBidirectional: false, description: '悦颜医美推荐成都康复堂作为线下渠道', tags: ['引荐人', '上下游']),
+    ContactRelation(id: 'rel-008', fromContactId: 'c-009', toContactId: 'c-002', fromName: '金相哲', toName: 'Dr. 田中美咲', relationType: '同行/同业', strength: RelationStrength.weak, isBidirectional: true, description: '中日韩皮肤医疗学术交流认识', tags: ['行业联盟', '同事']),
+    ContactRelation(id: 'rel-009', fromContactId: 'c-001', toContactId: 'c-010', fromName: '张伟', toName: '林志远', relationType: '渠道伙伴', strength: RelationStrength.strong, isBidirectional: true, description: '华东+台湾联合代理战略伙伴', tags: ['商业伙伴', '行业联盟']),
+    ContactRelation(id: 'rel-010', fromContactId: 'c-004', toContactId: 'c-009', fromName: '佐藤健一', toName: '金相哲', relationType: '行业协会', strength: RelationStrength.weak, isBidirectional: true, description: '亚洲美容医疗协会理事成员', tags: ['行业联盟']),
   ];
 }

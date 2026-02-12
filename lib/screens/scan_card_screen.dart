@@ -1,11 +1,15 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:google_generative_ai/google_generative_ai.dart';
 import '../providers/crm_provider.dart';
 import '../models/contact.dart';
 import '../utils/theme.dart';
 
+/// 名片扫描 + Gemini Vision AI识别
 class ScanCardScreen extends StatefulWidget {
   const ScanCardScreen({super.key});
   @override
@@ -13,9 +17,12 @@ class ScanCardScreen extends StatefulWidget {
 }
 
 class _ScanCardScreenState extends State<ScanCardScreen> {
+  static const _apiKey = 'AIzaSyBMTKwBDxjH2JakRFMhFRWxltXXjE-hk4A';
   bool _isScanning = false;
   bool _showResult = false;
   String? _imagePath;
+  Uint8List? _imageBytes;
+  String? _recognitionLog;
   final _nameCtrl = TextEditingController();
   final _companyCtrl = TextEditingController();
   final _positionCtrl = TextEditingController();
@@ -41,7 +48,7 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('名片扫描'),
+        title: const Text('名片扫描 (AI识别)'),
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios), onPressed: () => Navigator.pop(context)),
       ),
       body: SafeArea(
@@ -64,7 +71,12 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
             ),
             child: Stack(
               children: [
-                if (_imagePath != null)
+                if (_imageBytes != null)
+                  Center(child: ClipRRect(
+                    borderRadius: BorderRadius.circular(18),
+                    child: Image.memory(_imageBytes!, fit: BoxFit.contain),
+                  ))
+                else if (_imagePath != null)
                   Center(
                     child: Container(
                       padding: const EdgeInsets.all(10),
@@ -72,7 +84,6 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
                         Icon(Icons.check_circle, color: AppTheme.success, size: 64),
                         SizedBox(height: 12),
                         Text('照片已获取', style: TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w600)),
-                        Text('正在处理中...', style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
                       ]),
                     ),
                   )
@@ -83,11 +94,11 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
                           color: AppTheme.primaryPurple, size: 64),
                       const SizedBox(height: 20),
                       Text(
-                        _isScanning ? '正在识别名片...' : '将名片放入框内',
+                        _isScanning ? '正在AI识别名片...' : '将名片放入框内',
                         style: const TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 8),
-                      const Text('支持中文/日文/英文名片', style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+                      const Text('Gemini Vision AI · 中/日/英/韩', style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
                     ]),
                   ),
                 if (!_isScanning && _imagePath == null) ...[
@@ -106,7 +117,7 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
           flex: 2,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Column(children: [
+            child: SingleChildScrollView(child: Column(children: [
               const SizedBox(height: 16),
               Row(children: [
                 if (!kIsWeb) ...[
@@ -115,7 +126,7 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
                       icon: Icons.camera_alt,
                       label: '拍照扫描',
                       color: AppTheme.primaryPurple,
-                      onTap: () => _pickImage(ImageSource.camera),
+                      onTap: () => _pickAndRecognize(ImageSource.camera),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -123,9 +134,9 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
                 Expanded(
                   child: _actionButton(
                     icon: Icons.photo_library,
-                    label: kIsWeb ? '选择图片' : '相册导入',
+                    label: kIsWeb ? '选择图片(AI识别)' : '相册导入(AI识别)',
                     color: AppTheme.primaryBlue,
-                    onTap: () => _pickImage(ImageSource.gallery),
+                    onTap: () => _pickAndRecognize(ImageSource.gallery),
                   ),
                 ),
               ]),
@@ -141,20 +152,29 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(14)),
                 child: Row(children: [
-                  const Icon(Icons.lightbulb_outline, color: AppTheme.accentGold, size: 20),
+                  const Icon(Icons.auto_awesome, color: AppTheme.accentGold, size: 20),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      const Text('扫描提示', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
+                      const Text('AI识别引擎', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
                       const SizedBox(height: 2),
                       Text(
-                        kIsWeb ? '点击"选择图片"从本地上传名片照片\n选择后可手动录入识别信息' : '拍照或从相册选择名片照片\n照片获取后可手动录入识别信息',
+                        'Gemini Vision API · 自动提取姓名、公司、职位、电话、邮箱、地址',
                         style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
                     ]),
                   ),
                 ]),
               ),
-            ]),
+              if (_recognitionLog != null) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(8)),
+                  child: Text(_recognitionLog!, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10), maxLines: 3, overflow: TextOverflow.ellipsis),
+                ),
+              ],
+              const SizedBox(height: 20),
+            ])),
           ),
         ),
       ],
@@ -204,7 +224,8 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
     );
   }
 
-  Future<void> _pickImage(ImageSource source) async {
+  /// 选择图片 + Gemini Vision AI识别
+  Future<void> _pickAndRecognize(ImageSource source) async {
     try {
       final XFile? image = await _picker.pickImage(
         source: source,
@@ -212,29 +233,157 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
         maxHeight: 1080,
         imageQuality: 85,
       );
-      if (image != null && mounted) {
-        setState(() {
-          _imagePath = image.path;
-          _isScanning = true;
-        });
-        await Future.delayed(const Duration(seconds: 1));
-        if (mounted) {
-          setState(() {
-            _isScanning = false;
-            _showResult = true;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('照片获取成功! 请填写名片信息'), backgroundColor: AppTheme.success),
-          );
-        }
-      }
+      if (image == null || !mounted) return;
+
+      final bytes = await image.readAsBytes();
+      setState(() {
+        _imagePath = image.path;
+        _imageBytes = bytes;
+        _isScanning = true;
+        _recognitionLog = '正在调用 Gemini Vision API...';
+      });
+
+      // 调用 Gemini Vision API
+      await _recognizeWithGemini(bytes, image.mimeType ?? 'image/jpeg');
+
     } catch (e) {
       if (mounted) {
+        setState(() {
+          _isScanning = false;
+          _recognitionLog = '识别失败: $e';
+        });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('无法获取照片: $e'), backgroundColor: AppTheme.danger),
+          SnackBar(content: Text('识别失败: $e'), backgroundColor: AppTheme.danger),
         );
       }
     }
+  }
+
+  /// Gemini Vision OCR核心
+  Future<void> _recognizeWithGemini(Uint8List imageBytes, String mimeType) async {
+    try {
+      final model = GenerativeModel(
+        model: 'gemini-2.0-flash',
+        apiKey: _apiKey,
+      );
+
+      final prompt = '''请识别这张名片/图片中的联系人信息，严格返回以下JSON格式（不要markdown代码块）:
+{
+  "name": "姓名",
+  "company": "公司名",
+  "position": "职位",
+  "phone": "电话号码",
+  "email": "邮箱",
+  "address": "地址",
+  "industry": "行业(healthcare/finance/technology/trading/consulting/manufacturing/realestate/other)",
+  "relation_type": "关系类型(agent/clinic/retailer/advisor/investor/partner/other)",
+  "confidence": 0.95
+}
+如果有多个电话号码，用逗号分隔放在phone字段。如果某项无法识别，返回空字符串。''';
+
+      final content = Content.multi([
+        TextPart(prompt),
+        DataPart(mimeType, imageBytes),
+      ]);
+
+      final response = await model.generateContent([content]);
+      final text = response.text ?? '';
+
+      if (mounted) {
+        setState(() => _recognitionLog = 'AI返回: ${text.substring(0, text.length > 100 ? 100 : text.length)}...');
+      }
+
+      // 解析JSON
+      _parseGeminiResponse(text);
+
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isScanning = false;
+          _recognitionLog = 'Gemini API调用失败: $e';
+        });
+        // 回退到手动录入
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('AI识别失败, 可手动录入: $e'), backgroundColor: AppTheme.warning),
+        );
+        setState(() => _showResult = true);
+      }
+    }
+  }
+
+  void _parseGeminiResponse(String text) {
+    try {
+      // 清理可能的markdown代码块
+      String jsonStr = text.trim();
+      if (jsonStr.startsWith('```json')) jsonStr = jsonStr.substring(7);
+      if (jsonStr.startsWith('```')) jsonStr = jsonStr.substring(3);
+      if (jsonStr.endsWith('```')) jsonStr = jsonStr.substring(0, jsonStr.length - 3);
+      jsonStr = jsonStr.trim();
+
+      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+
+      _nameCtrl.text = data['name'] as String? ?? '';
+      _companyCtrl.text = data['company'] as String? ?? '';
+      _positionCtrl.text = data['position'] as String? ?? '';
+      _phoneCtrl.text = data['phone'] as String? ?? '';
+      _emailCtrl.text = data['email'] as String? ?? '';
+      _addressCtrl.text = data['address'] as String? ?? '';
+
+      // 自动匹配行业
+      final industryStr = data['industry'] as String? ?? 'other';
+      _industry = _matchIndustry(industryStr);
+
+      // 自动匹配关系类型
+      final relStr = data['relation_type'] as String? ?? 'other';
+      _myRelation = _matchRelation(relStr);
+
+      final confidence = (data['confidence'] as num?)?.toDouble() ?? 0;
+
+      setState(() {
+        _isScanning = false;
+        _showResult = true;
+        _recognitionLog = '识别成功! 置信度: ${(confidence * 100).toStringAsFixed(0)}%';
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('AI识别成功! ${_nameCtrl.text.isNotEmpty ? _nameCtrl.text : "请确认信息"} | 置信度${(confidence * 100).toStringAsFixed(0)}%'),
+            backgroundColor: AppTheme.success,
+          ),
+        );
+      }
+    } catch (e) {
+      // JSON解析失败，尝试模糊提取
+      setState(() {
+        _isScanning = false;
+        _showResult = true;
+        _recognitionLog = 'JSON解析失败, 已展示手动录入: $e';
+      });
+    }
+  }
+
+  Industry _matchIndustry(String s) {
+    final lower = s.toLowerCase();
+    if (lower.contains('health') || lower.contains('医')) return Industry.healthcare;
+    if (lower.contains('finance') || lower.contains('金融')) return Industry.finance;
+    if (lower.contains('tech')) return Industry.technology;
+    if (lower.contains('trad') || lower.contains('贸易')) return Industry.trading;
+    if (lower.contains('consult') || lower.contains('咨询')) return Industry.consulting;
+    if (lower.contains('manuf') || lower.contains('建设') || lower.contains('制造')) return Industry.construction;
+    if (lower.contains('real') || lower.contains('不动产') || lower.contains('地产')) return Industry.realEstate;
+    return Industry.other;
+  }
+
+  MyRelationType _matchRelation(String s) {
+    final lower = s.toLowerCase();
+    if (lower.contains('agent') || lower.contains('代理')) return MyRelationType.agent;
+    if (lower.contains('clinic') || lower.contains('诊所')) return MyRelationType.clinic;
+    if (lower.contains('retail') || lower.contains('零售')) return MyRelationType.retailer;
+    if (lower.contains('advis') || lower.contains('顾问')) return MyRelationType.advisor;
+    if (lower.contains('invest') || lower.contains('投资')) return MyRelationType.investor;
+    if (lower.contains('partner') || lower.contains('合作')) return MyRelationType.partner;
+    return MyRelationType.other;
   }
 
   Widget _buildResultForm() {
@@ -245,14 +394,22 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(gradient: AppTheme.gradient, borderRadius: BorderRadius.circular(14)),
           child: Row(children: [
-            Icon(_imagePath != null ? Icons.photo_camera : Icons.edit_note, color: Colors.white, size: 24),
+            Icon(_imageBytes != null ? Icons.auto_awesome : _imagePath != null ? Icons.photo_camera : Icons.edit_note, color: Colors.white, size: 24),
             const SizedBox(width: 10),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(_imagePath != null ? '照片已获取' : '手动录入', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-              const Text('请填写并确认信息后保存', style: TextStyle(color: Colors.white70, fontSize: 12)),
+              Text(_imageBytes != null ? 'AI识别结果' : _imagePath != null ? '照片已获取' : '手动录入', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+              Text(_recognitionLog ?? '请填写并确认信息后保存', style: const TextStyle(color: Colors.white70, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
             ])),
           ]),
         ),
+        // 预览缩略图
+        if (_imageBytes != null) ...[
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.memory(_imageBytes!, height: 120, fit: BoxFit.cover),
+          ),
+        ],
         const SizedBox(height: 20),
         _field(_nameCtrl, '姓名', Icons.person),
         _field(_companyCtrl, '公司', Icons.business),
@@ -291,6 +448,8 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
               onPressed: () => setState(() {
                 _showResult = false;
                 _imagePath = null;
+                _imageBytes = null;
+                _recognitionLog = null;
                 _clearFields();
               }),
               style: OutlinedButton.styleFrom(

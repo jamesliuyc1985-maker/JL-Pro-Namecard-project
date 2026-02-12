@@ -103,6 +103,26 @@ class Product {
   );
 }
 
+/// 收款状态
+class PaymentStatus {
+  static const unpaid = 'unpaid';
+  static const partial = 'partial';
+  static const paid = 'paid';
+  static const refunded = 'refunded';
+
+  static String label(String s) {
+    switch (s) {
+      case unpaid: return '未收款';
+      case partial: return '部分收款';
+      case paid: return '已收款';
+      case refunded: return '已退款';
+      default: return s;
+    }
+  }
+
+  static bool isSettled(String s) => s == paid;
+}
+
 class SalesOrder {
   String id;
   String contactId;
@@ -113,15 +133,30 @@ class SalesOrder {
   double totalAmount;
   String currency;
   String notes;
-  String deliveryAddress; // 配送地址
-  String shippingMethod; // 配送方式: express, sea, air, pickup
-  String paymentTerms; // 付款条件: prepaid, cod, net30, net60
-  String dealStage; // 关联的交易阶段
-  String contactPhone; // 客户电话
-  String contactCompany; // 客户公司
-  DateTime? expectedDeliveryDate; // 预计交付日期
+  String deliveryAddress;
+  String shippingMethod; // express, sea, air, pickup
+  String paymentTerms; // prepaid, cod, net30, net60
+  String dealStage;
+  String contactPhone;
+  String contactCompany;
+  DateTime? expectedDeliveryDate;
   DateTime createdAt;
   DateTime updatedAt;
+
+  // === 收款跟踪 ===
+  String paymentStatus; // unpaid, partial, paid, refunded
+  double paidAmount; // 已收款金额
+  DateTime? paidAt; // 最后收款时间
+  String paymentNote; // 收款备注
+
+  // === 物流跟踪 ===
+  String trackingNumber; // 物流单据号
+  String trackingCarrier; // 物流公司
+  String trackingStatus; // pending, picked_up, in_transit, delivered
+  String trackingNote; // 物流备注
+  DateTime? shippedAt; // 出货时间
+  DateTime? deliveredAt; // 签收时间
+  List<String> trackingPhotos; // 物流凭证照片URL
 
   SalesOrder({
     required this.id,
@@ -142,9 +177,23 @@ class SalesOrder {
     this.expectedDeliveryDate,
     DateTime? createdAt,
     DateTime? updatedAt,
+    // 收款
+    this.paymentStatus = 'unpaid',
+    this.paidAmount = 0,
+    this.paidAt,
+    this.paymentNote = '',
+    // 物流
+    this.trackingNumber = '',
+    this.trackingCarrier = '',
+    this.trackingStatus = 'pending',
+    this.trackingNote = '',
+    this.shippedAt,
+    this.deliveredAt,
+    List<String>? trackingPhotos,
   }) : items = items ?? [],
        createdAt = createdAt ?? DateTime.now(),
-       updatedAt = updatedAt ?? DateTime.now();
+       updatedAt = updatedAt ?? DateTime.now(),
+       trackingPhotos = trackingPhotos ?? [];
 
   void recalculate() {
     totalAmount = 0;
@@ -152,6 +201,11 @@ class SalesOrder {
       totalAmount += item.subtotal;
     }
   }
+
+  /// 是否已结清
+  bool get isFullyPaid => paymentStatus == PaymentStatus.paid;
+  /// 待收金额
+  double get unpaidAmount => totalAmount - paidAmount;
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -172,6 +226,19 @@ class SalesOrder {
     'expected_delivery_date': expectedDeliveryDate?.toIso8601String(),
     'created_at': createdAt.toIso8601String(),
     'updated_at': updatedAt.toIso8601String(),
+    // 收款
+    'payment_status': paymentStatus,
+    'paid_amount': paidAmount,
+    'paid_at': paidAt?.toIso8601String(),
+    'payment_note': paymentNote,
+    // 物流
+    'tracking_number': trackingNumber,
+    'tracking_carrier': trackingCarrier,
+    'tracking_status': trackingStatus,
+    'tracking_note': trackingNote,
+    'shipped_at': shippedAt?.toIso8601String(),
+    'delivered_at': deliveredAt?.toIso8601String(),
+    'tracking_photos': trackingPhotos,
   };
 
   factory SalesOrder.fromJson(Map<String, dynamic> json) {
@@ -199,6 +266,19 @@ class SalesOrder {
       expectedDeliveryDate: json['expected_delivery_date'] != null ? DateTime.tryParse(json['expected_delivery_date']) : null,
       createdAt: DateTime.tryParse(json['created_at'] ?? '') ?? DateTime.now(),
       updatedAt: DateTime.tryParse(json['updated_at'] ?? '') ?? DateTime.now(),
+      // 收款
+      paymentStatus: json['payment_status'] as String? ?? 'unpaid',
+      paidAmount: (json['paid_amount'] as num?)?.toDouble() ?? 0,
+      paidAt: json['paid_at'] != null ? DateTime.tryParse(json['paid_at']) : null,
+      paymentNote: json['payment_note'] as String? ?? '',
+      // 物流
+      trackingNumber: json['tracking_number'] as String? ?? '',
+      trackingCarrier: json['tracking_carrier'] as String? ?? '',
+      trackingStatus: json['tracking_status'] as String? ?? 'pending',
+      trackingNote: json['tracking_note'] as String? ?? '',
+      shippedAt: json['shipped_at'] != null ? DateTime.tryParse(json['shipped_at']) : null,
+      deliveredAt: json['delivered_at'] != null ? DateTime.tryParse(json['delivered_at']) : null,
+      trackingPhotos: List<String>.from(json['tracking_photos'] ?? []),
     );
   }
 
@@ -239,6 +319,16 @@ class SalesOrder {
       case 'net30': return 'Net 30天';
       case 'net60': return 'Net 60天';
       default: return s.isEmpty ? '未指定' : s;
+    }
+  }
+
+  static String trackingStatusLabel(String s) {
+    switch (s) {
+      case 'pending': return '待发货';
+      case 'picked_up': return '已揽收';
+      case 'in_transit': return '运输中';
+      case 'delivered': return '已签收';
+      default: return s;
     }
   }
 }

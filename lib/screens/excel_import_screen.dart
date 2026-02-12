@@ -1,12 +1,16 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:csv/csv.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:google_generative_ai/google_generative_ai.dart';
 import '../providers/crm_provider.dart';
 import '../models/contact.dart';
 import '../utils/theme.dart';
 
-/// Excel/CSV 文件导入人脉 + 图片识别上传
+/// 多类型文件导入: CSV/Excel + 图片AI识别 + 名片批量识别
 class ExcelImportScreen extends StatefulWidget {
   const ExcelImportScreen({super.key});
   @override
@@ -14,12 +18,12 @@ class ExcelImportScreen extends StatefulWidget {
 }
 
 class _ExcelImportScreenState extends State<ExcelImportScreen> with SingleTickerProviderStateMixin {
+  static const _apiKey = 'AIzaSyBMTKwBDxjH2JakRFMhFRWxltXXjE-hk4A';
   late TabController _tabCtrl;
   List<List<dynamic>> _csvData = [];
   List<Map<String, String>> _parsedContacts = [];
   bool _isParsing = false;
   String? _error;
-  // Column mapping
   int _nameCol = 0;
   int _companyCol = 1;
   int _positionCol = 2;
@@ -30,7 +34,8 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> with SingleTicker
   // Image recognition
   final ImagePicker _picker = ImagePicker();
   bool _isRecognizing = false;
-  String? _imagePath;
+  Uint8List? _imageBytes;
+  String? _recognitionLog;
   List<Map<String, String>> _recognizedContacts = [];
 
   @override
@@ -50,7 +55,7 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> with SingleTicker
           indicatorColor: AppTheme.gold,
           labelColor: AppTheme.gold,
           unselectedLabelColor: AppTheme.slate,
-          tabs: const [Tab(text: 'CSV/Excel导入'), Tab(text: '图片识别')],
+          tabs: const [Tab(text: 'CSV/Excel导入'), Tab(text: 'AI图片识别')],
         ),
       ),
       body: TabBarView(controller: _tabCtrl, children: [
@@ -65,7 +70,6 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> with SingleTicker
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // Instructions
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(color: AppTheme.navyLight, borderRadius: BorderRadius.circular(8),
@@ -90,7 +94,6 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> with SingleTicker
         ),
         const SizedBox(height: 16),
 
-        // Paste CSV data
         const Text('粘贴CSV数据:', style: TextStyle(color: AppTheme.offWhite, fontSize: 13, fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
         TextField(
@@ -103,14 +106,11 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> with SingleTicker
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.steel.withValues(alpha: 0.3))),
           ),
           onChanged: (text) {
-            if (text.isNotEmpty) {
-              _parseCsv(text);
-            }
+            if (text.isNotEmpty) { _parseCsv(text); }
           },
         ),
         const SizedBox(height: 8),
 
-        // Options
         Row(children: [
           Checkbox(
             value: _hasHeader,
@@ -123,7 +123,6 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> with SingleTicker
         if (_isParsing) const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator(color: AppTheme.gold))),
         if (_error != null) Padding(padding: const EdgeInsets.all(8), child: Text(_error!, style: const TextStyle(color: AppTheme.danger, fontSize: 12))),
 
-        // Preview parsed contacts
         if (_parsedContacts.isNotEmpty) ...[
           const SizedBox(height: 12),
           Row(children: [
@@ -212,7 +211,7 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> with SingleTicker
     );
   }
 
-  // ====== Tab 2: Image Recognition ======
+  // ====== Tab 2: AI Image Recognition (Gemini Vision) ======
   Widget _imageRecognitionTab() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -220,46 +219,58 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> with SingleTicker
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(color: AppTheme.navyLight, borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppTheme.info.withValues(alpha: 0.3))),
+            border: Border.all(color: AppTheme.gold.withValues(alpha: 0.3))),
           child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              Icon(Icons.image_search, color: AppTheme.info, size: 16),
+              Icon(Icons.auto_awesome, color: AppTheme.gold, size: 16),
               SizedBox(width: 8),
-              Text('图片识别说明', style: TextStyle(color: AppTheme.info, fontWeight: FontWeight.w600, fontSize: 13)),
+              Text('Gemini Vision AI识别', style: TextStyle(color: AppTheme.gold, fontWeight: FontWeight.w600, fontSize: 13)),
             ]),
             SizedBox(height: 8),
-            Text('支持上传截图/照片, AI识别其中的联系人信息\n支持格式: 名片照片, 通讯录截图, 表格截图等',
-              style: TextStyle(color: AppTheme.slate, fontSize: 11, height: 1.4)),
+            Text('支持上传以下类型图片, AI自动提取联系人信息:\n'
+                '- 名片照片 (中/日/英/韩多语言)\n'
+                '- 通讯录截图\n'
+                '- Excel/表格截图\n'
+                '- 名单列表照片',
+              style: TextStyle(color: AppTheme.slate, fontSize: 11, height: 1.5)),
           ]),
         ),
         const SizedBox(height: 16),
 
-        // Upload buttons
         Row(children: [
-          Expanded(child: _uploadBtn(Icons.camera_alt, '拍照识别', () => _pickImage(ImageSource.camera))),
-          const SizedBox(width: 12),
-          Expanded(child: _uploadBtn(Icons.photo_library, '相册选择', () => _pickImage(ImageSource.gallery))),
+          if (!kIsWeb) ...[
+            Expanded(child: _uploadBtn(Icons.camera_alt, '拍照识别', () => _pickAndRecognizeImage(ImageSource.camera))),
+            const SizedBox(width: 12),
+          ],
+          Expanded(child: _uploadBtn(Icons.photo_library, kIsWeb ? '上传图片识别' : '相册选择识别', () => _pickAndRecognizeImage(ImageSource.gallery))),
         ]),
         const SizedBox(height: 16),
 
         if (_isRecognizing)
-          const Center(child: Column(children: [
-            SizedBox(height: 20),
-            CircularProgressIndicator(color: AppTheme.gold),
-            SizedBox(height: 12),
-            Text('正在识别图片内容...', style: TextStyle(color: AppTheme.slate, fontSize: 12)),
+          Center(child: Column(children: [
+            const SizedBox(height: 20),
+            const CircularProgressIndicator(color: AppTheme.gold),
+            const SizedBox(height: 12),
+            Text(_recognitionLog ?? '正在AI识别...', style: const TextStyle(color: AppTheme.slate, fontSize: 12)),
           ])),
 
-        if (_imagePath != null && !_isRecognizing) ...[
+        if (_imageBytes != null && !_isRecognizing) ...[
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(color: AppTheme.navyLight, borderRadius: BorderRadius.circular(8)),
-            child: Row(children: [
-              const Icon(Icons.check_circle, color: AppTheme.success, size: 18),
-              const SizedBox(width: 8),
-              const Expanded(child: Text('图片已上传', style: TextStyle(color: AppTheme.success, fontSize: 12))),
-              TextButton(onPressed: () => setState(() { _imagePath = null; _recognizedContacts = []; }),
-                child: const Text('清除', style: TextStyle(fontSize: 11))),
+            child: Column(children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.memory(_imageBytes!, height: 120, width: double.infinity, fit: BoxFit.cover),
+              ),
+              const SizedBox(height: 8),
+              Row(children: [
+                const Icon(Icons.check_circle, color: AppTheme.success, size: 18),
+                const SizedBox(width: 8),
+                Expanded(child: Text(_recognitionLog ?? '识别完成', style: const TextStyle(color: AppTheme.success, fontSize: 12))),
+                TextButton(onPressed: () => setState(() { _imageBytes = null; _recognizedContacts = []; _recognitionLog = null; }),
+                  child: const Text('清除', style: TextStyle(fontSize: 11))),
+              ]),
             ]),
           ),
         ],
@@ -267,7 +278,7 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> with SingleTicker
         if (_recognizedContacts.isNotEmpty) ...[
           const SizedBox(height: 12),
           Row(children: [
-            Text('识别到 ${_recognizedContacts.length} 条记录', style: const TextStyle(color: AppTheme.success, fontWeight: FontWeight.w600, fontSize: 13)),
+            Text('AI识别到 ${_recognizedContacts.length} 条记录', style: const TextStyle(color: AppTheme.success, fontWeight: FontWeight.w600, fontSize: 13)),
             const Spacer(),
             ElevatedButton.icon(
               onPressed: () => _importContacts(_recognizedContacts),
@@ -290,7 +301,7 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> with SingleTicker
         padding: const EdgeInsets.symmetric(vertical: 24),
         decoration: BoxDecoration(
           color: AppTheme.navyLight, borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.steel.withValues(alpha: 0.3), style: BorderStyle.solid),
+          border: Border.all(color: AppTheme.gold.withValues(alpha: 0.3), style: BorderStyle.solid),
         ),
         child: Column(children: [
           Icon(icon, color: AppTheme.gold, size: 32),
@@ -301,23 +312,93 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> with SingleTicker
     );
   }
 
-  Future<void> _pickImage(ImageSource source) async {
-    final xfile = await _picker.pickImage(source: source, maxWidth: 1920, maxHeight: 1080, imageQuality: 85);
-    if (xfile == null) return;
-    setState(() { _imagePath = xfile.path; _isRecognizing = true; _recognizedContacts = []; });
+  /// 选择图片 + Gemini Vision AI批量识别
+  Future<void> _pickAndRecognizeImage(ImageSource source) async {
+    try {
+      final xfile = await _picker.pickImage(source: source, maxWidth: 1920, maxHeight: 1080, imageQuality: 85);
+      if (xfile == null) return;
 
-    // Simulate AI recognition (placeholder - in production use Gemini API)
-    await Future.delayed(const Duration(seconds: 2));
-    setState(() {
-      _isRecognizing = false;
-      // Show demo result - in production this would use google_generative_ai
-      _recognizedContacts = [
-        {'name': '(识别结果)', 'company': '请使用CSV导入或名片扫描', 'position': '', 'phone': '', 'email': ''},
-      ];
-    });
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('图片已上传, 请配合CSV导入功能使用'), backgroundColor: AppTheme.info));
+      final bytes = await xfile.readAsBytes();
+      setState(() {
+        _imageBytes = bytes;
+        _isRecognizing = true;
+        _recognizedContacts = [];
+        _recognitionLog = '正在调用 Gemini Vision API...';
+      });
+
+      // Gemini Vision 批量识别
+      final model = GenerativeModel(
+        model: 'gemini-2.0-flash',
+        apiKey: _apiKey,
+      );
+
+      final prompt = '''请识别这张图片中所有的联系人信息。图片可能是名片、通讯录截图、Excel表格截图或名单列表。
+严格返回JSON数组格式（不要markdown代码块）:
+[
+  {"name": "姓名", "company": "公司名", "position": "职位", "phone": "电话", "email": "邮箱"},
+  ...
+]
+规则:
+- 尽可能提取所有可见联系人
+- 如果某项无法识别返回空字符串
+- 支持中文/日文/英文/韩文
+- 如果图片不含联系人信息，返回空数组 []''';
+
+      final content = Content.multi([
+        TextPart(prompt),
+        DataPart(xfile.mimeType ?? 'image/jpeg', bytes),
+      ]);
+
+      final response = await model.generateContent([content]);
+      final text = response.text ?? '[]';
+
+      // 解析JSON
+      String jsonStr = text.trim();
+      if (jsonStr.startsWith('```json')) jsonStr = jsonStr.substring(7);
+      if (jsonStr.startsWith('```')) jsonStr = jsonStr.substring(3);
+      if (jsonStr.endsWith('```')) jsonStr = jsonStr.substring(0, jsonStr.length - 3);
+      jsonStr = jsonStr.trim();
+
+      final decoded = jsonDecode(jsonStr);
+      List<Map<String, String>> contacts = [];
+
+      if (decoded is List) {
+        for (final item in decoded) {
+          if (item is Map) {
+            final name = (item['name'] ?? '').toString().trim();
+            if (name.isNotEmpty) {
+              contacts.add({
+                'name': name,
+                'company': (item['company'] ?? '').toString().trim(),
+                'position': (item['position'] ?? '').toString().trim(),
+                'phone': (item['phone'] ?? '').toString().trim(),
+                'email': (item['email'] ?? '').toString().trim(),
+              });
+            }
+          }
+        }
+      }
+
+      setState(() {
+        _isRecognizing = false;
+        _recognizedContacts = contacts;
+        _recognitionLog = contacts.isEmpty ? 'AI未识别到联系人信息' : '成功识别 ${contacts.length} 条联系人!';
+      });
+
+      if (mounted && contacts.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('AI识别成功! 发现 ${contacts.length} 条联系人'), backgroundColor: AppTheme.success));
+      }
+
+    } catch (e) {
+      setState(() {
+        _isRecognizing = false;
+        _recognitionLog = '识别失败: $e';
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('AI识别失败: $e'), backgroundColor: AppTheme.danger));
+      }
     }
   }
 }
