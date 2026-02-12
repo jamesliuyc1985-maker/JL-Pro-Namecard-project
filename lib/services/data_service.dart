@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/contact.dart';
 import '../models/deal.dart';
 import '../models/interaction.dart';
@@ -10,13 +11,24 @@ import '../models/task.dart';
 import '../models/contact_assignment.dart';
 import '../models/factory.dart';
 
-/// DataService: 纯本地缓存模式（无 Firebase 依赖）
+/// DataService: Local-first + 可选 Firestore 云同步
 class DataService {
   static const _uuid = Uuid();
 
   String _userId = 'local';
   void setUserId(String uid) => _userId = uid;
   String get userId => _userId;
+
+  /// Firestore 开关
+  bool _firestoreEnabled = false;
+  FirebaseFirestore? _db;
+  bool get isFirestoreEnabled => _firestoreEnabled;
+
+  void enableFirestore() {
+    _firestoreEnabled = true;
+    _db = FirebaseFirestore.instance;
+    if (kDebugMode) debugPrint('[DataService] Firestore enabled');
+  }
 
   // ========== Local caches ==========
   List<Contact> _contactsCache = [];
@@ -157,11 +169,13 @@ class DataService {
   Future<void> saveContact(Contact contact) async {
     final idx = _contactsCache.indexWhere((c) => c.id == contact.id);
     if (idx >= 0) { _contactsCache[idx] = contact; } else { _contactsCache.add(contact); }
+    _firestoreWrite('contacts', contact.id, contact.toJson());
   }
   Future<void> deleteContact(String id) async {
     _contactsCache.removeWhere((c) => c.id == id);
     _interactionsCache.removeWhere((i) => i.contactId == id);
     _relationsCache.removeWhere((r) => r.fromContactId == id || r.toContactId == id);
+    _firestoreDelete('contacts', id);
   }
 
   // ========== Relation CRUD ==========
@@ -171,9 +185,11 @@ class DataService {
   Future<void> saveRelation(ContactRelation relation) async {
     final idx = _relationsCache.indexWhere((r) => r.id == relation.id);
     if (idx >= 0) { _relationsCache[idx] = relation; } else { _relationsCache.add(relation); }
+    _firestoreWrite('relations', relation.id, relation.toJson());
   }
   Future<void> deleteRelation(String id) async {
     _relationsCache.removeWhere((r) => r.id == id);
+    _firestoreDelete('relations', id);
   }
 
   // ========== Deal CRUD ==========
@@ -183,9 +199,11 @@ class DataService {
   Future<void> saveDeal(Deal deal) async {
     final idx = _dealsCache.indexWhere((d) => d.id == deal.id);
     if (idx >= 0) { _dealsCache[idx] = deal; } else { _dealsCache.add(deal); }
+    _firestoreWrite('deals', deal.id, deal.toJson());
   }
   Future<void> deleteDeal(String id) async {
     _dealsCache.removeWhere((d) => d.id == id);
+    _firestoreDelete('deals', id);
   }
 
   // ========== Interaction CRUD ==========
@@ -195,9 +213,11 @@ class DataService {
   Future<void> saveInteraction(Interaction interaction) async {
     final idx = _interactionsCache.indexWhere((i) => i.id == interaction.id);
     if (idx >= 0) { _interactionsCache[idx] = interaction; } else { _interactionsCache.add(interaction); }
+    _firestoreWrite('interactions', interaction.id, interaction.toJson());
   }
   Future<void> deleteInteraction(String id) async {
     _interactionsCache.removeWhere((i) => i.id == id);
+    _firestoreDelete('interactions', id);
   }
 
   // ========== Product CRUD ==========
@@ -209,9 +229,11 @@ class DataService {
   Future<void> saveProduct(Product product) async {
     final idx = _productsCache.indexWhere((p) => p.id == product.id);
     if (idx >= 0) { _productsCache[idx] = product; } else { _productsCache.add(product); }
+    _firestoreWrite('products', product.id, product.toJson());
   }
   Future<void> deleteProduct(String id) async {
     _productsCache.removeWhere((p) => p.id == id);
+    _firestoreDelete('products', id);
   }
 
   // ========== Sales Order CRUD ==========
@@ -220,9 +242,11 @@ class DataService {
   Future<void> saveOrder(SalesOrder order) async {
     final idx = _ordersCache.indexWhere((o) => o.id == order.id);
     if (idx >= 0) { _ordersCache[idx] = order; } else { _ordersCache.add(order); }
+    _firestoreWrite('sales_orders', order.id, order.toJson());
   }
   Future<void> deleteOrder(String id) async {
     _ordersCache.removeWhere((o) => o.id == id);
+    _firestoreDelete('sales_orders', id);
   }
 
   // ========== Inventory CRUD ==========
@@ -290,6 +314,64 @@ class DataService {
   }
 
   String generateId() => _uuid.v4();
+
+  // ========== Firestore 辅助方法 ==========
+
+  /// 后台写入 Firestore（不阻塞 UI）
+  void _firestoreWrite(String collection, String docId, Map<String, dynamic> data) {
+    if (!_firestoreEnabled || _db == null) return;
+    _db!.collection(collection).doc(docId).set(data).catchError((e) {
+      if (kDebugMode) debugPrint('[DataService] Firestore write error ($collection/$docId): $e');
+    });
+  }
+
+  void _firestoreDelete(String collection, String docId) {
+    if (!_firestoreEnabled || _db == null) return;
+    _db!.collection(collection).doc(docId).delete().catchError((e) {
+      if (kDebugMode) debugPrint('[DataService] Firestore delete error ($collection/$docId): $e');
+    });
+  }
+
+  /// 从 Firestore 拉取数据到本地缓存
+  Future<void> syncFromCloud() async {
+    if (!_firestoreEnabled || _db == null) return;
+    try {
+      // 联系人
+      final contactSnap = await _db!.collection('contacts').get();
+      if (contactSnap.docs.isNotEmpty) {
+        _contactsCache = contactSnap.docs.map((d) {
+          try { return Contact.fromJson(d.data()); } catch (_) { return null; }
+        }).whereType<Contact>().toList();
+      }
+      // Deal
+      final dealSnap = await _db!.collection('deals').get();
+      if (dealSnap.docs.isNotEmpty) {
+        _dealsCache = dealSnap.docs.map((d) {
+          try { return Deal.fromJson(d.data()); } catch (_) { return null; }
+        }).whereType<Deal>().toList();
+      }
+      // Relations
+      final relSnap = await _db!.collection('relations').get();
+      if (relSnap.docs.isNotEmpty) {
+        _relationsCache = relSnap.docs.map((d) {
+          try { return ContactRelation.fromJson(d.data()); } catch (_) { return null; }
+        }).whereType<ContactRelation>().toList();
+      }
+      // Products
+      final prodSnap = await _db!.collection('products').get();
+      if (prodSnap.docs.isNotEmpty) {
+        _productsCache = prodSnap.docs.map((d) {
+          try { return Product.fromJson(d.data()); } catch (_) { return null; }
+        }).whereType<Product>().toList();
+      }
+
+      if (kDebugMode) {
+        debugPrint('[DataService] Cloud sync: ${_contactsCache.length} contacts, ${_dealsCache.length} deals, ${_relationsCache.length} relations');
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('[DataService] syncFromCloud error: $e');
+    }
+  }
 
   // ========== Built-in Product Catalog ==========
   List<Product> _builtInProducts() => [

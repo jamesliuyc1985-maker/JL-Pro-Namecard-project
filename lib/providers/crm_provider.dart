@@ -34,6 +34,7 @@ class CrmProvider extends ChangeNotifier {
   CrmProvider(this._dataService);
 
   void setNotificationService(NotificationService ns) { _notificationService = ns; }
+  void setUserId(String uid) { _dataService.setUserId(uid); }
 
   void _notify(String title, String body, NotificationType type, {String? relatedId}) {
     _notificationService?.add(CrmNotification(
@@ -101,13 +102,14 @@ class CrmProvider extends ChangeNotifier {
 
   Future<void> syncFromCloud() async {
     _isLoading = true;
-    _syncStatus = '正在刷新...';
+    _syncStatus = '正在同步...';
     notifyListeners();
     try {
+      await _dataService.syncFromCloud();
       await loadAll();
-      _syncStatus = '刷新成功';
+      _syncStatus = '同步成功';
     } catch (e) {
-      _syncStatus = '刷新失败: $e';
+      _syncStatus = '同步失败: $e';
     }
     _isLoading = false;
     notifyListeners();
