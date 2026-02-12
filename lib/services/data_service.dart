@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/contact.dart';
 import '../models/deal.dart';
@@ -9,9 +10,15 @@ import '../models/task.dart';
 import '../models/contact_assignment.dart';
 import '../models/factory.dart';
 
+/// DataService: 纯本地缓存模式（无 Firebase 依赖）
 class DataService {
   static const _uuid = Uuid();
 
+  String _userId = 'local';
+  void setUserId(String uid) => _userId = uid;
+  String get userId => _userId;
+
+  // ========== Local caches ==========
   List<Contact> _contactsCache = [];
   List<Deal> _dealsCache = [];
   List<Interaction> _interactionsCache = [];
@@ -30,12 +37,16 @@ class DataService {
   TeamMember? getTeamMember(String id) {
     try { return _teamCache.firstWhere((m) => m.id == id); } catch (_) { return null; }
   }
-  Future<void> addTeamMember(TeamMember member) async { _teamCache.add(member); }
+  Future<void> addTeamMember(TeamMember member) async {
+    _teamCache.add(member);
+  }
   Future<void> updateTeamMember(TeamMember member) async {
     final idx = _teamCache.indexWhere((m) => m.id == member.id);
     if (idx >= 0) _teamCache[idx] = member;
   }
-  Future<void> deleteTeamMember(String id) async { _teamCache.removeWhere((m) => m.id == id); }
+  Future<void> deleteTeamMember(String id) async {
+    _teamCache.removeWhere((m) => m.id == id);
+  }
 
   // ========== Task CRUD ==========
   List<Task> getAllTasks() => List.from(_taskCache);
@@ -43,12 +54,16 @@ class DataService {
       _taskCache.where((t) => t.assigneeId == assigneeId).toList();
   List<Task> getTasksByDate(DateTime date) =>
       _taskCache.where((t) => t.dueDate.year == date.year && t.dueDate.month == date.month && t.dueDate.day == date.day).toList();
-  Future<void> addTask(Task task) async { _taskCache.add(task); }
+  Future<void> addTask(Task task) async {
+    _taskCache.add(task);
+  }
   Future<void> updateTask(Task task) async {
     final idx = _taskCache.indexWhere((t) => t.id == task.id);
     if (idx >= 0) _taskCache[idx] = task;
   }
-  Future<void> deleteTask(String id) async { _taskCache.removeWhere((t) => t.id == id); }
+  Future<void> deleteTask(String id) async {
+    _taskCache.removeWhere((t) => t.id == id);
+  }
 
   // ========== Contact Assignment CRUD ==========
   List<ContactAssignment> getAllAssignments() => List.from(_assignmentCache);
@@ -56,24 +71,32 @@ class DataService {
       _assignmentCache.where((a) => a.contactId == contactId).toList();
   List<ContactAssignment> getAssignmentsByMember(String memberId) =>
       _assignmentCache.where((a) => a.memberId == memberId).toList();
-  Future<void> addAssignment(ContactAssignment assignment) async { _assignmentCache.add(assignment); }
+  Future<void> addAssignment(ContactAssignment assignment) async {
+    _assignmentCache.add(assignment);
+  }
   Future<void> updateAssignment(ContactAssignment assignment) async {
     final idx = _assignmentCache.indexWhere((a) => a.id == assignment.id);
     if (idx >= 0) _assignmentCache[idx] = assignment;
   }
-  Future<void> deleteAssignment(String id) async { _assignmentCache.removeWhere((a) => a.id == id); }
+  Future<void> deleteAssignment(String id) async {
+    _assignmentCache.removeWhere((a) => a.id == id);
+  }
 
   // ========== Factory CRUD ==========
   List<ProductionFactory> getAllFactories() => List.from(_factoryCache);
   ProductionFactory? getFactory(String id) {
     try { return _factoryCache.firstWhere((f) => f.id == id); } catch (_) { return null; }
   }
-  Future<void> addFactory(ProductionFactory factory) async { _factoryCache.add(factory); }
+  Future<void> addFactory(ProductionFactory factory) async {
+    _factoryCache.add(factory);
+  }
   Future<void> updateFactory(ProductionFactory factory) async {
     final idx = _factoryCache.indexWhere((f) => f.id == factory.id);
     if (idx >= 0) _factoryCache[idx] = factory;
   }
-  Future<void> deleteFactory(String id) async { _factoryCache.removeWhere((f) => f.id == id); }
+  Future<void> deleteFactory(String id) async {
+    _factoryCache.removeWhere((f) => f.id == id);
+  }
 
   // ========== ProductionOrder CRUD ==========
   List<ProductionOrder> getAllProductionOrders() => List.from(_productionCache);
@@ -88,12 +111,16 @@ class DataService {
       _productionCache.where((p) => p.status == status).toList();
   List<ProductionOrder> getActiveProductions() =>
       _productionCache.where((p) => ProductionStatus.activeStatuses.contains(p.status)).toList();
-  Future<void> addProductionOrder(ProductionOrder order) async { _productionCache.add(order); }
+  Future<void> addProductionOrder(ProductionOrder order) async {
+    _productionCache.add(order);
+  }
   Future<void> updateProductionOrder(ProductionOrder order) async {
     final idx = _productionCache.indexWhere((p) => p.id == order.id);
     if (idx >= 0) _productionCache[idx] = order;
   }
-  Future<void> deleteProductionOrder(String id) async { _productionCache.removeWhere((p) => p.id == id); }
+  Future<void> deleteProductionOrder(String id) async {
+    _productionCache.removeWhere((p) => p.id == id);
+  }
 
   // ========== Completed Tasks History ==========
   List<Task> getCompletedTasks() =>
@@ -109,17 +136,16 @@ class DataService {
     return stats;
   }
 
-  // ========== Init ==========
+  // ========== Init (纯本地，加载种子数据) ==========
   Future<void> init() async {
     _productsCache = _builtInProducts();
     _factoryCache.addAll(_builtInFactories());
     _teamCache.addAll(_builtInTeam());
     _contactsCache = _builtInContacts();
     _dealsCache = _builtInDeals();
-  }
-
-  Future<void> syncFromCloud() async {
-    // No-op in local mode
+    if (kDebugMode) {
+      debugPrint('[DataService] Loaded: ${_contactsCache.length} contacts, ${_dealsCache.length} deals, ${_productsCache.length} products');
+    }
   }
 
   // ========== Contact CRUD ==========
@@ -145,7 +171,9 @@ class DataService {
     final idx = _relationsCache.indexWhere((r) => r.id == relation.id);
     if (idx >= 0) { _relationsCache[idx] = relation; } else { _relationsCache.add(relation); }
   }
-  Future<void> deleteRelation(String id) async { _relationsCache.removeWhere((r) => r.id == id); }
+  Future<void> deleteRelation(String id) async {
+    _relationsCache.removeWhere((r) => r.id == id);
+  }
 
   // ========== Deal CRUD ==========
   List<Deal> getAllDeals() => List.from(_dealsCache);
@@ -155,7 +183,9 @@ class DataService {
     final idx = _dealsCache.indexWhere((d) => d.id == deal.id);
     if (idx >= 0) { _dealsCache[idx] = deal; } else { _dealsCache.add(deal); }
   }
-  Future<void> deleteDeal(String id) async { _dealsCache.removeWhere((d) => d.id == id); }
+  Future<void> deleteDeal(String id) async {
+    _dealsCache.removeWhere((d) => d.id == id);
+  }
 
   // ========== Interaction CRUD ==========
   List<Interaction> getAllInteractions() => List.from(_interactionsCache);
@@ -165,7 +195,9 @@ class DataService {
     final idx = _interactionsCache.indexWhere((i) => i.id == interaction.id);
     if (idx >= 0) { _interactionsCache[idx] = interaction; } else { _interactionsCache.add(interaction); }
   }
-  Future<void> deleteInteraction(String id) async { _interactionsCache.removeWhere((i) => i.id == id); }
+  Future<void> deleteInteraction(String id) async {
+    _interactionsCache.removeWhere((i) => i.id == id);
+  }
 
   // ========== Product CRUD ==========
   List<Product> getAllProducts() => List.from(_productsCache);
@@ -177,7 +209,9 @@ class DataService {
     final idx = _productsCache.indexWhere((p) => p.id == product.id);
     if (idx >= 0) { _productsCache[idx] = product; } else { _productsCache.add(product); }
   }
-  Future<void> deleteProduct(String id) async { _productsCache.removeWhere((p) => p.id == id); }
+  Future<void> deleteProduct(String id) async {
+    _productsCache.removeWhere((p) => p.id == id);
+  }
 
   // ========== Sales Order CRUD ==========
   List<SalesOrder> getAllOrders() => List.from(_ordersCache);
@@ -186,14 +220,20 @@ class DataService {
     final idx = _ordersCache.indexWhere((o) => o.id == order.id);
     if (idx >= 0) { _ordersCache[idx] = order; } else { _ordersCache.add(order); }
   }
-  Future<void> deleteOrder(String id) async { _ordersCache.removeWhere((o) => o.id == id); }
+  Future<void> deleteOrder(String id) async {
+    _ordersCache.removeWhere((o) => o.id == id);
+  }
 
   // ========== Inventory CRUD ==========
   List<InventoryRecord> getAllInventory() => List.from(_inventoryCache);
   List<InventoryRecord> getInventoryByProduct(String productId) =>
       _inventoryCache.where((r) => r.productId == productId).toList();
-  Future<void> addInventoryRecord(InventoryRecord record) async { _inventoryCache.add(record); }
-  Future<void> deleteInventoryRecord(String id) async { _inventoryCache.removeWhere((r) => r.id == id); }
+  Future<void> addInventoryRecord(InventoryRecord record) async {
+    _inventoryCache.add(record);
+  }
+  Future<void> deleteInventoryRecord(String id) async {
+    _inventoryCache.removeWhere((r) => r.id == id);
+  }
 
   List<InventoryStock> getInventoryStocks() {
     final stockMap = <String, InventoryStock>{};
@@ -252,161 +292,157 @@ class DataService {
 
   // ========== Built-in Product Catalog ==========
   List<Product> _builtInProducts() => [
-    Product(id: 'prod-exo-001', code: 'NS-EX0-001', name: '\u5916\u6ccc\u4f53\u539f\u6db2 300\u5104', nameJa: '\u30a8\u30af\u30bd\u30bd\u30fc\u30e0\u539f\u6db2 300\u5104\u5358\u4f4d', category: 'exosome',
-      description: '\u9ad8\u7d14\u5ea6\u5916\u6ccc\u4f53\u539f\u6db2\uff0c\u542b300\u5104\u5358\u4f4d\u5916\u6ccc\u4f53\u7c92\u5b50\u3002\u9069\u7528\u4e8e\u808c\u819a\u518d\u751f\u3001\u6297\u8001\u5316\u6cbb\u7597\u3002',
-      specification: '300\u5104\u5358\u4f4d/\u74f6', unitsPerBox: 5, agentPrice: 30000, clinicPrice: 40000, retailPrice: 100000,
+    Product(id: 'prod-exo-001', code: 'NS-EX0-001', name: '外泌体原液 300亿', nameJa: 'エクソソーム原液 300億単位', category: 'exosome',
+      description: '高纯度外泌体原液，含300亿单位外泌体粒子。适用于肌肤再生、抗老化治疗。',
+      specification: '300億単位/瓶', unitsPerBox: 5, agentPrice: 30000, clinicPrice: 40000, retailPrice: 100000,
       agentTotalPrice: 150000, clinicTotalPrice: 200000, retailTotalPrice: 500000,
-      storageMethod: '2-8\u00b0C \u51b7\u85cf\u4fdd\u5b58', shelfLife: '2\u5e74', usage: '\u9759\u8108\u6ce8\u5c04/\u70b9\u6ef4/\u5c40\u90e8\u6ce8\u5c04', notes: '\u4ee3\u7406\u6298\u625830%\u3001\u8bca\u6240\u6298\u625840%'),
-    Product(id: 'prod-exo-002', code: 'NS-EX0-002', name: '\u5916\u6ccc\u4f53\u539f\u6db2 500\u5104', nameJa: '\u30a8\u30af\u30bd\u30bd\u30fc\u30e0\u539f\u6db2 500\u5104\u5358\u4f4d', category: 'exosome',
-      description: '\u9ad8\u6fc3\u5ea6\u5916\u6ccc\u4f53\u539f\u6db2\uff0c\u542b500\u5104\u5358\u4f4d\u5916\u6ccc\u4f53\u7c92\u5b50\u3002',
-      specification: '500\u5104\u5358\u4f4d/\u74f6', unitsPerBox: 5, agentPrice: 45000, clinicPrice: 60000, retailPrice: 150000,
+      storageMethod: '2-8°C 冷藏保存', shelfLife: '2年', usage: '静脉注射/点滴/局部注射', notes: '代理折扣30%、诊所折扣40%'),
+    Product(id: 'prod-exo-002', code: 'NS-EX0-002', name: '外泌体原液 500亿', nameJa: 'エクソソーム原液 500億単位', category: 'exosome',
+      description: '高浓度外泌体原液，含500亿单位外泌体粒子。',
+      specification: '500億単位/瓶', unitsPerBox: 5, agentPrice: 45000, clinicPrice: 60000, retailPrice: 150000,
       agentTotalPrice: 225000, clinicTotalPrice: 300000, retailTotalPrice: 750000,
-      storageMethod: '2-8\u00b0C \u51b7\u85cf\u4fdd\u5b58', shelfLife: '2\u5e74', usage: '\u9759\u8108\u6ce8\u5c04/\u70b9\u6ef4/\u5c40\u90e8\u6ce8\u5c04', notes: '\u4ee3\u7406\u6298\u625830%\u3001\u8bca\u6240\u6298\u625840%'),
-    Product(id: 'prod-exo-003', code: 'NS-EX0-003', name: '\u5916\u6ccc\u4f53\u539f\u6db2 1000\u5104', nameJa: '\u30a8\u30af\u30bd\u30bd\u30fc\u30e0\u539f\u6db2 1000\u5104\u5358\u4f4d', category: 'exosome',
-      description: '\u8d85\u9ad8\u6fc3\u5ea6\u5916\u6ccc\u4f53\u539f\u6db2\uff0c\u542b1000\u5104\u5358\u4f4d\u5916\u6ccc\u4f53\u7c92\u5b50\u3002\u9802\u7d1a\u914d\u65b9\u3002',
-      specification: '1000\u5104\u5358\u4f4d/\u74f6', unitsPerBox: 5, agentPrice: 105000, clinicPrice: 140000, retailPrice: 350000,
+      storageMethod: '2-8°C 冷藏保存', shelfLife: '2年', usage: '静脉注射/点滴/局部注射', notes: '代理折扣30%、诊所折扣40%'),
+    Product(id: 'prod-exo-003', code: 'NS-EX0-003', name: '外泌体原液 1000亿', nameJa: 'エクソソーム原液 1000億単位', category: 'exosome',
+      description: '超高浓度外泌体原液，含1000亿单位外泌体粒子。顶级配方。',
+      specification: '1000億単位/瓶', unitsPerBox: 5, agentPrice: 105000, clinicPrice: 140000, retailPrice: 350000,
       agentTotalPrice: 525000, clinicTotalPrice: 700000, retailTotalPrice: 1750000,
-      storageMethod: '2-8\u00b0C \u51b7\u85cf\u4fdd\u5b58', shelfLife: '2\u5e74', usage: '\u9759\u8108\u6ce8\u5c04/\u70b9\u6ef4/\u5c40\u90e8\u6ce8\u5c04', notes: '\u4ee3\u7406\u6298\u625830%\u3001\u8bca\u6240\u6298\u625840%'),
-    Product(id: 'prod-nad-001', code: 'NS-NAD-001', name: 'NAD+ \u6ce8\u5c04\u6db2 250mg', nameJa: 'NAD+ \u6ce8\u5c04\u6db2 250mg', category: 'nad',
-      description: '\u9ad8\u7d14\u5ea6NAD+\u6ce8\u5c04\u6db2\uff0c\u6bcf\u74f6\u542b250mg NAD+\u3002\u4fc3\u9032\u7d30\u80de\u80fd\u91cf\u4ee3\u8b1d\u3002',
-      specification: '250mg/\u74f6', unitsPerBox: 5, agentPrice: 12000, clinicPrice: 16000, retailPrice: 40000,
+      storageMethod: '2-8°C 冷藏保存', shelfLife: '2年', usage: '静脉注射/点滴/局部注射', notes: '代理折扣30%、诊所折扣40%'),
+    Product(id: 'prod-nad-001', code: 'NS-NAD-001', name: 'NAD+ 注射液 250mg', nameJa: 'NAD+ 注射液 250mg', category: 'nad',
+      description: '高纯度NAD+注射液，每瓶含250mg NAD+。促进细胞能量代谢。',
+      specification: '250mg/瓶', unitsPerBox: 5, agentPrice: 12000, clinicPrice: 16000, retailPrice: 40000,
       agentTotalPrice: 60000, clinicTotalPrice: 80000, retailTotalPrice: 200000,
-      storageMethod: '2-8\u00b0C \u51b7\u85cf\u4fdd\u5b58', shelfLife: '2\u5e74', usage: '\u9759\u8108\u6ce8\u5c04/\u70b9\u6ef4', notes: '\u4ee3\u7406\u6298\u625830%\u3001\u8bca\u6240\u6298\u625840%'),
-    Product(id: 'prod-nmn-001', code: 'NS-NMN-001', name: 'NMN \u70b9\u9f3b/\u5438\u5165', nameJa: 'NMN \u70b9\u9f3b\u30fb\u5438\u5165', category: 'nmn',
-      description: 'NMN\u70b9\u9f3b/\u5438\u5165\u5236\u5242\u3002\u751f\u7269\u5229\u7528\u5ea6\u9ad8\u3002',
-      specification: '\u70b9\u9f3b/\u5438\u5165\u578b', unitsPerBox: 1, agentPrice: 22000, clinicPrice: 32000, retailPrice: 60000,
+      storageMethod: '2-8°C 冷藏保存', shelfLife: '2年', usage: '静脉注射/点滴', notes: '代理折扣30%、诊所折扣40%'),
+    Product(id: 'prod-nmn-001', code: 'NS-NMN-001', name: 'NMN 点鼻/吸入', nameJa: 'NMN 点鼻・吸入', category: 'nmn',
+      description: 'NMN点鼻/吸入制剂。生物利用度高。',
+      specification: '点鼻/吸入型', unitsPerBox: 1, agentPrice: 22000, clinicPrice: 32000, retailPrice: 60000,
       agentTotalPrice: 22000, clinicTotalPrice: 32000, retailTotalPrice: 60000,
-      storageMethod: '\u5e38\u6e29\u4fdd\u5b58', shelfLife: '2\u5e74', usage: '\u70b9\u9f3b/\u5438\u5165\u4f7f\u7528', notes: 'NMN 700mg\u914d\u5408'),
-    Product(id: 'prod-nmn-002', code: 'NS-NMN-002', name: 'NMN \u80f6\u56ca', nameJa: 'NMN \u30ab\u30d7\u30bb\u30eb', category: 'nmn',
-      description: 'NMN\u53e3\u670d\u80f6\u56ca\u3002\u6bcf\u7c92\u542b\u9ad8\u7d14\u5ea6NMN\u3002',
-      specification: '\u80f6\u56ca\u578b', unitsPerBox: 1, agentPrice: 9000, clinicPrice: 12000, retailPrice: 30000,
+      storageMethod: '常温保存', shelfLife: '2年', usage: '点鼻/吸入使用', notes: 'NMN 700mg配合'),
+    Product(id: 'prod-nmn-002', code: 'NS-NMN-002', name: 'NMN 胶囊', nameJa: 'NMN カプセル', category: 'nmn',
+      description: 'NMN口服胶囊。每粒含高纯度NMN。',
+      specification: '胶囊型', unitsPerBox: 1, agentPrice: 9000, clinicPrice: 12000, retailPrice: 30000,
       agentTotalPrice: 9000, clinicTotalPrice: 12000, retailTotalPrice: 30000,
-      storageMethod: '\u5e38\u6e29\u4fdd\u5b58', shelfLife: '2\u5e74', usage: '\u6bcf\u65e51-2\u7c92\uff0c\u53e3\u670d'),
+      storageMethod: '常温保存', shelfLife: '2年', usage: '每日1-2粒，口服'),
   ];
 
-  // ========== Built-in Factory Data ==========
   List<ProductionFactory> _builtInFactories() => [
     ProductionFactory(
-      id: 'factory-001', name: '\u682a\u5f0f\u4f1a\u793e\u30b7\u30a8\u30f3', nameJa: '\u682a\u5f0f\u4f1a\u793e\u30b7\u30a8\u30f3',
-      address: '\u4e09\u91cd\u770c\u6d25\u5e02\u6728\u6c5f\u753a1\u756a11\u53f7', representative: '\u6c60\u7530 \u5e79',
-      description: '\u9ad8\u7aef\u751f\u7269\u79d1\u6280\u52a0\u5de5\u4f01\u696d\uff0c\u6838\u5fc3\u51bb\u5e72\u6280\u672f\uff0c\u4e13\u6ce8\u518d\u751f\u533b\u7597\u9886\u57df\u3002',
-      certifications: ['GMP', '\u518d\u751f\u533b\u7597\u52a0\u5de5'], capabilities: ['exosome', 'nad'],
+      id: 'factory-001', name: '株式会社シエン', nameJa: '株式会社シエン',
+      address: '三重県津市木江町1番11号', representative: '池田 幹',
+      description: '高端生物科技加工企业，核心冻干技术，专注再生医疗领域。',
+      certifications: ['GMP', '再生医療加工'], capabilities: ['exosome', 'nad'],
       phone: '', email: '', isActive: true,
     ),
     ProductionFactory(
-      id: 'factory-002', name: '\u682a\u5f0f\u4f1a\u793e\u30df\u30ba\u30fb\u30d0\u30e9\u30a8\u30c6\u30a3\u30fc', nameJa: '\u682a\u5f0f\u4f1a\u793e\u30df\u30ba\u30fb\u30d0\u30e9\u30a8\u30c6\u30a3\u30fc',
-      address: '\u9759\u5ca1\u770c\u5bcc\u58eb\u5e02\u4eca\u6cc9383-5', representative: '\u85e4\u7530 \u4f38\u592b',
-      description: '\u7efc\u5408\u5065\u5eb7\u98df\u54c1\u5236\u9020\u4f01\u696d\uff0c\u6301\u6709\u591a\u9879\u56fd\u9645\u8ba4\u8bc1\u3002',
+      id: 'factory-002', name: '株式会社ミズ・バラエティー', nameJa: '株式会社ミズ・バラエティー',
+      address: '静岡県富士市今泉383-5', representative: '藤田 伸夫',
+      description: '综合健康食品制造企业，持有多项国际认证。',
       certifications: ['ISO9001', 'ISO27001', 'ISO22716', 'JIHFS', 'PrivacyMark', 'GMP'],
       capabilities: ['nmn', 'skincare'], phone: '', email: '', isActive: true,
     ),
   ];
 
-  // ========== Built-in Team ==========
   List<TeamMember> _builtInTeam() => [
     TeamMember(id: 'member-001', name: 'James Liu', role: 'admin', email: 'james@dealnavigator.com'),
-    TeamMember(id: 'member-002', name: '\u7530\u4e2d\u592a\u90ce', role: 'manager', email: 'tanaka@dealnavigator.com'),
-    TeamMember(id: 'member-003', name: '\u738b\u5c0f\u660e', role: 'member', email: 'xiaoming@dealnavigator.com'),
+    TeamMember(id: 'member-002', name: '田中太郎', role: 'manager', email: 'tanaka@dealnavigator.com'),
+    TeamMember(id: 'member-003', name: '王小明', role: 'member', email: 'xiaoming@dealnavigator.com'),
   ];
 
-  // ========== Built-in Contacts ==========
   List<Contact> _builtInContacts() {
     final now = DateTime.now();
     return [
-      Contact(id: 'c-001', name: '\u5f20\u4f1f', company: '\u4e0a\u6d77\u6cf0\u5eb7\u533b\u7f8e', position: '\u603b\u7ecf\u7406',
-        phone: '+86-138-0000-1001', email: 'zhangwei@taikang.com', address: '\u4e0a\u6d77\u5e02\u9759\u5b89\u533a',
+      Contact(id: 'c-001', name: '张伟', company: '上海泰康医美', position: '总经理',
+        phone: '+86-138-0000-1001', email: 'zhangwei@taikang.com', address: '上海市静安区',
         industry: Industry.healthcare, strength: RelationshipStrength.hot, myRelation: MyRelationType.agent,
-        notes: '\u534e\u4e1c\u533a\u603b\u4ee3\u7406\uff0c\u6708\u91c7\u8d2d\u91cf\u7a33\u5b9a', tags: ['VIP', '\u4ee3\u7406'],
+        notes: '华东区总代理，月采购量稳定', tags: ['VIP', '代理'],
         createdAt: now.subtract(const Duration(days: 400)), lastContactedAt: now.subtract(const Duration(days: 1)),
         businessCategory: 'agent'),
-      Contact(id: 'c-002', name: 'Dr. \u7530\u4e2d\u7f8e\u54b2', nameReading: '\u305f\u306a\u304b \u307f\u3055\u304d', company: '\u516d\u672c\u6728\u30b9\u30ad\u30f3\u30af\u30ea\u30cb\u30c3\u30af', position: '\u9662\u957f',
-        phone: '+81-3-5555-0001', email: 'misaki@roppongi-skin.jp', address: '\u6771\u4eac\u90fd\u6e2f\u533a\u516d\u672c\u67283-1-1',
+      Contact(id: 'c-002', name: 'Dr. 田中美咲', nameReading: 'たなか みさき', company: '六本木スキンクリニック', position: '院长',
+        phone: '+81-3-5555-0001', email: 'misaki@roppongi-skin.jp', address: '東京都港区六本木3-1-1',
         industry: Industry.healthcare, strength: RelationshipStrength.hot, myRelation: MyRelationType.clinic,
-        notes: '\u6708\u91c7\u8d2d\u5916\u6ccc\u4f53\u6ce8\u5c04\u6db220\u652f', tags: ['\u8bca\u6240', '\u4e1c\u4eac', 'VIP'],
+        notes: '月采购外泌体注射液20支', tags: ['诊所', '东京', 'VIP'],
         createdAt: now.subtract(const Duration(days: 380)), lastContactedAt: now.subtract(const Duration(hours: 6)),
         businessCategory: 'clinic'),
-      Contact(id: 'c-003', name: '\u674e\u660e', company: '\u6df1\u5733\u5065\u5eb7\u4f18\u9009', position: '\u91c7\u8d2d\u603b\u76d1',
-        phone: '+86-135-0000-2002', email: 'liming@healthbest.cn', address: '\u6df1\u5733\u5e02\u5357\u5c71\u533a',
+      Contact(id: 'c-003', name: '李明', company: '深圳健康优选', position: '采购总监',
+        phone: '+86-135-0000-2002', email: 'liming@healthbest.cn', address: '深圳市南山区',
         industry: Industry.trading, strength: RelationshipStrength.warm, myRelation: MyRelationType.retailer,
-        notes: '\u8de8\u5883\u7535\u5546\u6e20\u9053\uff0cNMN\u4ea7\u54c1\u4e3a\u4e3b', tags: ['\u96f6\u552e', '\u7535\u5546'],
+        notes: '跨境电商渠道，NMN产品为主', tags: ['零售', '电商'],
         createdAt: now.subtract(const Duration(days: 340)), lastContactedAt: now.subtract(const Duration(days: 3)),
         businessCategory: 'retail'),
-      Contact(id: 'c-004', name: '\u4f50\u85e4\u5065\u4e00', nameReading: '\u3055\u3068\u3046 \u3051\u3093\u3044\u3061', company: '\u4e1c\u4eac\u7f8e\u5bb9\u534f\u4f1a', position: '\u7406\u4e8b',
-        phone: '+81-3-6666-0001', email: 'sato.k@beauty-assoc.jp', address: '\u6771\u4eac\u90fd\u6e0b\u8c37\u533a',
+      Contact(id: 'c-004', name: '佐藤健一', nameReading: 'さとう けんいち', company: '东京美容协会', position: '理事',
+        phone: '+81-3-6666-0001', email: 'sato.k@beauty-assoc.jp', address: '東京都渋谷区',
         industry: Industry.consulting, strength: RelationshipStrength.warm, myRelation: MyRelationType.advisor,
-        notes: '\u884c\u4e1a\u8d44\u6e90\u4ecb\u7ecd\uff0c\u5173\u952e\u4eba\u8109\u8282\u70b9', tags: ['\u987e\u95ee', '\u4e1c\u4eac'],
+        notes: '行业资源介绍，关键人脉节点', tags: ['顾问', '东京'],
         createdAt: now.subtract(const Duration(days: 310)), lastContactedAt: now.subtract(const Duration(days: 22))),
-      Contact(id: 'c-005', name: '\u738b\u82b3', company: '\u676d\u5dde\u60a6\u989c\u533b\u7f8e', position: '\u8fd0\u8425\u603b\u76d1',
-        phone: '+86-139-0000-3003', email: 'wangfang@yueyan.com', address: '\u676d\u5dde\u5e02\u897f\u6e56\u533a',
+      Contact(id: 'c-005', name: '王芳', company: '杭州悦颜医美', position: '运营总监',
+        phone: '+86-139-0000-3003', email: 'wangfang@yueyan.com', address: '杭州市西湖区',
         industry: Industry.healthcare, strength: RelationshipStrength.hot, myRelation: MyRelationType.clinic,
-        notes: '3\u5bb6\u8fde\u9501\u8bca\u6240\uff0c\u6708\u9500\u7a33\u5b9a', tags: ['\u8bca\u6240', '\u676d\u5dde', 'VIP'],
+        notes: '3家连锁诊所，月销稳定', tags: ['诊所', '杭州', 'VIP'],
         createdAt: now.subtract(const Duration(days: 270)), lastContactedAt: now.subtract(const Duration(days: 2)),
         businessCategory: 'clinic'),
       Contact(id: 'c-006', name: 'Mike Chen', company: 'Pacific Health Group', position: 'VP Business Dev',
         phone: '+1-415-555-0088', email: 'mchen@pacifichealth.com', address: 'San Francisco, CA',
         industry: Industry.trading, strength: RelationshipStrength.cool, myRelation: MyRelationType.agent,
-        notes: '\u5317\u7f8e\u5e02\u573a\u6f5c\u5728\u4ee3\u7406', tags: ['\u5317\u7f8e', '\u5f00\u53d1\u4e2d'],
+        notes: '北美市场潜在代理', tags: ['北美', '开发中'],
         createdAt: now.subtract(const Duration(days: 175)), lastContactedAt: now.subtract(const Duration(days: 12)),
         businessCategory: 'agent'),
-      Contact(id: 'c-007', name: '\u5c71\u672c\u771f\u7531\u7f8e', nameReading: '\u3084\u307e\u3082\u3068 \u307e\u3086\u307f', company: '\u9280\u5ea7\u30d3\u30e5\u30fc\u30c6\u30a3\u30fc\u30e9\u30dc', position: '\u30aa\u30fc\u30ca\u30fc',
-        phone: '+81-3-7777-0001', email: 'yamamoto@ginza-beauty.jp', address: '\u6771\u4eac\u90fd\u4e2d\u592e\u533a\u9280\u5ea75-1-1',
+      Contact(id: 'c-007', name: '山本真由美', nameReading: 'やまもと まゆみ', company: '銀座ビューティーラボ', position: 'オーナー',
+        phone: '+81-3-7777-0001', email: 'yamamoto@ginza-beauty.jp', address: '東京都中央区銀座5-1-1',
         industry: Industry.healthcare, strength: RelationshipStrength.warm, myRelation: MyRelationType.clinic,
-        notes: '\u9ad8\u7aef\u7f8e\u5bb9\u9662\uff0c\u5bf9\u5916\u6ccc\u4f53\u9762\u819c\u611f\u5174\u8da3', tags: ['\u8bca\u6240', '\u94f6\u5ea7'],
+        notes: '高端美容院，对外泌体面膜感兴趣', tags: ['诊所', '银座'],
         createdAt: now.subtract(const Duration(days: 160)), lastContactedAt: now.subtract(const Duration(days: 6)),
         businessCategory: 'clinic'),
-      Contact(id: 'c-008', name: '\u8d75\u5927\u529b', company: '\u6210\u90fd\u5eb7\u590d\u5802', position: '\u5408\u4f19\u4eba',
-        phone: '+86-136-0000-4004', email: 'zhaodl@kangfutang.cn', address: '\u6210\u90fd\u5e02\u9526\u6c5f\u533a',
+      Contact(id: 'c-008', name: '赵大力', company: '成都康复堂', position: '合伙人',
+        phone: '+86-136-0000-4004', email: 'zhaodl@kangfutang.cn', address: '成都市锦江区',
         industry: Industry.healthcare, strength: RelationshipStrength.cool, myRelation: MyRelationType.retailer,
-        notes: '\u7ebf\u4e0b\u96f6\u552e+\u793e\u7fa4\u56e2\u8d2d', tags: ['\u96f6\u552e', '\u6210\u90fd'],
+        notes: '线下零售+社群团购', tags: ['零售', '成都'],
         createdAt: now.subtract(const Duration(days: 130)), lastContactedAt: now.subtract(const Duration(days: 17)),
         businessCategory: 'retail'),
-      Contact(id: 'c-009', name: '\u91d1\u76f8\u54f2', nameReading: '\uae40\uc0c1\ucca0', company: 'Seoul Derm Clinic', position: 'Director',
-        phone: '+82-2-555-0099', email: 'kim@seoulderm.kr', address: '\uc11c\uc6b8 \uac15\ub0a8\uad6c',
+      Contact(id: 'c-009', name: '金相哲', nameReading: '김상철', company: 'Seoul Derm Clinic', position: 'Director',
+        phone: '+82-2-555-0099', email: 'kim@seoulderm.kr', address: '서울 강남구',
         industry: Industry.healthcare, strength: RelationshipStrength.cool, myRelation: MyRelationType.clinic,
-        notes: '\u97e9\u56fd\u76ae\u80a4\u79d1\u8bca\u6240\uff0c\u8003\u5bdf\u4e2d', tags: ['\u8bca\u6240', '\u97e9\u56fd'],
+        notes: '韩国皮肤科诊所，考察中', tags: ['诊所', '韩国'],
         createdAt: now.subtract(const Duration(days: 95)), lastContactedAt: now.subtract(const Duration(days: 28)),
         businessCategory: 'clinic'),
-      Contact(id: 'c-010', name: '\u6797\u5fd7\u8fdc', company: '\u53f0\u5317\u751f\u6280\u80a1\u4efd\u6709\u9650\u516c\u53f8', position: 'CEO',
-        phone: '+886-2-8888-0001', email: 'lin@taipei-biotech.tw', address: '\u53f0\u5317\u5e02\u4fe1\u4e49\u533a',
+      Contact(id: 'c-010', name: '林志远', company: '台北生技股份有限公司', position: 'CEO',
+        phone: '+886-2-8888-0001', email: 'lin@taipei-biotech.tw', address: '台北市信义区',
         industry: Industry.healthcare, strength: RelationshipStrength.warm, myRelation: MyRelationType.agent,
-        notes: '\u53f0\u6e7e\u533aNMN\u4ee3\u7406\u610f\u5411', tags: ['\u4ee3\u7406', '\u53f0\u6e7e'],
+        notes: '台湾区NMN代理意向', tags: ['代理', '台湾'],
         createdAt: now.subtract(const Duration(days: 225)), lastContactedAt: now.subtract(const Duration(days: 4)),
         businessCategory: 'agent'),
     ];
   }
 
-  // ========== Built-in Deals ==========
   List<Deal> _builtInDeals() {
     final now = DateTime.now();
     return [
-      Deal(id: 'd-001', title: '\u4e0a\u6d77\u6cf0\u5eb7 \u5916\u6ccc\u4f53300\u4ebf \u4ee3\u7406\u6279\u53d1', description: '\u534e\u4e1c\u533a\u9996\u6279500\u74f6\u8bd5\u9500',
-        contactId: 'c-001', contactName: '\u5f20\u4f1f', stage: DealStage.negotiation, amount: 7500000, currency: 'JPY',
+      Deal(id: 'd-001', title: '上海泰康 外泌体300亿 代理批发', description: '华东区首批500瓶试销',
+        contactId: 'c-001', contactName: '张伟', stage: DealStage.negotiation, amount: 7500000, currency: 'JPY',
         createdAt: now.subtract(const Duration(days: 72)), expectedCloseDate: now.add(const Duration(days: 33)),
-        updatedAt: now.subtract(const Duration(days: 1)), probability: 70, tags: ['\u4ee3\u7406', '\u534e\u4e1c']),
-      Deal(id: 'd-002', title: '\u516d\u672c\u6728\u8bca\u6240 \u6ce8\u5c04\u6db2\u6708\u5ea6\u8ba2\u5355', description: '\u6708\u5ea620\u652f\u5916\u6ccc\u4f53\u6ce8\u5c04\u6db2',
-        contactId: 'c-002', contactName: 'Dr. \u7530\u4e2d\u7f8e\u54b2', stage: DealStage.ordered, amount: 2800000, currency: 'JPY',
+        updatedAt: now.subtract(const Duration(days: 1)), probability: 70, tags: ['代理', '华东']),
+      Deal(id: 'd-002', title: '六本木诊所 注射液月度订单', description: '月度20支外泌体注射液',
+        contactId: 'c-002', contactName: 'Dr. 田中美咲', stage: DealStage.ordered, amount: 2800000, currency: 'JPY',
         createdAt: now.subtract(const Duration(days: 88)), expectedCloseDate: now.add(const Duration(days: 17)),
-        updatedAt: now.subtract(const Duration(hours: 6)), probability: 95, tags: ['\u8bca\u6240', '\u6708\u5ea6']),
-      Deal(id: 'd-003', title: '\u6df1\u5733\u5065\u5eb7\u4f18\u9009 NMN\u8de8\u5883\u7535\u5546', description: 'NMN\u80f6\u56ca\u9996\u6279200\u74f6',
-        contactId: 'c-003', contactName: '\u674e\u660e', stage: DealStage.proposal, amount: 1800000, currency: 'JPY',
+        updatedAt: now.subtract(const Duration(hours: 6)), probability: 95, tags: ['诊所', '月度']),
+      Deal(id: 'd-003', title: '深圳健康优选 NMN跨境电商', description: 'NMN胶囊首批200瓶',
+        contactId: 'c-003', contactName: '李明', stage: DealStage.proposal, amount: 1800000, currency: 'JPY',
         createdAt: now.subtract(const Duration(days: 32)), expectedCloseDate: now.add(const Duration(days: 49)),
-        updatedAt: now.subtract(const Duration(days: 3)), probability: 40, tags: ['\u96f6\u552e', '\u7535\u5546']),
-      Deal(id: 'd-004', title: '\u60a6\u989c\u533b\u7f8e \u5916\u6ccc\u4f53\u9762\u819c+\u6ce8\u5c04\u6db2', description: '3\u5bb6\u8fde\u9501\u8bca\u6240\u6708\u5ea6\u91c7\u8d2d',
-        contactId: 'c-005', contactName: '\u738b\u82b3', stage: DealStage.ordered, amount: 3000000, currency: 'JPY',
+        updatedAt: now.subtract(const Duration(days: 3)), probability: 40, tags: ['零售', '电商']),
+      Deal(id: 'd-004', title: '悦颜医美 外泌体面膜+注射液', description: '3家连锁诊所月度采购',
+        contactId: 'c-005', contactName: '王芳', stage: DealStage.ordered, amount: 3000000, currency: 'JPY',
         createdAt: now.subtract(const Duration(days: 114)), expectedCloseDate: now.add(const Duration(days: 9)),
-        updatedAt: now.subtract(const Duration(days: 2)), probability: 90, tags: ['\u8bca\u6240', '\u8fde\u9501']),
-      Deal(id: 'd-005', title: 'Pacific Health \u5317\u7f8e\u72ec\u5bb6\u4ee3\u7406', description: '\u5317\u7f8e\u5e02\u573a\u72ec\u5bb6\u4ee3\u7406\u6743\u8c08\u5224',
+        updatedAt: now.subtract(const Duration(days: 2)), probability: 90, tags: ['诊所', '连锁']),
+      Deal(id: 'd-005', title: 'Pacific Health 北美独家代理', description: '北美市场独家代理权谈判',
         contactId: 'c-006', contactName: 'Mike Chen', stage: DealStage.contacted, amount: 50000000, currency: 'JPY',
         createdAt: now.subtract(const Duration(days: 22)), expectedCloseDate: now.add(const Duration(days: 139)),
-        updatedAt: now.subtract(const Duration(days: 12)), probability: 15, tags: ['\u5317\u7f8e', '\u72ec\u5bb6']),
-      Deal(id: 'd-006', title: '\u94f6\u5ea7\u7f8e\u5bb9\u9662 \u9762\u819c\u8bd5\u7528\u91c7\u8d2d', description: '\u9ad8\u7aef\u5916\u6ccc\u4f53\u9762\u819c\u8bd5\u7528\u88c5',
-        contactId: 'c-007', contactName: '\u5c71\u672c\u771f\u7531\u7f8e', stage: DealStage.proposal, amount: 400000, currency: 'JPY',
+        updatedAt: now.subtract(const Duration(days: 12)), probability: 15, tags: ['北美', '独家']),
+      Deal(id: 'd-006', title: '银座美容院 面膜试用采购', description: '高端外泌体面膜试用装',
+        contactId: 'c-007', contactName: '山本真由美', stage: DealStage.proposal, amount: 400000, currency: 'JPY',
         createdAt: now.subtract(const Duration(days: 17)), expectedCloseDate: now.add(const Duration(days: 18)),
-        updatedAt: now.subtract(const Duration(days: 6)), probability: 55, tags: ['\u8bca\u6240', '\u9762\u819c']),
-      Deal(id: 'd-007', title: '\u53f0\u5317\u751f\u6280 NMN Premium \u53f0\u6e7e\u4ee3\u7406', description: '\u53f0\u6e7e\u533aNMN\u5168\u7ebf\u4ea7\u54c1\u72ec\u5bb6\u4ee3\u7406',
-        contactId: 'c-010', contactName: '\u6797\u5fd7\u8fdc', stage: DealStage.negotiation, amount: 12000000, currency: 'JPY',
+        updatedAt: now.subtract(const Duration(days: 6)), probability: 55, tags: ['诊所', '面膜']),
+      Deal(id: 'd-007', title: '台北生技 NMN Premium 台湾代理', description: '台湾区NMN全线产品独家代理',
+        contactId: 'c-010', contactName: '林志远', stage: DealStage.negotiation, amount: 12000000, currency: 'JPY',
         createdAt: now.subtract(const Duration(days: 58)), expectedCloseDate: now.add(const Duration(days: 64)),
-        updatedAt: now.subtract(const Duration(days: 4)), probability: 50, tags: ['\u4ee3\u7406', '\u53f0\u6e7e']),
+        updatedAt: now.subtract(const Duration(days: 4)), probability: 50, tags: ['代理', '台湾']),
     ];
   }
 }

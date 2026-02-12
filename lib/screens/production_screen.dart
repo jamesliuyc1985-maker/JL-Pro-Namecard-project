@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/crm_provider.dart';
 import '../models/factory.dart';
 import '../models/product.dart';
+import '../models/team.dart';
 import '../utils/theme.dart';
 import '../utils/formatters.dart';
 
@@ -171,7 +172,21 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(order.productName, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold, fontSize: 15)),
             const SizedBox(height: 2),
-            Text(order.factoryName, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            Row(children: [
+              Text(order.factoryName, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+              if (order.assigneeName.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: AppTheme.primaryPurple.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.person, color: AppTheme.primaryPurple, size: 10),
+                    const SizedBox(width: 3),
+                    Text(order.assigneeName, style: const TextStyle(color: AppTheme.primaryPurple, fontSize: 10, fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+              ],
+            ]),
           ])),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -443,6 +458,7 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
   void _showNewProductionSheet(BuildContext context, CrmProvider crm) {
     ProductionFactory? selectedFactory;
     Product? selectedProduct;
+    TeamMember? selectedAssignee;
     final qtyCtrl = TextEditingController(text: '10');
     final batchCtrl = TextEditingController();
     final notesCtrl = TextEditingController();
@@ -492,6 +508,28 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
                       ]),
                     )).toList(),
                     onChanged: (v) => setModalState(() => selectedProduct = v),
+                  ),
+                  const SizedBox(height: 12),
+                  // Select Assignee
+                  DropdownButtonFormField<TeamMember>(
+                    initialValue: selectedAssignee,
+                    decoration: const InputDecoration(labelText: '负责人 (可选)', prefixIcon: Icon(Icons.person_outline, color: AppTheme.textSecondary, size: 20)),
+                    dropdownColor: AppTheme.cardBgLight,
+                    style: const TextStyle(color: AppTheme.textPrimary),
+                    items: [
+                      const DropdownMenuItem<TeamMember>(value: null, child: Text('不指派', style: TextStyle(fontSize: 13, color: AppTheme.textSecondary))),
+                      ...crm.teamMembers.map((m) => DropdownMenuItem<TeamMember>(
+                        value: m,
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          CircleAvatar(radius: 10, backgroundColor: _roleColor(m.role), child: Text(m.name.isNotEmpty ? m.name[0] : '?', style: const TextStyle(color: Colors.white, fontSize: 10))),
+                          const SizedBox(width: 8),
+                          Text(m.name, style: const TextStyle(fontSize: 13)),
+                          const SizedBox(width: 6),
+                          Text(TeamMember.roleLabel(m.role), style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+                        ]),
+                      )),
+                    ],
+                    onChanged: (v) => setModalState(() => selectedAssignee = v),
                   ),
                   const SizedBox(height: 12),
                   Row(children: [
@@ -582,6 +620,8 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
                         batchNumber: batchCtrl.text,
                         plannedDate: plannedDate,
                         notes: notesCtrl.text,
+                        assigneeId: selectedAssignee?.id ?? '',
+                        assigneeName: selectedAssignee?.name ?? '',
                       );
                       crm.addProductionOrder(order);
                       Navigator.pop(ctx);
@@ -608,6 +648,15 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
   }
 
   // ========== Helpers ==========
+  Color _roleColor(String role) {
+    switch (role) {
+      case 'admin': return const Color(0xFFE17055);
+      case 'manager': return AppTheme.accentGold;
+      case 'member': return AppTheme.primaryBlue;
+      default: return AppTheme.textSecondary;
+    }
+  }
+
   Color _statusColor(String status) {
     switch (status) {
       case 'planned': return AppTheme.textSecondary;

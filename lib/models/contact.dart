@@ -158,6 +158,7 @@ class ContactRelation {
   String toName;
   String relationType; // 同事、合伙人、客户-供应商、朋友、校友等
   String description;
+  List<String> tags; // 关系标签（商业、私人、合作、竞争、上下游等）
   DateTime createdAt;
 
   ContactRelation({
@@ -168,8 +169,10 @@ class ContactRelation {
     required this.toName,
     required this.relationType,
     this.description = '',
+    List<String>? tags,
     DateTime? createdAt,
-  }) : createdAt = createdAt ?? DateTime.now();
+  }) : tags = tags ?? [],
+       createdAt = createdAt ?? DateTime.now();
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -179,6 +182,7 @@ class ContactRelation {
         'toName': toName,
         'relationType': relationType,
         'description': description,
+        'tags': tags,
         'createdAt': createdAt.toIso8601String(),
       };
 
@@ -191,6 +195,30 @@ class ContactRelation {
         toName: json['toName'] as String? ?? '',
         relationType: json['relationType'] as String? ?? '',
         description: json['description'] as String? ?? '',
+        tags: List<String>.from(json['tags'] ?? []),
         createdAt: DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
       );
+
+  /// 预定义关系标签
+  static const List<String> presetTags = [
+    '商业伙伴', '私人关系', '上下游', '竞争对手', '投资关系',
+    '引荐人', '校友', '同事', '家族', '行业联盟',
+  ];
+
+  /// 标签对应颜色
+  static Color tagColor(String tag) {
+    switch (tag) {
+      case '商业伙伴': return const Color(0xFF0984E3);
+      case '私人关系': return const Color(0xFFE17055);
+      case '上下游': return const Color(0xFF00B894);
+      case '竞争对手': return const Color(0xFFFF6348);
+      case '投资关系': return const Color(0xFF6C5CE7);
+      case '引荐人': return const Color(0xFFA29BFE);
+      case '校友': return const Color(0xFF74B9FF);
+      case '同事': return const Color(0xFF636E72);
+      case '家族': return const Color(0xFFFDAA5B);
+      case '行业联盟': return const Color(0xFF00CEC9);
+      default: return const Color(0xFFDFE6E9);
+    }
+  }
 }

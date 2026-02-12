@@ -11,9 +11,11 @@ import 'production_screen.dart';
 import 'calendar_task_screen.dart';
 import 'team_screen.dart';
 import 'stats_dashboard_screen.dart';
+import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final VoidCallback? onLogout;
+  const HomeScreen({super.key, this.onLogout});
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -21,16 +23,23 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
 
-  final _screens = const [
-    ProductionScreen(),          // 0 生产
-    ProductInventoryScreen(),    // 1 产品
-    PipelineScreen(),            // 2 销售
-    ContactsScreen(),            // 3 人脉
-    CalendarTaskScreen(),        // 4 任务
-    TeamScreen(),                // 5 团队
-    NetworkScreen(),             // 6 图谱
-    StatsDashboardScreen(),      // 7 统计
-  ];
+  late final List<Widget> _screens;
+
+  @override
+  void initState() {
+    super.initState();
+    _screens = [
+      const ProductionScreen(),          // 0 生产
+      const ProductInventoryScreen(),    // 1 产品
+      const PipelineScreen(),            // 2 销售
+      const ContactsScreen(),            // 3 人脉
+      const CalendarTaskScreen(),        // 4 任务
+      const TeamScreen(),                // 5 团队
+      const NetworkScreen(),             // 6 图谱
+      const StatsDashboardScreen(),      // 7 统计
+      ProfileScreen(onLogout: widget.onLogout), // 8 我的
+    ];
+  }
 
   // 上行导航项 (业务线)
   static const _topRow = [
@@ -40,12 +49,13 @@ class _HomeScreenState extends State<HomeScreen> {
     _NavDef(3, Icons.people_rounded, '人脉'),
   ];
 
-  // 下行导航项 (管理线)
+  // 下行导航项 (管理线 + 我的)
   static const _bottomRow = [
     _NavDef(4, Icons.calendar_month, '任务'),
     _NavDef(5, Icons.group_rounded, '团队'),
     _NavDef(6, Icons.hub_rounded, '图谱'),
     _NavDef(7, Icons.analytics_rounded, '统计'),
+    _NavDef(8, Icons.person_rounded, '我的'),
   ];
 
   @override
@@ -78,7 +88,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: AppTheme.textSecondary.withValues(alpha: 0.15),
                 ),
                 const SizedBox(height: 2),
-                // 下行：任务 / 团队 / 图谱 / 统计
+                // 下行：任务 / 团队 / 图谱 / 统计 / 我的
                 Row(
                   children: _bottomRow.map((n) => Expanded(child: _navItem(n))).toList(),
                 ),
@@ -190,8 +200,8 @@ class _HomeScreenState extends State<HomeScreen> {
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-        margin: const EdgeInsets.symmetric(horizontal: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+        margin: const EdgeInsets.symmetric(horizontal: 1),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(10),
           gradient: isSelected ? AppTheme.gradient : null,
@@ -199,7 +209,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(nav.icon, color: isSelected ? Colors.white : AppTheme.textSecondary, size: 18),
+            Icon(nav.icon, color: isSelected ? Colors.white : AppTheme.textSecondary, size: 17),
             const SizedBox(height: 2),
             Text(nav.label, style: TextStyle(
               color: isSelected ? Colors.white : AppTheme.textSecondary,

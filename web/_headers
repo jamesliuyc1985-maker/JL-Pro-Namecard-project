@@ -1,0 +1,13 @@
+/*
+  Cache-Control: no-cache, no-store, must-revalidate
+  X-Frame-Options: SAMEORIGIN
+  Access-Control-Allow-Origin: *
+
+/flutter_service_worker.js
+  Cache-Control: no-cache
+
+/main.dart.js
+  Cache-Control: no-cache
+
+/flutter_bootstrap.js
+  Cache-Control: no-cache

@@ -101,14 +101,13 @@ class CrmProvider extends ChangeNotifier {
 
   Future<void> syncFromCloud() async {
     _isLoading = true;
-    _syncStatus = '正在同步...';
+    _syncStatus = '正在刷新...';
     notifyListeners();
     try {
-      await _dataService.syncFromCloud();
       await loadAll();
-      _syncStatus = '同步成功';
+      _syncStatus = '刷新成功';
     } catch (e) {
-      _syncStatus = '同步失败: $e';
+      _syncStatus = '刷新失败: $e';
     }
     _isLoading = false;
     notifyListeners();
@@ -136,6 +135,7 @@ class CrmProvider extends ChangeNotifier {
   List<ContactRelation> getRelationsForContact(String contactId) =>
       _relations.where((r) => r.fromContactId == contactId || r.toContactId == contactId).toList();
   Future<void> addRelation(ContactRelation relation) async { await _dataService.saveRelation(relation); await loadAll(); }
+  Future<void> updateRelation(ContactRelation relation) async { await _dataService.saveRelation(relation); await loadAll(); }
   Future<void> deleteRelation(String id) async { await _dataService.deleteRelation(id); await loadAll(); }
 
   // Deal

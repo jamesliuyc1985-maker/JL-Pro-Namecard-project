@@ -100,6 +100,8 @@ class ProductionOrder {
   DateTime plannedDate;    // 计划生产日期
   DateTime? startedDate;   // 实际开始日期
   DateTime? completedDate; // 完成日期
+  String assigneeId;     // 指派的团队成员ID
+  String assigneeName;   // 指派的团队成员名
   String notes;
   String qualityNotes;     // 质检备注
   double estimatedCost;    // 预估成本
@@ -122,6 +124,8 @@ class ProductionOrder {
     DateTime? plannedDate,
     this.startedDate,
     this.completedDate,
+    this.assigneeId = '',
+    this.assigneeName = '',
     this.notes = '',
     this.qualityNotes = '',
     this.estimatedCost = 0,
@@ -147,6 +151,8 @@ class ProductionOrder {
     'planned_date': plannedDate.toIso8601String(),
     'started_date': startedDate?.toIso8601String(),
     'completed_date': completedDate?.toIso8601String(),
+    'assignee_id': assigneeId,
+    'assignee_name': assigneeName,
     'notes': notes,
     'quality_notes': qualityNotes,
     'estimated_cost': estimatedCost,
@@ -170,6 +176,8 @@ class ProductionOrder {
     plannedDate: DateTime.tryParse(json['planned_date'] ?? '') ?? DateTime.now(),
     startedDate: json['started_date'] != null ? DateTime.tryParse(json['started_date']) : null,
     completedDate: json['completed_date'] != null ? DateTime.tryParse(json['completed_date']) : null,
+    assigneeId: json['assignee_id'] as String? ?? '',
+    assigneeName: json['assignee_name'] as String? ?? '',
     notes: json['notes'] as String? ?? '',
     qualityNotes: json['quality_notes'] as String? ?? '',
     estimatedCost: (json['estimated_cost'] as num?)?.toDouble() ?? 0,
