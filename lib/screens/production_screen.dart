@@ -16,6 +16,13 @@ class ProductionScreen extends StatefulWidget {
 class _ProductionScreenState extends State<ProductionScreen> with SingleTickerProviderStateMixin {
   late TabController _tabCtrl;
 
+  // Factory reference images
+  static const _factoryImages = [
+    'https://sspark.genspark.ai/cfimages?u1=gQJ0%2FI61F8aniwhXmW3RCOtb2ddp%2BIkvgbC7uSVsjje5TY6kHHdQPw%2BFX0pCr5TsSpLSsbDs4eWYMJDVR%2FFZAjSEVv7H2zT35KTXrux0iEY5eavPlEp5xTtvMR0zx5sQIvyRD6SSeJwJP6BNzxz7kIebeN1oPBmfpBnWtYaphXqzk2qYywDvrib4XqOrSyCsmijp5I4%3D&u2=vdsQVGBgw%2FpPeDo2&width=2560',
+    'https://sspark.genspark.ai/cfimages?u1=NMt7iimnkNbTD%2BHBOS0KWCZby0endZndjAqeIfg699osg2c%2BTTy413AhtpAFkSGl0%2Fvs9UDe5XmyB0CtcFXmR4EhnUgIASlhjPa9aNAr4oX2vKyVfBD0ndqRYWGvasifbDvHNJGudph2pzV6ULTi&u2=boXq0HzYZ6OkrSKA&width=2560',
+    'https://sspark.genspark.ai/cfimages?u1=%2B867UIyvfKjTMlImBU%2BnMIh0a98A0vGpZPtfJNpzgdWwOO6FYfdSkOHd%2F4MR4tAcV%2FCnx0oWbiO%2BamB6pdSO%2F%2BBB3LinyUpmMeoEWIPciHaJeA%3D%3D&u2=KwRXd53fs%2BatU71C&width=2560',
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -33,7 +40,7 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
     return Consumer<CrmProvider>(builder: (context, crm, _) {
       return SafeArea(
         child: Column(children: [
-          _buildHeader(context, crm),
+          _buildBrandHeader(context, crm),
           _buildSummaryRow(crm),
           _buildTabBar(),
           const SizedBox(height: 6),
@@ -49,15 +56,37 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
     });
   }
 
-  Widget _buildHeader(BuildContext context, CrmProvider crm) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 12, 4),
-      child: Row(children: [
-        const Icon(Icons.precision_manufacturing, color: Color(0xFF00CEC9), size: 24),
-        const SizedBox(width: 10),
-        const Expanded(
-          child: Text('生产管理', style: TextStyle(color: AppTheme.textPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
+  Widget _buildBrandHeader(BuildContext context, CrmProvider crm) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [AppTheme.brandDarkRed.withValues(alpha: 0.25), AppTheme.darkBg],
+          begin: Alignment.topCenter, end: Alignment.bottomCenter,
         ),
+      ),
+      child: Row(children: [
+        Container(
+          width: 40, height: 40,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: [BoxShadow(color: AppTheme.brandGold.withValues(alpha: 0.3), blurRadius: 8)],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.asset('assets/images/nd_logo.png', fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                decoration: BoxDecoration(gradient: AppTheme.gradient, borderRadius: BorderRadius.circular(10)),
+                child: const Icon(Icons.precision_manufacturing, color: Colors.white, size: 20),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('生产管理', style: TextStyle(color: AppTheme.textPrimary, fontSize: 20, fontWeight: FontWeight.bold)),
+          Text('Swiss Technology | GMP Manufacturing', style: TextStyle(color: AppTheme.brandGoldLight.withValues(alpha: 0.7), fontSize: 10)),
+        ])),
         IconButton(
           icon: Container(
             padding: const EdgeInsets.all(7),
@@ -73,33 +102,112 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
 
   Widget _buildSummaryRow(CrmProvider crm) {
     final stats = crm.productionStats;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.brandGold.withValues(alpha: 0.15)),
+      ),
       child: Row(children: [
-        Expanded(child: _summaryChip('${stats['activeOrders']}', '进行中', const Color(0xFF00CEC9))),
-        const SizedBox(width: 6),
-        Expanded(child: _summaryChip('${stats['totalPlannedQty']}', '计划产量', AppTheme.primaryBlue)),
-        const SizedBox(width: 6),
-        Expanded(child: _summaryChip('${stats['completedOrders']}', '已完成', AppTheme.success)),
-        const SizedBox(width: 6),
-        Expanded(child: _summaryChip('${stats['totalCompletedQty']}', '已产出', AppTheme.accentGold)),
-        const SizedBox(width: 6),
-        Expanded(child: _summaryChip('${stats['factoryCount']}', '工厂', AppTheme.primaryPurple)),
+        Expanded(child: _summaryChipTap('${stats['activeOrders']}', '进行中', const Color(0xFF00CEC9), Icons.autorenew, () {
+          final active = crm.productionOrders.where((o) => o.status != 'completed' && o.status != 'cancelled').toList();
+          _showDrilldown('进行中生产单 (${active.length})', const Color(0xFF00CEC9), Icons.autorenew,
+            active.map((o) => _drilldownItem(o.productName, '${o.factoryName} | ${ProductionStatus.label(o.status)} | 数量${o.quantity}', _statusColor(o.status))).toList());
+        })),
+        _goldDivider(),
+        Expanded(child: _summaryChipTap('${stats['totalPlannedQty']}', '计划产量', AppTheme.brandGold, Icons.inventory_2, () {
+          _showDrilldown('生产计划总量', AppTheme.brandGold, Icons.inventory_2,
+            crm.productionOrders.where((o) => o.status != 'cancelled').map((o) =>
+              _drilldownItem(o.productName, '${o.factoryName} | ${ProductionStatus.label(o.status)}', _statusColor(o.status), trailing: '${o.quantity}')).toList());
+        })),
+        _goldDivider(),
+        Expanded(child: _summaryChipTap('${stats['completedOrders']}', '已完成', AppTheme.success, Icons.check_circle, () {
+          final done = crm.productionOrders.where((o) => o.status == 'completed').toList();
+          _showDrilldown('已完成生产单 (${done.length})', AppTheme.success, Icons.check_circle,
+            done.map((o) => _drilldownItem(o.productName, '${o.factoryName} | 已入库', AppTheme.success, trailing: '${o.quantity}')).toList());
+        })),
+        _goldDivider(),
+        Expanded(child: _summaryChipTap('${stats['totalCompletedQty']}', '已产出', AppTheme.accentGold, Icons.output, () {
+          final done = crm.productionOrders.where((o) => o.status == 'completed').toList();
+          _showDrilldown('已产出量明细', AppTheme.accentGold, Icons.output,
+            done.map((o) => _drilldownItem(o.productName, o.factoryName, AppTheme.accentGold, trailing: '${o.quantity}')).toList());
+        })),
+        _goldDivider(),
+        Expanded(child: _summaryChipTap('${stats['factoryCount']}', '工厂', AppTheme.brandDarkRed, Icons.factory, () {
+          _showDrilldown('工厂列表 (${crm.factories.length})', AppTheme.brandDarkRed, Icons.factory,
+            crm.factories.map((f) => _drilldownItem(f.name, '${f.address} | ${f.representative}', AppTheme.brandDarkRed)).toList());
+        })),
       ]),
     );
   }
 
-  Widget _summaryChip(String value, String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-      decoration: BoxDecoration(
-        color: AppTheme.cardBg,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
+  Widget _summaryChipTap(String value, String label, Color color, IconData icon, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
       child: Column(children: [
-        Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 16)),
-        Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 9)),
+        Icon(icon, color: color, size: 14),
+        const SizedBox(height: 3),
+        Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 15)),
+        Row(mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
+          Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 9)),
+          const SizedBox(width: 2),
+          Icon(Icons.open_in_new, size: 6, color: color.withValues(alpha: 0.5)),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _goldDivider() => Container(
+    width: 1, height: 36, margin: const EdgeInsets.symmetric(horizontal: 2),
+    decoration: BoxDecoration(
+      gradient: LinearGradient(colors: [Colors.transparent, AppTheme.brandGold.withValues(alpha: 0.2), Colors.transparent],
+        begin: Alignment.topCenter, end: Alignment.bottomCenter),
+    ),
+  );
+
+  // === Drilldown Sheet ===
+  void _showDrilldown(String title, Color color, IconData icon, List<Widget> children) {
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: AppTheme.cardBg,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.75),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [color.withValues(alpha: 0.15), Colors.transparent]),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Row(children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 8),
+              Expanded(child: Text(title, style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.bold))),
+              IconButton(icon: const Icon(Icons.close, color: AppTheme.textSecondary, size: 20), onPressed: () => Navigator.pop(ctx)),
+            ]),
+          ),
+          if (children.isEmpty) const Padding(padding: EdgeInsets.all(40), child: Text('无数据', style: TextStyle(color: AppTheme.textSecondary)))
+          else Flexible(child: ListView(padding: const EdgeInsets.symmetric(horizontal: 12), children: [...children, const SizedBox(height: 16)])),
+        ]),
+      ),
+    );
+  }
+
+  Widget _drilldownItem(String title, String subtitle, Color color, {String? trailing}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: AppTheme.cardBgLight, borderRadius: BorderRadius.circular(10)),
+      child: Row(children: [
+        Container(width: 4, height: 30, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
+        const SizedBox(width: 10),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+          if (subtitle.isNotEmpty) Text(subtitle, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+        ])),
+        if (trailing != null) Text(trailing, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
       ]),
     );
   }
@@ -137,7 +245,6 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
       ]));
     }
 
-    // Sort by planned date
     final sorted = List<ProductionOrder>.from(orders)
       ..sort((a, b) => a.plannedDate.compareTo(b.plannedDate));
 
@@ -159,7 +266,7 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
       decoration: BoxDecoration(
         color: AppTheme.cardBg,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: statusColor.withValues(alpha: 0.4)),
+        border: Border(left: BorderSide(color: statusColor, width: 3)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
@@ -178,11 +285,11 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
                 const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: AppTheme.primaryPurple.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                  decoration: BoxDecoration(color: AppTheme.brandGold.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.person, color: AppTheme.primaryPurple, size: 10),
+                    const Icon(Icons.person, color: AppTheme.brandGold, size: 10),
                     const SizedBox(width: 3),
-                    Text(order.assigneeName, style: const TextStyle(color: AppTheme.primaryPurple, fontSize: 10, fontWeight: FontWeight.w600)),
+                    Text(order.assigneeName, style: const TextStyle(color: AppTheme.brandGold, fontSize: 10, fontWeight: FontWeight.w600)),
                   ]),
                 ),
               ],
@@ -195,14 +302,13 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
           ),
         ]),
         const SizedBox(height: 10),
-        // Progress bar
         _buildStatusProgress(order.status),
         const SizedBox(height: 10),
         Row(children: [
           _infoTag(Icons.numbers, '数量: ${order.quantity}', AppTheme.primaryBlue),
           const SizedBox(width: 8),
           if (order.batchNumber.isNotEmpty)
-            _infoTag(Icons.qr_code, order.batchNumber, AppTheme.primaryPurple),
+            _infoTag(Icons.qr_code, order.batchNumber, AppTheme.brandGold),
           const Spacer(),
           Text('计划: ${Formatters.dateFull(order.plannedDate)}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
         ]),
@@ -238,22 +344,19 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
           IconButton(
             icon: const Icon(Icons.delete_outline, color: AppTheme.danger, size: 18),
             onPressed: () {
-              showDialog(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  backgroundColor: AppTheme.cardBg,
-                  title: const Text('确认删除?', style: TextStyle(color: AppTheme.textPrimary)),
-                  content: Text('删除 ${order.productName} 的生产订单?', style: const TextStyle(color: AppTheme.textSecondary)),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger),
-                      onPressed: () { crm.deleteProductionOrder(order.id); Navigator.pop(ctx); },
-                      child: const Text('删除'),
-                    ),
-                  ],
-                ),
-              );
+              showDialog(context: context, builder: (ctx) => AlertDialog(
+                backgroundColor: AppTheme.cardBg,
+                title: const Text('确认删除?', style: TextStyle(color: AppTheme.textPrimary)),
+                content: Text('删除 ${order.productName} 的生产订单?', style: const TextStyle(color: AppTheme.textSecondary)),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger),
+                    onPressed: () { crm.deleteProductionOrder(order.id); Navigator.pop(ctx); },
+                    child: const Text('删除'),
+                  ),
+                ],
+              ));
             },
           ),
         ]),
@@ -271,15 +374,11 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
       final color = isActive ? _statusColor(statuses[i]) : AppTheme.cardBgLight;
 
       return Expanded(child: Row(children: [
-        if (i > 0) Expanded(
-          child: Container(height: 2, color: isActive ? color : AppTheme.cardBgLight),
-        ),
+        if (i > 0) Expanded(child: Container(height: 2, color: isActive ? color : AppTheme.cardBgLight)),
         Container(
-          width: isCurrent ? 12 : 8,
-          height: isCurrent ? 12 : 8,
+          width: isCurrent ? 12 : 8, height: isCurrent ? 12 : 8,
           decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
+            color: color, shape: BoxShape.circle,
             border: isCurrent ? Border.all(color: Colors.white, width: 2) : null,
             boxShadow: isCurrent ? [BoxShadow(color: color.withValues(alpha: 0.5), blurRadius: 6)] : null,
           ),
@@ -300,7 +399,7 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
     );
   }
 
-  // ========== Tab 2: Factory List ==========
+  // ========== Tab 2: Factory List (with images) ==========
   Widget _buildFactoryList(CrmProvider crm) {
     final factories = crm.factories;
     if (factories.isEmpty) {
@@ -310,86 +409,118 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       itemCount: factories.length,
-      itemBuilder: (context, index) => _factoryCard(crm, factories[index]),
+      itemBuilder: (context, index) => _factoryCard(crm, factories[index], index),
     );
   }
 
-  Widget _factoryCard(CrmProvider crm, ProductionFactory factory) {
+  Widget _factoryCard(CrmProvider crm, ProductionFactory factory, int index) {
     final activeOrders = crm.getProductionByFactory(factory.id).where(
       (p) => ProductionStatus.activeStatuses.contains(p.status)
     ).length;
 
+    final imageUrl = _factoryImages[index % _factoryImages.length];
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: AppTheme.cardBg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.primaryPurple.withValues(alpha: 0.3)),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.brandGold.withValues(alpha: 0.2)),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Container(
-            width: 48, height: 48,
-            decoration: BoxDecoration(
-              gradient: AppTheme.gradient,
-              borderRadius: BorderRadius.circular(12),
+      child: Column(children: [
+        // Factory image banner
+        ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          child: Stack(children: [
+            Image.network(imageUrl, width: double.infinity, height: 120, fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                width: double.infinity, height: 120,
+                decoration: BoxDecoration(gradient: AppTheme.gradient),
+                child: const Center(child: Icon(Icons.factory, color: Colors.white, size: 40)),
+              ),
             ),
-            child: const Icon(Icons.factory, color: Colors.white, size: 24),
-          ),
-          const SizedBox(width: 14),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(factory.name, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold, fontSize: 15)),
-            if (factory.representative.isNotEmpty) ...[
-              const SizedBox(height: 2),
-              Text('代表: ${factory.representative}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            // Gradient overlay
+            Positioned.fill(child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: [Colors.transparent, AppTheme.cardBg.withValues(alpha: 0.8)],
+                  begin: Alignment.topCenter, end: Alignment.bottomCenter),
+              ),
+            )),
+            // Factory name overlay
+            Positioned(bottom: 8, left: 14, right: 14, child: Row(children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  gradient: AppTheme.gradient,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.factory, color: Colors.white, size: 16),
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: Text(factory.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15))),
+              if (activeOrders > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(color: const Color(0xFF00CEC9).withValues(alpha: 0.8), borderRadius: BorderRadius.circular(8)),
+                  child: Text('$activeOrders 单', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                ),
+            ])),
+          ]),
+        ),
+        // Factory details
+        Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (factory.representative.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(children: [
+                  const Icon(Icons.person, color: AppTheme.brandGold, size: 14),
+                  const SizedBox(width: 6),
+                  Text('代表: ${factory.representative}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                ]),
+              ),
+            Row(children: [
+              const Icon(Icons.location_on, color: AppTheme.textSecondary, size: 14),
+              const SizedBox(width: 4),
+              Expanded(child: Text(factory.address, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12), overflow: TextOverflow.ellipsis)),
+            ]),
+            const SizedBox(height: 8),
+            Text(factory.description, style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.7), fontSize: 11), maxLines: 2, overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 10),
+            if (factory.certifications.isNotEmpty) ...[
+              Wrap(spacing: 6, runSpacing: 4, children: factory.certifications.map((cert) =>
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(color: AppTheme.success.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.verified, color: AppTheme.success, size: 10),
+                    const SizedBox(width: 3),
+                    Text(cert, style: const TextStyle(color: AppTheme.success, fontSize: 9, fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+              ).toList()),
+              const SizedBox(height: 8),
             ],
-          ])),
-          if (activeOrders > 0)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(color: const Color(0xFF00CEC9).withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
-              child: Text('$activeOrders 单', style: const TextStyle(color: Color(0xFF00CEC9), fontSize: 11, fontWeight: FontWeight.w600)),
-            ),
-        ]),
-        const SizedBox(height: 10),
-        Row(children: [
-          const Icon(Icons.location_on, color: AppTheme.textSecondary, size: 14),
-          const SizedBox(width: 4),
-          Expanded(child: Text(factory.address, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12), overflow: TextOverflow.ellipsis)),
-        ]),
-        const SizedBox(height: 8),
-        Text(factory.description, style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.7), fontSize: 11), maxLines: 2, overflow: TextOverflow.ellipsis),
-        const SizedBox(height: 10),
-        // Certifications
-        if (factory.certifications.isNotEmpty) ...[
-          Wrap(spacing: 6, runSpacing: 4, children: factory.certifications.map((cert) =>
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(color: AppTheme.success.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
-              child: Text(cert, style: const TextStyle(color: AppTheme.success, fontSize: 9, fontWeight: FontWeight.w600)),
-            ),
-          ).toList()),
-          const SizedBox(height: 8),
-        ],
-        // Capabilities
-        if (factory.capabilities.isNotEmpty)
-          Wrap(spacing: 6, runSpacing: 4, children: factory.capabilities.map((cap) {
-            Color c;
-            String label;
-            switch (cap) {
-              case 'exosome': c = const Color(0xFF00B894); label = '外泌体'; break;
-              case 'nad': c = const Color(0xFFE17055); label = 'NAD+'; break;
-              case 'nmn': c = const Color(0xFF0984E3); label = 'NMN'; break;
-              case 'skincare': c = AppTheme.primaryPurple; label = '美容'; break;
-              default: c = AppTheme.textSecondary; label = cap; break;
-            }
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(color: c.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
-              child: Text(label, style: TextStyle(color: c, fontSize: 9, fontWeight: FontWeight.w600)),
-            );
-          }).toList()),
+            if (factory.capabilities.isNotEmpty)
+              Wrap(spacing: 6, runSpacing: 4, children: factory.capabilities.map((cap) {
+                Color c;
+                String label;
+                switch (cap) {
+                  case 'exosome': c = const Color(0xFF00B894); label = '外泌体'; break;
+                  case 'nad': c = const Color(0xFFE17055); label = 'NAD+'; break;
+                  case 'nmn': c = const Color(0xFF0984E3); label = 'NMN'; break;
+                  case 'skincare': c = AppTheme.brandDarkRed; label = '美容'; break;
+                  default: c = AppTheme.textSecondary; label = cap; break;
+                }
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(color: c.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
+                  child: Text(label, style: TextStyle(color: c, fontSize: 9, fontWeight: FontWeight.w600)),
+                );
+              }).toList()),
+          ]),
+        ),
       ]),
     );
   }
@@ -420,7 +551,8 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
         return Container(
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12)),
+          decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12),
+            border: Border(left: BorderSide(color: color, width: 3))),
           child: Row(children: [
             Container(
               padding: const EdgeInsets.all(8),
@@ -483,83 +615,57 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
                     IconButton(icon: const Icon(Icons.close, color: AppTheme.textSecondary), onPressed: () => Navigator.pop(ctx)),
                   ]),
                   const SizedBox(height: 12),
-                  // Select Factory
                   DropdownButtonFormField<ProductionFactory>(
                     initialValue: selectedFactory,
                     decoration: const InputDecoration(labelText: '选择工厂', prefixIcon: Icon(Icons.factory, color: AppTheme.textSecondary, size: 20)),
-                    dropdownColor: AppTheme.cardBgLight,
-                    style: const TextStyle(color: AppTheme.textPrimary),
+                    dropdownColor: AppTheme.cardBgLight, style: const TextStyle(color: AppTheme.textPrimary),
                     items: crm.factories.map<DropdownMenuItem<ProductionFactory>>((f) => DropdownMenuItem<ProductionFactory>(value: f, child: Text(f.name, style: const TextStyle(fontSize: 13)))).toList(),
                     onChanged: (v) => setModalState(() => selectedFactory = v),
                   ),
                   const SizedBox(height: 12),
-                  // Select Product (filter by factory capability)
                   DropdownButtonFormField<Product>(
                     initialValue: selectedProduct,
                     decoration: const InputDecoration(labelText: '选择产品', prefixIcon: Icon(Icons.science, color: AppTheme.textSecondary, size: 20)),
-                    dropdownColor: AppTheme.cardBgLight,
-                    style: const TextStyle(color: AppTheme.textPrimary),
-                    items: _getFilteredProducts(crm, selectedFactory).map((p) => DropdownMenuItem(
-                      value: p,
+                    dropdownColor: AppTheme.cardBgLight, style: const TextStyle(color: AppTheme.textPrimary),
+                    items: _getFilteredProducts(crm, selectedFactory).map((p) => DropdownMenuItem(value: p,
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
                         Text(p.name, style: const TextStyle(fontSize: 13)),
                         const SizedBox(width: 8),
                         Text('库存:${crm.getProductStock(p.id)}', style: TextStyle(color: crm.getProductStock(p.id) <= 0 ? AppTheme.danger : AppTheme.textSecondary, fontSize: 10)),
-                      ]),
-                    )).toList(),
+                      ]))).toList(),
                     onChanged: (v) => setModalState(() => selectedProduct = v),
                   ),
                   const SizedBox(height: 12),
-                  // Select Assignee
                   DropdownButtonFormField<TeamMember>(
                     initialValue: selectedAssignee,
                     decoration: const InputDecoration(labelText: '负责人 (可选)', prefixIcon: Icon(Icons.person_outline, color: AppTheme.textSecondary, size: 20)),
-                    dropdownColor: AppTheme.cardBgLight,
-                    style: const TextStyle(color: AppTheme.textPrimary),
+                    dropdownColor: AppTheme.cardBgLight, style: const TextStyle(color: AppTheme.textPrimary),
                     items: [
                       const DropdownMenuItem<TeamMember>(value: null, child: Text('不指派', style: TextStyle(fontSize: 13, color: AppTheme.textSecondary))),
-                      ...crm.teamMembers.map((m) => DropdownMenuItem<TeamMember>(
-                        value: m,
+                      ...crm.teamMembers.map((m) => DropdownMenuItem<TeamMember>(value: m,
                         child: Row(mainAxisSize: MainAxisSize.min, children: [
                           CircleAvatar(radius: 10, backgroundColor: _roleColor(m.role), child: Text(m.name.isNotEmpty ? m.name[0] : '?', style: const TextStyle(color: Colors.white, fontSize: 10))),
                           const SizedBox(width: 8),
                           Text(m.name, style: const TextStyle(fontSize: 13)),
                           const SizedBox(width: 6),
                           Text(TeamMember.roleLabel(m.role), style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
-                        ]),
-                      )),
+                        ]))),
                     ],
                     onChanged: (v) => setModalState(() => selectedAssignee = v),
                   ),
                   const SizedBox(height: 12),
                   Row(children: [
-                    Expanded(
-                      child: TextField(
-                        controller: qtyCtrl,
-                        keyboardType: TextInputType.number,
-                        style: const TextStyle(color: AppTheme.textPrimary),
-                        decoration: const InputDecoration(labelText: '生产数量', prefixIcon: Icon(Icons.numbers, color: AppTheme.textSecondary, size: 20)),
-                      ),
-                    ),
+                    Expanded(child: TextField(controller: qtyCtrl, keyboardType: TextInputType.number, style: const TextStyle(color: AppTheme.textPrimary),
+                      decoration: const InputDecoration(labelText: '生产数量', prefixIcon: Icon(Icons.numbers, color: AppTheme.textSecondary, size: 20)))),
                     const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        controller: batchCtrl,
-                        style: const TextStyle(color: AppTheme.textPrimary),
-                        decoration: const InputDecoration(labelText: '批次号 (可选)', prefixIcon: Icon(Icons.qr_code, color: AppTheme.textSecondary, size: 20)),
-                      ),
-                    ),
+                    Expanded(child: TextField(controller: batchCtrl, style: const TextStyle(color: AppTheme.textPrimary),
+                      decoration: const InputDecoration(labelText: '批次号 (可选)', prefixIcon: Icon(Icons.qr_code, color: AppTheme.textSecondary, size: 20)))),
                   ]),
                   const SizedBox(height: 12),
-                  // Planned Date
                   GestureDetector(
                     onTap: () async {
-                      final date = await showDatePicker(
-                        context: ctx,
-                        initialDate: plannedDate,
-                        firstDate: DateTime.now(),
-                        lastDate: DateTime.now().add(const Duration(days: 365)),
-                      );
+                      final date = await showDatePicker(context: ctx, initialDate: plannedDate,
+                        firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 365)));
                       if (date != null) setModalState(() => plannedDate = date);
                     },
                     child: Container(
@@ -568,33 +674,21 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
                       child: Row(children: [
                         const Icon(Icons.calendar_today, color: AppTheme.textSecondary, size: 18),
                         const SizedBox(width: 10),
-                        Text('计划日期: ${Formatters.dateFull(plannedDate)}',
-                          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14)),
+                        Text('计划日期: ${Formatters.dateFull(plannedDate)}', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14)),
                       ]),
                     ),
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: notesCtrl,
-                    style: const TextStyle(color: AppTheme.textPrimary),
-                    maxLines: 2,
-                    decoration: const InputDecoration(labelText: '备注'),
-                  ),
+                  TextField(controller: notesCtrl, style: const TextStyle(color: AppTheme.textPrimary), maxLines: 2,
+                    decoration: const InputDecoration(labelText: '备注')),
                   const SizedBox(height: 16),
-                  // Linkage info
                   Container(
                     padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF00CEC9).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                    decoration: BoxDecoration(color: const Color(0xFF00CEC9).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
                     child: const Row(children: [
                       Icon(Icons.link, color: Color(0xFF00CEC9), size: 16),
                       SizedBox(width: 8),
-                      Expanded(child: Text(
-                        '生产完成后将自动入库, 销售下单时自动出库扣减',
-                        style: TextStyle(color: Color(0xFF00CEC9), fontSize: 11),
-                      )),
+                      Expanded(child: Text('生产完成后将自动入库, 销售下单时自动出库扣减', style: TextStyle(color: Color(0xFF00CEC9), fontSize: 11))),
                     ]),
                   ),
                   const SizedBox(height: 16),
@@ -608,20 +702,11 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
                     onPressed: (selectedFactory == null || selectedProduct == null) ? null : () {
                       final qty = int.tryParse(qtyCtrl.text) ?? 0;
                       if (qty <= 0) return;
-
                       final order = ProductionOrder(
-                        id: crm.generateId(),
-                        factoryId: selectedFactory!.id,
-                        factoryName: selectedFactory!.name,
-                        productId: selectedProduct!.id,
-                        productName: selectedProduct!.name,
-                        productCode: selectedProduct!.code,
-                        quantity: qty,
-                        batchNumber: batchCtrl.text,
-                        plannedDate: plannedDate,
-                        notes: notesCtrl.text,
-                        assigneeId: selectedAssignee?.id ?? '',
-                        assigneeName: selectedAssignee?.name ?? '',
+                        id: crm.generateId(), factoryId: selectedFactory!.id, factoryName: selectedFactory!.name,
+                        productId: selectedProduct!.id, productName: selectedProduct!.name, productCode: selectedProduct!.code,
+                        quantity: qty, batchNumber: batchCtrl.text, plannedDate: plannedDate, notes: notesCtrl.text,
+                        assigneeId: selectedAssignee?.id ?? '', assigneeName: selectedAssignee?.name ?? '',
                       );
                       crm.addProductionOrder(order);
                       Navigator.pop(ctx);
@@ -641,7 +726,6 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
     );
   }
 
-  /// Filter products based on factory capabilities
   List<Product> _getFilteredProducts(CrmProvider crm, ProductionFactory? factory) {
     if (factory == null || factory.capabilities.isEmpty) return crm.products;
     return crm.products.where((p) => factory.capabilities.contains(p.category)).toList();
@@ -650,7 +734,7 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
   // ========== Helpers ==========
   Color _roleColor(String role) {
     switch (role) {
-      case 'admin': return const Color(0xFFE17055);
+      case 'admin': return AppTheme.brandDarkRed;
       case 'manager': return AppTheme.accentGold;
       case 'member': return AppTheme.primaryBlue;
       default: return AppTheme.textSecondary;
@@ -662,7 +746,7 @@ class _ProductionScreenState extends State<ProductionScreen> with SingleTickerPr
       case 'planned': return AppTheme.textSecondary;
       case 'materials': return AppTheme.warning;
       case 'producing': return const Color(0xFF00CEC9);
-      case 'quality': return AppTheme.primaryPurple;
+      case 'quality': return AppTheme.brandDarkRed;
       case 'completed': return AppTheme.success;
       case 'cancelled': return AppTheme.danger;
       default: return AppTheme.textSecondary;

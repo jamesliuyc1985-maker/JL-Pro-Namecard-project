@@ -32,7 +32,7 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
   Widget build(BuildContext context) {
     return Consumer<CrmProvider>(builder: (context, crm, _) {
       return SafeArea(child: Column(children: [
-        _buildHeader(context, crm),
+        _buildBrandHeader(context, crm),
         _buildSummary(crm),
         _buildTabs(),
         Expanded(child: _buildTabView(crm)),
@@ -40,14 +40,30 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
     });
   }
 
-  Widget _buildHeader(BuildContext context, CrmProvider crm) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 8, 4),
+  Widget _buildBrandHeader(BuildContext context, CrmProvider crm) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 12, 8, 8),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [AppTheme.brandDarkRed.withValues(alpha: 0.3), AppTheme.darkBg],
+          begin: Alignment.topCenter, end: Alignment.bottomCenter,
+        ),
+      ),
       child: Row(children: [
-        const Icon(Icons.view_kanban_rounded, color: AppTheme.primaryPurple, size: 24),
-        const SizedBox(width: 10),
-        const Text('销售管线', style: TextStyle(color: AppTheme.textPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
-        const Spacer(),
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            gradient: AppTheme.gradient,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [BoxShadow(color: AppTheme.brandDarkRed.withValues(alpha: 0.3), blurRadius: 8)],
+          ),
+          child: const Icon(Icons.view_kanban_rounded, color: Colors.white, size: 20),
+        ),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('销售管线', style: TextStyle(color: AppTheme.textPrimary, fontSize: 20, fontWeight: FontWeight.bold)),
+          Text('能道再生 | Sales Pipeline', style: TextStyle(color: AppTheme.brandGoldLight.withValues(alpha: 0.7), fontSize: 10)),
+        ])),
         IconButton(
           icon: Container(
             padding: const EdgeInsets.all(7),
@@ -73,28 +89,112 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
     for (final d in completedDeals) { closedVal += d.amount; }
     final pendingShip = crm.orders.where((o) => o.status == 'confirmed').length;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.brandGold.withValues(alpha: 0.2)),
+      ),
       child: Row(children: [
-        Expanded(child: _summaryCard('管线总额', Formatters.currency(pipeline), AppTheme.primaryPurple)),
-        const SizedBox(width: 6),
-        Expanded(child: _summaryCard('加权期望', Formatters.currency(weighted), AppTheme.primaryBlue)),
-        const SizedBox(width: 6),
-        Expanded(child: _summaryCard('已成交', Formatters.currency(closedVal), AppTheme.success)),
-        const SizedBox(width: 6),
-        Expanded(child: _summaryCard('待出货', '$pendingShip', AppTheme.warning)),
+        Expanded(child: _summaryCardTap('管线总额', Formatters.currency(pipeline), AppTheme.brandDarkRed, Icons.trending_up, () {
+          final activeList = active.toList()..sort((a, b) => b.amount.compareTo(a.amount));
+          _showDrilldown('管线总额明细 (${activeList.length}笔)', AppTheme.brandDarkRed, Icons.trending_up,
+            activeList.map((d) => _drilldownItem(d.title, '${d.contactName} | ${d.stage.label} | ${d.probability.toInt()}%', _color(d.stage), trailing: Formatters.currency(d.amount))).toList());
+        })),
+        _goldDivider(),
+        Expanded(child: _summaryCardTap('加权期望', Formatters.currency(weighted), AppTheme.brandGold, Icons.balance, () {
+          final activeList = active.toList()..sort((a, b) => (b.amount * b.probability).compareTo(a.amount * a.probability));
+          _showDrilldown('加权期望值明细', AppTheme.brandGold, Icons.balance,
+            activeList.map((d) => _drilldownItem(d.title, '${d.contactName} | 金额${Formatters.currency(d.amount)} × ${d.probability.toInt()}%', _color(d.stage),
+              trailing: Formatters.currency(d.amount * d.probability / 100))).toList());
+        })),
+        _goldDivider(),
+        Expanded(child: _summaryCardTap('已成交', Formatters.currency(closedVal), AppTheme.success, Icons.check_circle, () {
+          final doneList = completedDeals.toList()..sort((a, b) => b.amount.compareTo(a.amount));
+          _showDrilldown('已成交明细 (${doneList.length}笔)', AppTheme.success, Icons.check_circle,
+            doneList.map((d) => _drilldownItem(d.title, d.contactName, AppTheme.success, trailing: Formatters.currency(d.amount))).toList());
+        })),
+        _goldDivider(),
+        Expanded(child: _summaryCardTap('待出货', '$pendingShip', AppTheme.warning, Icons.local_shipping, () {
+          final pendingOrders = crm.orders.where((o) => o.status == 'confirmed').toList();
+          _showDrilldown('待出货订单 (${pendingOrders.length})', AppTheme.warning, Icons.local_shipping,
+            pendingOrders.map((o) => _drilldownItem(o.id.substring(0, 8), '${o.contactName} | ${SalesOrder.statusLabel(o.status)}', AppTheme.warning,
+              trailing: Formatters.currency(o.totalAmount))).toList());
+        })),
       ]),
     );
   }
 
-  Widget _summaryCard(String label, String value, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-      decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withValues(alpha: 0.3))),
+  Widget _summaryCardTap(String label, String value, Color color, IconData icon, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
       child: Column(children: [
-        Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12), overflow: TextOverflow.ellipsis),
+        Icon(icon, color: color, size: 16),
+        const SizedBox(height: 4),
+        Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 11), overflow: TextOverflow.ellipsis),
         const SizedBox(height: 2),
-        Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 9)),
+        Row(mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
+          Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 9)),
+          const SizedBox(width: 2),
+          Icon(Icons.open_in_new, size: 7, color: color.withValues(alpha: 0.5)),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _goldDivider() {
+    return Container(width: 1, height: 40, margin: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: [Colors.transparent, AppTheme.brandGold.withValues(alpha: 0.3), Colors.transparent], begin: Alignment.topCenter, end: Alignment.bottomCenter),
+      ),
+    );
+  }
+
+  // === Drilldown Sheet ===
+  void _showDrilldown(String title, Color color, IconData icon, List<Widget> children) {
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: AppTheme.cardBg,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.75),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [color.withValues(alpha: 0.15), Colors.transparent]),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Row(children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 8),
+              Expanded(child: Text(title, style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.bold))),
+              IconButton(icon: const Icon(Icons.close, color: AppTheme.textSecondary, size: 20), onPressed: () => Navigator.pop(ctx)),
+            ]),
+          ),
+          if (children.isEmpty)
+            const Padding(padding: EdgeInsets.all(40), child: Text('无数据', style: TextStyle(color: AppTheme.textSecondary)))
+          else
+            Flexible(child: ListView(padding: const EdgeInsets.symmetric(horizontal: 12), children: [...children, const SizedBox(height: 16)])),
+        ]),
+      ),
+    );
+  }
+
+  Widget _drilldownItem(String title, String subtitle, Color color, {String? trailing}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: AppTheme.cardBgLight, borderRadius: BorderRadius.circular(10)),
+      child: Row(children: [
+        Container(width: 4, height: 30, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
+        const SizedBox(width: 10),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+          if (subtitle.isNotEmpty) Text(subtitle, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+        ])),
+        if (trailing != null) Text(trailing, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
       ]),
     );
   }
@@ -103,9 +203,9 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
     return TabBar(
       controller: _tabController,
       isScrollable: true,
-      indicatorColor: AppTheme.primaryPurple,
+      indicatorColor: AppTheme.brandGold,
       indicatorWeight: 3,
-      labelColor: AppTheme.primaryPurple,
+      labelColor: AppTheme.brandGold,
       unselectedLabelColor: AppTheme.textSecondary,
       labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
       tabAlignment: TabAlignment.start,
@@ -149,7 +249,6 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
 
   Widget _dealCard(BuildContext context, CrmProvider crm, Deal deal) {
     final color = _color(deal.stage);
-    // Check if linked order is ready to ship
     final canShip = deal.orderId != null && (deal.stage == DealStage.ordered || deal.stage == DealStage.paid);
     SalesOrder? linkedOrder;
     if (deal.orderId != null) {
@@ -163,7 +262,7 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
       decoration: BoxDecoration(
         color: AppTheme.cardBg,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        border: Border(left: BorderSide(color: color, width: 3)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
@@ -200,7 +299,6 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
         Row(children: [
           Text(Formatters.currency(deal.amount), style: const TextStyle(color: AppTheme.accentGold, fontWeight: FontWeight.bold, fontSize: 16)),
           const Spacer(),
-          // Status badge
           if (linkedOrder != null) ...[
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -220,7 +318,6 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
           borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(value: deal.probability / 100, backgroundColor: AppTheme.cardBgLight, valueColor: AlwaysStoppedAnimation(color), minHeight: 3),
         ),
-        // Ship button
         if (canShip && linkedOrder != null && (linkedOrder.status == 'confirmed' || linkedOrder.status == 'draft')) ...[
           const SizedBox(height: 8),
           SizedBox(width: double.infinity, child: ElevatedButton.icon(
@@ -261,7 +358,7 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
     switch (s) {
       case DealStage.lead: return AppTheme.textSecondary;
       case DealStage.contacted: return AppTheme.primaryBlue;
-      case DealStage.proposal: return AppTheme.primaryPurple;
+      case DealStage.proposal: return AppTheme.brandDarkRed;
       case DealStage.negotiation: return AppTheme.warning;
       case DealStage.ordered: return const Color(0xFF00CEC9);
       case DealStage.paid: return const Color(0xFF55EFC4);
@@ -273,7 +370,7 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
     }
   }
 
-  // ========== New Order Sheet (unified) ==========
+  // ========== New Order Sheet (unchanged logic) ==========
   void _showNewOrderSheet(BuildContext context, CrmProvider crm) {
     String? selectedContactId;
     String selectedContactName = '';
@@ -312,7 +409,6 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
                   const Spacer(),
                   IconButton(icon: const Icon(Icons.close, color: AppTheme.textSecondary), onPressed: () => Navigator.pop(ctx)),
                 ]),
-                // Reservation info
                 Container(
                   margin: const EdgeInsets.only(top: 6, bottom: 8),
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -345,7 +441,7 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
                         label: Text(labels[pt]!, style: TextStyle(fontSize: 11, color: priceType == pt ? Colors.white : AppTheme.textPrimary)),
                         selected: priceType == pt,
                         onSelected: (_) => setModalState(() => priceType = pt),
-                        selectedColor: AppTheme.primaryPurple, backgroundColor: AppTheme.cardBgLight,
+                        selectedColor: AppTheme.brandDarkRed, backgroundColor: AppTheme.cardBgLight,
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact,
                       ),
                     );
@@ -373,9 +469,9 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
                       margin: const EdgeInsets.only(bottom: 5),
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: qty > 0 ? AppTheme.primaryPurple.withValues(alpha: 0.08) : AppTheme.cardBgLight,
+                        color: qty > 0 ? AppTheme.brandDarkRed.withValues(alpha: 0.08) : AppTheme.cardBgLight,
                         borderRadius: BorderRadius.circular(10),
-                        border: qty > 0 ? Border.all(color: AppTheme.primaryPurple.withValues(alpha: 0.3)) : null,
+                        border: qty > 0 ? Border.all(color: AppTheme.brandGold.withValues(alpha: 0.3)) : null,
                       ),
                       child: Row(children: [
                         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

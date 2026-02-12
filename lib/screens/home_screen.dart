@@ -204,7 +204,10 @@ class _HomeScreenState extends State<HomeScreen> {
         margin: const EdgeInsets.symmetric(horizontal: 1),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(10),
-          gradient: isSelected ? AppTheme.gradient : null,
+          gradient: isSelected ? LinearGradient(
+            colors: [AppTheme.brandDarkRed, AppTheme.brandGold],
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
+          ) : null,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
