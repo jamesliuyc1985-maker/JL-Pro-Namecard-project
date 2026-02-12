@@ -14,29 +14,30 @@ class DefaultFirebaseOptions {
     }
   }
 
+  // 新项目: deal-navigator-crm (project ID: deal-navigator-crm-a2caa)
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyBlC715Q8Og_3uatXX9FSb0XrOWeMjsXsc',
-    appId: '1:719651871406:web:582df7f5ffc89d701dab3f',
-    messagingSenderId: '719651871406',
-    projectId: 'deal-navigator-crm-120d2',
-    authDomain: 'deal-navigator-crm-120d2.firebaseapp.com',
-    storageBucket: 'deal-navigator-crm-120d2.firebasestorage.app',
+    apiKey: 'AIzaSyAUyHSgTbWX13xRvVE1vxU0bjUai8rpyUk',
+    appId: '1:67466347291:web:fb741cf334a00409ec89be',
+    messagingSenderId: '67466347291',
+    projectId: 'deal-navigator-crm-a2caa',
+    authDomain: 'deal-navigator-crm-a2caa.firebaseapp.com',
+    storageBucket: 'deal-navigator-crm-a2caa.firebasestorage.app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyBlC715Q8Og_3uatXX9FSb0XrOWeMjsXsc',
-    appId: '1:719651871406:android:66334c6656f66149bc31ef',
-    messagingSenderId: '719651871406',
-    projectId: 'deal-navigator-crm-120d2',
-    storageBucket: 'deal-navigator-crm-120d2.firebasestorage.app',
+    apiKey: 'AIzaSyAUyHSgTbWX13xRvVE1vxU0bjUai8rpyUk',
+    appId: '1:67466347291:android:placeholder',
+    messagingSenderId: '67466347291',
+    projectId: 'deal-navigator-crm-a2caa',
+    storageBucket: 'deal-navigator-crm-a2caa.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyBlC715Q8Og_3uatXX9FSb0XrOWeMjsXsc',
-    appId: '1:719651871406:ios:placeholder',
-    messagingSenderId: '719651871406',
-    projectId: 'deal-navigator-crm-120d2',
-    storageBucket: 'deal-navigator-crm-120d2.firebasestorage.app',
+    apiKey: 'AIzaSyAUyHSgTbWX13xRvVE1vxU0bjUai8rpyUk',
+    appId: '1:67466347291:ios:placeholder',
+    messagingSenderId: '67466347291',
+    projectId: 'deal-navigator-crm-a2caa',
+    storageBucket: 'deal-navigator-crm-a2caa.firebasestorage.app',
     iosBundleId: 'com.dealnavigator.crm',
   );
 }
