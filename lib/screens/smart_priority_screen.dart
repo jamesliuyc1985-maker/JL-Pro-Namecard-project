@@ -91,34 +91,187 @@ class _SmartPriorityScreenState extends State<SmartPriorityScreen> with SingleTi
   Widget _buildSummaryCards(List<_DealScore> deals, List<_ContactScore> contacts, CrmProvider crm) {
     double totalWeighted = 0;
     for (final d in deals) { totalWeighted += d.weightedValue; }
-    final redDeals = deals.where((d) => d.signal == _Signal.red).length;
-    final yellowDeals = deals.where((d) => d.signal == _Signal.yellow).length;
-    final coldContacts = contacts.where((c) => c.daysSinceLastContact > 14).length;
+    final redDealsList = deals.where((d) => d.signal == _Signal.red).toList();
+    final yellowDealsList = deals.where((d) => d.signal == _Signal.yellow).toList();
+    final coldContactsList = contacts.where((c) => c.daysSinceLastContact > 14).toList();
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(children: [
-        Expanded(child: _card('加权期望', Formatters.currency(totalWeighted), AppTheme.accentGold)),
+        Expanded(child: _card('加权期望', Formatters.currency(totalWeighted), AppTheme.accentGold, () {
+          _showDrilldownDeals(context, '加权期望明细', deals, AppTheme.accentGold);
+        })),
         const SizedBox(width: 6),
-        Expanded(child: _card('紧急项目', '$redDeals', AppTheme.danger)),
+        Expanded(child: _card('紧急项目', '${redDealsList.length}', AppTheme.danger, () {
+          _showDrilldownDeals(context, '紧急项目', redDealsList, AppTheme.danger);
+        })),
         const SizedBox(width: 6),
-        Expanded(child: _card('需关注', '$yellowDeals', AppTheme.warning)),
+        Expanded(child: _card('需关注', '${yellowDealsList.length}', AppTheme.warning, () {
+          _showDrilldownDeals(context, '需关注项目', yellowDealsList, AppTheme.warning);
+        })),
         const SizedBox(width: 6),
-        Expanded(child: _card('冷却人脉', '$coldContacts', const Color(0xFF74B9FF))),
+        Expanded(child: _card('冷却人脉', '${coldContactsList.length}', const Color(0xFF74B9FF), () {
+          _showDrilldownContacts(context, '冷却人脉 (>14天未联系)', coldContactsList, const Color(0xFF74B9FF));
+        })),
       ]),
     );
   }
 
-  Widget _card(String label, String value, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-      decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withValues(alpha: 0.3))),
-      child: Column(children: [
-        Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
-        const SizedBox(height: 2),
-        Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 9)),
-      ]),
+  Widget _card(String label, String value, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+        decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withValues(alpha: 0.3))),
+        child: Column(children: [
+          Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 2),
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 9)),
+            const SizedBox(width: 2),
+            Icon(Icons.open_in_new, size: 8, color: AppTheme.textSecondary.withValues(alpha: 0.5)),
+          ]),
+        ]),
+      ),
     );
+  }
+
+  // ========== Drilldown Dialogs ==========
+  void _showDrilldownDeals(BuildContext context, String title, List<_DealScore> deals, Color color) {
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: AppTheme.cardBg,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.75),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(children: [
+              Icon(Icons.trending_up, color: color, size: 20),
+              const SizedBox(width: 8),
+              Expanded(child: Text('$title (${deals.length})', style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.bold))),
+              IconButton(icon: const Icon(Icons.close, color: AppTheme.textSecondary, size: 20), onPressed: () => Navigator.pop(ctx)),
+            ]),
+          ),
+          if (deals.isEmpty)
+            const Padding(padding: EdgeInsets.all(40), child: Text('无数据', style: TextStyle(color: AppTheme.textSecondary)))
+          else
+            Flexible(child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              itemCount: deals.length,
+              itemBuilder: (_, i) {
+                final ds = deals[i];
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: AppTheme.cardBgLight, borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: ds.signal.color.withValues(alpha: 0.3))),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: ds.signal.color.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(6)),
+                        child: Text(ds.urgencyLabel, style: TextStyle(color: ds.signal.color, fontSize: 10, fontWeight: FontWeight.w600)),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(ds.deal.title, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    ]),
+                    const SizedBox(height: 6),
+                    Row(children: [
+                      _drilldownMetric('联系人', ds.deal.contactName, AppTheme.primaryBlue),
+                      _drilldownMetric('金额', Formatters.currency(ds.deal.amount), AppTheme.accentGold),
+                      _drilldownMetric('概率', '${ds.deal.probability.toInt()}%', AppTheme.primaryPurple),
+                      _drilldownMetric('剩余', ds.daysToClose <= 0 ? '已过期' : '${ds.daysToClose}天', ds.daysToClose <= 7 ? AppTheme.danger : AppTheme.success),
+                    ]),
+                    if (ds.suggestedAction.isNotEmpty) ...[const SizedBox(height: 6),
+                      Text(ds.suggestedAction, style: TextStyle(color: ds.signal.color, fontSize: 10))],
+                  ]),
+                );
+              },
+            )),
+          const SizedBox(height: 12),
+        ]),
+      ),
+    );
+  }
+
+  void _showDrilldownContacts(BuildContext context, String title, List<_ContactScore> contacts, Color color) {
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: AppTheme.cardBg,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.75),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(children: [
+              Icon(Icons.person_search, color: color, size: 20),
+              const SizedBox(width: 8),
+              Expanded(child: Text('$title (${contacts.length})', style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.bold))),
+              IconButton(icon: const Icon(Icons.close, color: AppTheme.textSecondary, size: 20), onPressed: () => Navigator.pop(ctx)),
+            ]),
+          ),
+          if (contacts.isEmpty)
+            const Padding(padding: EdgeInsets.all(40), child: Text('无数据', style: TextStyle(color: AppTheme.textSecondary)))
+          else
+            Flexible(child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              itemCount: contacts.length,
+              itemBuilder: (_, i) {
+                final cs = contacts[i];
+                return GestureDetector(
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => ContactDetailScreen(contactId: cs.contact.id)));
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: AppTheme.cardBgLight, borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: cs.signal.color.withValues(alpha: 0.3))),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(children: [
+                        Container(
+                          width: 32, height: 32,
+                          decoration: BoxDecoration(color: cs.contact.myRelation.color.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
+                          child: Center(child: Text(cs.contact.name[0], style: TextStyle(color: cs.contact.myRelation.color, fontWeight: FontWeight.bold))),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(cs.contact.name, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
+                          Text('${cs.contact.company} | ${cs.contact.strength.label}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+                        ])),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(color: cs.signal.color.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(6)),
+                          child: Text(cs.urgencyLabel, style: TextStyle(color: cs.signal.color, fontSize: 10, fontWeight: FontWeight.w600)),
+                        ),
+                      ]),
+                      const SizedBox(height: 6),
+                      Row(children: [
+                        _drilldownMetric('最后联系', cs.daysSinceLastContact == 0 ? '今天' : '${cs.daysSinceLastContact}天前', cs.daysSinceLastContact > 14 ? AppTheme.danger : AppTheme.success),
+                        _drilldownMetric('Deal', '${cs.dealCount}笔', AppTheme.primaryPurple),
+                        _drilldownMetric('管线', Formatters.currency(cs.pipelineValue), AppTheme.accentGold),
+                        _drilldownMetric('关联', '${cs.relationCount}人', AppTheme.primaryBlue),
+                      ]),
+                      if (cs.suggestedAction.isNotEmpty) ...[const SizedBox(height: 6),
+                        Text(cs.suggestedAction, style: TextStyle(color: cs.signal.color, fontSize: 10))],
+                    ]),
+                  ),
+                );
+              },
+            )),
+          const SizedBox(height: 12),
+        ]),
+      ),
+    );
+  }
+
+  Widget _drilldownMetric(String label, String value, Color color) {
+    return Expanded(child: Column(children: [
+      Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 11), overflow: TextOverflow.ellipsis),
+      Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 8)),
+    ]));
   }
 
   // ========== Deal Priority ==========

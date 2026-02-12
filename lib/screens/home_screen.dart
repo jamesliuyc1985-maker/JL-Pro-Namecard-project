@@ -33,12 +33,12 @@ class _HomeScreenState extends State<HomeScreen> {
       const ProductionScreen(),          // 0 生产
       const ProductInventoryScreen(),    // 1 产品
       const PipelineScreen(),            // 2 销售
-      const ContactsScreen(),            // 3 人脉
+      const StatsDashboardScreen(),      // 3 统计 (原人脉位置)
       const SmartPriorityScreen(),       // 4 智能
       const CalendarTaskScreen(),        // 5 任务
       const TeamScreen(),                // 6 团队
-      const NetworkScreen(),             // 7 图谱
-      const StatsDashboardScreen(),      // 8 统计
+      const ContactsScreen(),            // 7 人脉 (原图谱位置)
+      const NetworkScreen(),             // 8 图谱 (原统计位置)
       ProfileScreen(onLogout: widget.onLogout), // 9 我的
     ];
   }
@@ -48,7 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _NavDef(0, Icons.precision_manufacturing, '生产'),
     _NavDef(1, Icons.science_rounded, '产品'),
     _NavDef(2, Icons.view_kanban_rounded, '销售'),
-    _NavDef(3, Icons.people_rounded, '人脉'),
+    _NavDef(3, Icons.analytics_rounded, '统计'),
     _NavDef(4, Icons.auto_awesome, '智能'),
   ];
 
@@ -56,8 +56,8 @@ class _HomeScreenState extends State<HomeScreen> {
   static const _bottomRow = [
     _NavDef(5, Icons.calendar_month, '任务'),
     _NavDef(6, Icons.group_rounded, '团队'),
-    _NavDef(7, Icons.hub_rounded, '图谱'),
-    _NavDef(8, Icons.analytics_rounded, '统计'),
+    _NavDef(7, Icons.people_rounded, '人脉'),
+    _NavDef(8, Icons.hub_rounded, '图谱'),
     _NavDef(9, Icons.person_rounded, '我的'),
   ];
 

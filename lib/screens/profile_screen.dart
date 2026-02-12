@@ -39,20 +39,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _loadUser();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadUser());
   }
 
   Future<void> _loadUser() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
 
-    // 先用 Firebase Auth 本地缓存的信息（零延迟）
-    final fbUser = FirebaseAuth.instance.currentUser;
+    // 第一步: 立即用 Firebase Auth 本地缓存信息展示 (零网络延迟)
+    User? fbUser;
+    try {
+      fbUser = FirebaseAuth.instance.currentUser;
+    } catch (_) {}
+
     if (fbUser != null) {
       _appUser = AppUser(
         uid: fbUser.uid,
         email: fbUser.email ?? '',
-        displayName: fbUser.displayName ?? 'User',
+        displayName: fbUser.displayName ?? fbUser.email?.split('@').first ?? 'User',
         role: UserRole.admin,
       );
     } else {
@@ -64,26 +68,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
 
-    // 先展示，不等网络
+    // 立即展示，不等网络
     if (mounted) setState(() => _isLoading = false);
 
-    // 后台尝试从 Firestore 获取更详细的用户信息（带超时）
-    try {
-      final auth = AuthService();
-      final detailedUser = await auth.getCurrentUser()
-          .timeout(const Duration(seconds: 4));
-      if (detailedUser != null && mounted) {
-        setState(() => _appUser = detailedUser);
+    // 第二步: 后台异步拉取 Firestore 详情 (超时保护, 失败静默)
+    if (fbUser != null) {
+      try {
+        final auth = AuthService();
+        final detailedUser = await auth.getCurrentUser()
+            .timeout(const Duration(seconds: 3));
+        if (detailedUser != null && mounted) {
+          setState(() => _appUser = detailedUser);
+        }
+      } catch (_) {
+        // Firestore 超时/失败，保持 Auth 基本信息
       }
 
-      // 如果是 admin，后台拉取所有用户
+      // admin 后台拉全部用户
       if (_appUser?.role == UserRole.admin) {
-        final users = await auth.getAllUsers()
-            .timeout(const Duration(seconds: 4));
-        if (mounted) setState(() => _allUsers = users);
+        try {
+          final auth = AuthService();
+          final users = await auth.getAllUsers()
+              .timeout(const Duration(seconds: 3));
+          if (mounted && users.isNotEmpty) setState(() => _allUsers = users);
+        } catch (_) {}
       }
-    } catch (e) {
-      // Firestore 超时，保持已有的本地数据
     }
   }
 
@@ -94,12 +103,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     final user = _appUser ?? AppUser(uid: 'local', email: 'local@mode', displayName: 'User', role: UserRole.member);
-    bool isFirebase;
+    bool isFirebase = false;
     try {
       isFirebase = FirebaseAuth.instance.currentUser != null;
-    } catch (_) {
-      isFirebase = false;
-    }
+    } catch (_) {}
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -268,7 +275,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           showAboutDialog(
             context: context,
             applicationName: 'Deal Navigator',
-            applicationVersion: isFirebase ? 'v15.1 (Cloud)' : 'v15.1 (Local)',
+            applicationVersion: isFirebase ? 'v15.3 (Cloud)' : 'v15.3 (Local)',
             children: [Text(isFirebase ? 'CRM & 商务管理系统\nFirebase 云端同步模式' : 'CRM & 商务管理系统\n本地模式')],
           );
         }),
@@ -325,7 +332,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 color: AppTheme.cardBgLight,
                 onSelected: (role) async {
                   try {
-                    await AuthService().updateUserRole(u.uid, role);
+                    await AuthService().updateUserRole(u.uid, role).timeout(const Duration(seconds: 4));
                     _loadUser();
                   } catch (_) {}
                   if (mounted) {
@@ -420,7 +427,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           SizedBox(width: double.infinity, child: ElevatedButton(
             onPressed: () async {
               try {
-                await AuthService().updateProfile(user.uid, nameCtrl.text.trim());
+                await AuthService().updateProfile(user.uid, nameCtrl.text.trim())
+                    .timeout(const Duration(seconds: 4));
                 await _loadUser();
                 if (ctx.mounted) Navigator.pop(ctx);
                 if (mounted) {
