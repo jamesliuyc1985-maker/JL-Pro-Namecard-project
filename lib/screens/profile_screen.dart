@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:csv/csv.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../providers/crm_provider.dart';
 import '../services/auth_service.dart';
 import '../utils/theme.dart';
 import '../utils/formatters.dart';
+import '../utils/download_helper.dart';
+
+const String appVersion = 'v16.0';
 
 /// 角色工具类
 class AppRole {
@@ -46,7 +51,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (!mounted) return;
     setState(() => _isLoading = true);
 
-    // 第一步: 立即用 Firebase Auth 本地缓存信息展示 (零网络延迟)
     User? fbUser;
     try {
       fbUser = FirebaseAuth.instance.currentUser;
@@ -68,10 +72,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
 
-    // 立即展示，不等网络
     if (mounted) setState(() => _isLoading = false);
 
-    // 第二步: 后台异步拉取 Firestore 详情 (超时保护, 失败静默)
     if (fbUser != null) {
       try {
         final auth = AuthService();
@@ -80,11 +82,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (detailedUser != null && mounted) {
           setState(() => _appUser = detailedUser);
         }
-      } catch (_) {
-        // Firestore 超时/失败，保持 Auth 基本信息
-      }
+      } catch (_) {}
 
-      // admin 后台拉全部用户
       if (_appUser?.role == UserRole.admin) {
         try {
           final auth = AuthService();
@@ -116,15 +115,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 20),
           _buildProfileCard(user, isFirebase),
           const SizedBox(height: 16),
-          _buildPermissionsCard(user),
-          const SizedBox(height: 16),
           _buildMyWorkCard(context, user),
           const SizedBox(height: 16),
+          _buildExportCard(context),
+          const SizedBox(height: 16),
+          _buildEmailCard(context),
+          const SizedBox(height: 16),
           _buildActionsCard(context, isFirebase),
+          const SizedBox(height: 16),
+          _buildPermissionsCard(user),
           if (user.role == UserRole.admin && _allUsers.length > 1) ...[
             const SizedBox(height: 16),
             _buildUserManagement(user),
           ],
+          const SizedBox(height: 16),
+          _buildVersionInfo(isFirebase),
           const SizedBox(height: 30),
         ]),
       ),
@@ -168,6 +173,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 fontSize: 10, fontWeight: FontWeight.w600)),
             ]),
           ),
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            decoration: BoxDecoration(color: AppTheme.primaryBlue.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
+            child: Text(appVersion, style: const TextStyle(color: AppTheme.primaryBlue, fontSize: 9, fontWeight: FontWeight.bold)),
+          ),
         ]),
       ])),
     ]);
@@ -195,28 +206,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           label: const Text('编辑资料', style: TextStyle(fontSize: 13)),
           onPressed: () => _showEditProfile(context, user),
         )),
-      ]),
-    );
-  }
-
-  Widget _buildPermissionsCard(AppUser user) {
-    final role = user.role.name;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(14)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Row(children: [
-          Icon(Icons.security, color: AppTheme.accentGold, size: 18),
-          SizedBox(width: 8),
-          Text('权限说明', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
-        ]),
-        const SizedBox(height: 12),
-        _permRow('查看所有数据', true),
-        _permRow('编辑/新增数据', AppRole.canEditData(role)),
-        _permRow('管理团队成员', AppRole.canManageTeam(role)),
-        _permRow('查看统计仪表板', AppRole.canViewStats(role)),
-        _permRow('删除数据', AppRole.canDelete(role)),
-        _permRow('管理用户权限', AppRole.canAssignRole(role)),
       ]),
     );
   }
@@ -253,11 +242,387 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
+  // ========== Excel 导出卡片 ==========
+  Widget _buildExportCard(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(14)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Row(children: [
+          Icon(Icons.file_download, color: AppTheme.success, size: 18),
+          SizedBox(width: 8),
+          Text('数据导出', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+        ]),
+        const SizedBox(height: 4),
+        const Text('导出数据为 CSV/Excel 格式', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+        const SizedBox(height: 12),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          _exportChip(context, Icons.people, '人脉', AppTheme.primaryBlue, 'contacts'),
+          _exportChip(context, Icons.view_kanban, '销售管线', AppTheme.primaryPurple, 'deals'),
+          _exportChip(context, Icons.shopping_cart, '订单', AppTheme.accentGold, 'orders'),
+          _exportChip(context, Icons.science, '产品', const Color(0xFF00CEC9), 'products'),
+          _exportChip(context, Icons.inventory, '库存', AppTheme.warning, 'inventory'),
+          _exportChip(context, Icons.precision_manufacturing, '生产', AppTheme.danger, 'production'),
+          _exportChip(context, Icons.task_alt, '任务', AppTheme.success, 'tasks'),
+          _exportChip(context, Icons.select_all, '全部导出', Colors.white, 'all'),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _exportChip(BuildContext context, IconData icon, String label, Color color, String type) {
+    return GestureDetector(
+      onTap: () => _exportData(context, type),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, color: color, size: 16),
+          const SizedBox(width: 6),
+          Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
+        ]),
+      ),
+    );
+  }
+
+  void _exportData(BuildContext context, String type) {
+    final crm = context.read<CrmProvider>();
+    final now = DateTime.now();
+    final dateStr = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+    try {
+      if (type == 'all') {
+        _doExport('contacts', dateStr, _contactsCsv(crm));
+        _doExport('deals', dateStr, _dealsCsv(crm));
+        _doExport('orders', dateStr, _ordersCsv(crm));
+        _doExport('products', dateStr, _productsCsv(crm));
+        _doExport('inventory', dateStr, _inventoryCsv(crm));
+        _doExport('production', dateStr, _productionCsv(crm));
+        _doExport('tasks', dateStr, _tasksCsv(crm));
+      } else {
+        String csv;
+        switch (type) {
+          case 'contacts': csv = _contactsCsv(crm); break;
+          case 'deals': csv = _dealsCsv(crm); break;
+          case 'orders': csv = _ordersCsv(crm); break;
+          case 'products': csv = _productsCsv(crm); break;
+          case 'inventory': csv = _inventoryCsv(crm); break;
+          case 'production': csv = _productionCsv(crm); break;
+          case 'tasks': csv = _tasksCsv(crm); break;
+          default: return;
+        }
+        _doExport(type, dateStr, csv);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${type == "all" ? "全部数据" : type} 导出成功'), backgroundColor: AppTheme.success),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导出失败: $e'), backgroundColor: AppTheme.danger),
+        );
+      }
+    }
+  }
+
+  void _doExport(String name, String dateStr, String csvContent) {
+    final fileName = 'dealnavigator_${name}_$dateStr.csv';
+    downloadCsvWeb(fileName, csvContent);
+  }
+
+  String _contactsCsv(CrmProvider crm) {
+    final rows = <List<String>>[
+      ['姓名', '公司', '职位', '电话', '邮箱', '地址', '行业', '关系强度', '与我关系', '标签', '备注', '最后联系', '创建时间'],
+      ...crm.allContacts.map((c) => [
+        c.name, c.company, c.position, c.phone, c.email, c.address,
+        c.industry.label, c.strength.label, c.myRelation.label,
+        c.tags.join(';'), c.notes,
+        Formatters.dateFull(c.lastContactedAt), Formatters.dateFull(c.createdAt),
+      ]),
+    ];
+    return const ListToCsvConverter().convert(rows);
+  }
+
+  String _dealsCsv(CrmProvider crm) {
+    final rows = <List<String>>[
+      ['标题', '联系人', '阶段', '金额', '币种', '概率%', '预期关闭日期', '标签', '描述', '创建时间', '更新时间'],
+      ...crm.deals.map((d) => [
+        d.title, d.contactName, d.stage.label, d.amount.toStringAsFixed(0),
+        d.currency, d.probability.toString(),
+        Formatters.dateFull(d.expectedCloseDate),
+        d.tags.join(';'), d.description,
+        Formatters.dateFull(d.createdAt), Formatters.dateFull(d.updatedAt),
+      ]),
+    ];
+    return const ListToCsvConverter().convert(rows);
+  }
+
+  String _ordersCsv(CrmProvider crm) {
+    final rows = <List<String>>[
+      ['订单ID', '联系人', '价格类型', '总金额', '状态', '商品明细', '创建时间', '更新时间'],
+      ...crm.orders.map((o) => [
+        o.id.substring(0, 8), o.contactName, o.priceType, o.totalAmount.toStringAsFixed(0),
+        o.status, o.items.map((i) => '${i.productName}x${i.quantity}').join(';'),
+        Formatters.dateFull(o.createdAt), Formatters.dateFull(o.updatedAt),
+      ]),
+    ];
+    return const ListToCsvConverter().convert(rows);
+  }
+
+  String _productsCsv(CrmProvider crm) {
+    final rows = <List<String>>[
+      ['编码', '名称', '日文名', '类别', '规格', '每箱数量', '代理价', '诊所价', '零售价', '储存方式', '保质期', '说明'],
+      ...crm.products.map((p) => [
+        p.code, p.name, p.nameJa, p.category, p.specification,
+        p.unitsPerBox.toString(), p.agentPrice.toStringAsFixed(0),
+        p.clinicPrice.toStringAsFixed(0), p.retailPrice.toStringAsFixed(0),
+        p.storageMethod, p.shelfLife, p.description,
+      ]),
+    ];
+    return const ListToCsvConverter().convert(rows);
+  }
+
+  String _inventoryCsv(CrmProvider crm) {
+    final stocks = crm.inventoryStocks;
+    final rows = <List<String>>[
+      ['产品ID', '产品名', '产品编码', '当前库存'],
+      ...stocks.map((s) => [s.productId, s.productName, s.productCode, s.currentStock.toString()]),
+    ];
+    return const ListToCsvConverter().convert(rows);
+  }
+
+  String _productionCsv(CrmProvider crm) {
+    final rows = <List<String>>[
+      ['产品', '工厂', '数量', '批次号', '状态', '负责人', '创建日期', '开始日期', '完成日期'],
+      ...crm.productionOrders.map((p) => [
+        p.productName, p.factoryName, p.quantity.toString(), p.batchNumber,
+        p.status, p.assigneeName,
+        Formatters.dateFull(p.createdAt),
+        p.startedDate != null ? Formatters.dateFull(p.startedDate!) : '',
+        p.completedDate != null ? Formatters.dateFull(p.completedDate!) : '',
+      ]),
+    ];
+    return const ListToCsvConverter().convert(rows);
+  }
+
+  String _tasksCsv(CrmProvider crm) {
+    final rows = <List<String>>[
+      ['标题', '描述', '负责人', '创建人', '优先级', '阶段', '截止日期', '预计工时', '实际工时', '标签'],
+      ...crm.tasks.map((t) => [
+        t.title, t.description, t.assigneeName, t.creatorName,
+        t.priority, t.phase.name, Formatters.dateFull(t.dueDate),
+        t.estimatedHours.toString(), t.actualHours.toString(),
+        t.tags.join(';'),
+      ]),
+    ];
+    return const ListToCsvConverter().convert(rows);
+  }
+
+  // ========== 邮件功能卡片 ==========
+  Widget _buildEmailCard(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(14)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Row(children: [
+          Icon(Icons.email, color: AppTheme.primaryPurple, size: 18),
+          SizedBox(width: 8),
+          Text('发送邮件', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+        ]),
+        const SizedBox(height: 4),
+        const Text('快速发送邮件给联系人或团队', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(child: _emailActionButton(
+            Icons.send, '新邮件', AppTheme.primaryPurple,
+            () => _composeEmail(context),
+          )),
+          const SizedBox(width: 8),
+          Expanded(child: _emailActionButton(
+            Icons.groups, '群发联系人', AppTheme.primaryBlue,
+            () => _composeBulkEmail(context),
+          )),
+          const SizedBox(width: 8),
+          Expanded(child: _emailActionButton(
+            Icons.summarize, '发送报告', AppTheme.success,
+            () => _composeReportEmail(context),
+          )),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _emailActionButton(IconData icon, String label, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Column(children: [
+          Icon(icon, color: color, size: 22),
+          const SizedBox(height: 4),
+          Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _composeEmail(BuildContext context, {String? to, String? subject, String? body}) async {
+    final toCtrl = TextEditingController(text: to ?? '');
+    final subjectCtrl = TextEditingController(text: subject ?? '');
+    final bodyCtrl = TextEditingController(text: body ?? '');
+    final crm = context.read<CrmProvider>();
+    final contactEmails = crm.allContacts.where((c) => c.email.isNotEmpty).toList();
+
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: AppTheme.cardBg,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 20, right: 20, top: 20),
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Text('撰写邮件', style: TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              if (contactEmails.isNotEmpty && toCtrl.text.isEmpty) ...[
+                SizedBox(
+                  height: 36,
+                  child: ListView(scrollDirection: Axis.horizontal, children: contactEmails.take(10).map((c) =>
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: GestureDetector(
+                        onTap: () {
+                          setModalState(() { toCtrl.text = c.email; });
+                        },
+                        child: Chip(
+                          avatar: CircleAvatar(backgroundColor: c.industry.color, radius: 10,
+                            child: Text(c.name[0], style: const TextStyle(fontSize: 9, color: Colors.white))),
+                          label: Text(c.name, style: const TextStyle(fontSize: 10)),
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          padding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ),
+                  ).toList()),
+                ),
+                const SizedBox(height: 8),
+              ],
+              TextField(controller: toCtrl, style: const TextStyle(color: AppTheme.textPrimary),
+                decoration: const InputDecoration(labelText: '收件人', prefixIcon: Icon(Icons.person, color: AppTheme.textSecondary, size: 18))),
+              const SizedBox(height: 10),
+              TextField(controller: subjectCtrl, style: const TextStyle(color: AppTheme.textPrimary),
+                decoration: const InputDecoration(labelText: '主题', prefixIcon: Icon(Icons.subject, color: AppTheme.textSecondary, size: 18))),
+              const SizedBox(height: 10),
+              TextField(controller: bodyCtrl, style: const TextStyle(color: AppTheme.textPrimary),
+                maxLines: 5, decoration: const InputDecoration(labelText: '正文', alignLabelWithHint: true)),
+              const SizedBox(height: 16),
+              Row(children: [
+                Expanded(child: OutlinedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('取消'),
+                )),
+                const SizedBox(width: 12),
+                Expanded(flex: 2, child: ElevatedButton.icon(
+                  icon: const Icon(Icons.send, size: 18),
+                  label: const Text('发送'),
+                  onPressed: () async {
+                    final uri = Uri(
+                      scheme: 'mailto',
+                      path: toCtrl.text.trim(),
+                      queryParameters: {
+                        if (subjectCtrl.text.isNotEmpty) 'subject': subjectCtrl.text.trim(),
+                        if (bodyCtrl.text.isNotEmpty) 'body': bodyCtrl.text.trim(),
+                      },
+                    );
+                    try {
+                      await launchUrl(uri);
+                      if (ctx.mounted) Navigator.pop(ctx);
+                    } catch (e) {
+                      if (ctx.mounted) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(content: Text('无法打开邮件客户端: $e'), backgroundColor: AppTheme.danger),
+                        );
+                      }
+                    }
+                  },
+                )),
+              ]),
+              const SizedBox(height: 20),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _composeBulkEmail(BuildContext context) {
+    final crm = context.read<CrmProvider>();
+    final contactEmails = crm.allContacts.where((c) => c.email.isNotEmpty).map((c) => c.email).toList();
+    if (contactEmails.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('没有可发送的联系人邮箱'), backgroundColor: AppTheme.warning),
+      );
+      return;
+    }
+    _composeEmail(context,
+      to: contactEmails.join(','),
+      subject: 'Deal Navigator - 业务更新',
+      body: '尊敬的合作伙伴，\n\n感谢您的持续合作。\n\n此致\nDeal Navigator 团队',
+    );
+  }
+
+  void _composeReportEmail(BuildContext context) {
+    final crm = context.read<CrmProvider>();
+    final stats = crm.stats;
+    final now = DateTime.now();
+    final subject = 'Deal Navigator 业务报告 - ${now.year}/${now.month}/${now.day}';
+    final body = '''Deal Navigator 业务报告
+日期: ${Formatters.dateFull(now)}
+
+=== 核心指标 ===
+人脉总数: ${stats['totalContacts']}
+活跃管线: ${stats['activeDeals']}
+管线金额: ${Formatters.currency(stats['pipelineValue'] as double)}
+成交金额: ${Formatters.currency(stats['closedValue'] as double)}
+成交率: ${(stats['winRate'] as double).toStringAsFixed(1)}%
+
+=== 销售数据 ===
+总订单: ${stats['totalOrders']}
+完成订单: ${stats['completedOrders']}
+销售总额: ${Formatters.currency(stats['salesTotal'] as double)}
+
+=== 生产数据 ===
+活跃生产: ${stats['activeProductions']}
+完成生产: ${stats['completedProductions']}
+工厂数: ${stats['activeFactories']}
+
+---
+由 Deal Navigator $appVersion 生成
+''';
+    _composeEmail(context, subject: subject, body: body);
+  }
+
   Widget _buildActionsCard(BuildContext context, bool isFirebase) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(14)),
-      child: Column(children: [
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Row(children: [
+          Icon(Icons.settings, color: AppTheme.textSecondary, size: 18),
+          SizedBox(width: 8),
+          Text('设置', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+        ]),
+        const SizedBox(height: 8),
         if (isFirebase) ...[
           _actionTile(Icons.sync, '同步云端数据', () async {
             setState(() => _syncStatus = '正在同步...');
@@ -275,12 +640,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
           showAboutDialog(
             context: context,
             applicationName: 'Deal Navigator',
-            applicationVersion: isFirebase ? 'v15.3 (Cloud)' : 'v15.3 (Local)',
-            children: [Text(isFirebase ? 'CRM & 商务管理系统\nFirebase 云端同步模式' : 'CRM & 商务管理系统\n本地模式')],
+            applicationVersion: '$appVersion ${isFirebase ? "(Cloud)" : "(Local)"}',
+            children: [
+              Text(isFirebase
+                ? 'CRM & 商务管理系统\nFirebase 云端同步模式\n\nBuild: ${DateTime.now().year}.${DateTime.now().month}'
+                : 'CRM & 商务管理系统\n本地模式\n\nBuild: ${DateTime.now().year}.${DateTime.now().month}'),
+            ],
           );
         }),
         if (isFirebase && widget.onLogout != null)
           _actionTile(Icons.logout, '退出登录', () => _confirmLogout(context), color: AppTheme.danger),
+      ]),
+    );
+  }
+
+  Widget _buildPermissionsCard(AppUser user) {
+    final role = user.role.name;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(14)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Row(children: [
+          Icon(Icons.security, color: AppTheme.accentGold, size: 18),
+          SizedBox(width: 8),
+          Text('权限说明', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+        ]),
+        const SizedBox(height: 12),
+        _permRow('查看所有数据', true),
+        _permRow('编辑/新增数据', AppRole.canEditData(role)),
+        _permRow('管理团队成员', AppRole.canManageTeam(role)),
+        _permRow('查看统计仪表板', AppRole.canViewStats(role)),
+        _permRow('删除数据', AppRole.canDelete(role)),
+        _permRow('管理用户权限', AppRole.canAssignRole(role)),
       ]),
     );
   }
@@ -349,6 +740,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
           ]),
         ))),
+      ]),
+    );
+  }
+
+  // ========== 版本信息卡片 ==========
+  Widget _buildVersionInfo(bool isFirebase) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [AppTheme.cardBg, AppTheme.primaryPurple.withValues(alpha: 0.08)],
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.primaryPurple.withValues(alpha: 0.15)),
+      ),
+      child: Column(children: [
+        Row(children: [
+          Container(
+            width: 40, height: 40,
+            decoration: BoxDecoration(gradient: AppTheme.gradient, borderRadius: BorderRadius.circular(12)),
+            child: const Icon(Icons.handshake_rounded, color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Deal Navigator', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+            Text('$appVersion | ${isFirebase ? "Firebase Cloud" : "Local Mode"}',
+              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+          ])),
+        ]),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity, padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(color: AppTheme.darkBg.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(8)),
+          child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('CRM & 商务管理系统', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+            Text('外泌体 | NAD+ | NMN | 医药保健品', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+            SizedBox(height: 4),
+            Text('金融 | 股权投融资 | 交易 | 海内外进出口', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+          ]),
+        ),
       ]),
     );
   }

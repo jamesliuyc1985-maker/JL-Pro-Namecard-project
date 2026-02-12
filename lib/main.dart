@@ -11,6 +11,7 @@ import 'services/auth_service.dart';
 import 'utils/theme.dart';
 import 'screens/home_screen.dart';
 import 'screens/auth_screen.dart';
+import 'screens/profile_screen.dart' show appVersion;
 
 /// Firebase 初始化状态
 bool _firebaseReady = false;

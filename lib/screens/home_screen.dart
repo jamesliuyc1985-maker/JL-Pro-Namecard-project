@@ -3,16 +3,16 @@ import 'package:provider/provider.dart';
 import '../services/notification_service.dart';
 import '../utils/theme.dart';
 import '../utils/formatters.dart';
-import 'contacts_screen.dart';
+import 'stats_dashboard_screen.dart';
 import 'pipeline_screen.dart';
-import 'network_screen.dart';
 import 'product_inventory_screen.dart';
 import 'production_screen.dart';
-import 'calendar_task_screen.dart';
-import 'team_screen.dart';
-import 'stats_dashboard_screen.dart';
-import 'profile_screen.dart';
 import 'smart_priority_screen.dart';
+import 'contacts_screen.dart';
+import 'network_screen.dart';
+import 'team_screen.dart';
+import 'calendar_task_screen.dart';
+import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback? onLogout;
@@ -30,34 +30,34 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _screens = [
-      const ProductionScreen(),          // 0 生产
-      const ProductInventoryScreen(),    // 1 产品
-      const PipelineScreen(),            // 2 销售
-      const StatsDashboardScreen(),      // 3 统计 (原人脉位置)
-      const SmartPriorityScreen(),       // 4 智能
-      const CalendarTaskScreen(),        // 5 任务
-      const TeamScreen(),                // 6 团队
-      const ContactsScreen(),            // 7 人脉 (原图谱位置)
-      const NetworkScreen(),             // 8 图谱 (原统计位置)
+      const StatsDashboardScreen(),       // 0 统计
+      const PipelineScreen(),             // 1 销售
+      const ProductInventoryScreen(),     // 2 产品
+      const ProductionScreen(),           // 3 生产
+      const SmartPriorityScreen(),        // 4 智能
+      const ContactsScreen(),             // 5 人脉
+      const NetworkScreen(),              // 6 图谱
+      const TeamScreen(),                 // 7 团队
+      const CalendarTaskScreen(),         // 8 任务
       ProfileScreen(onLogout: widget.onLogout), // 9 我的
     ];
   }
 
   // 上行导航项 (业务线)
   static const _topRow = [
-    _NavDef(0, Icons.precision_manufacturing, '生产'),
-    _NavDef(1, Icons.science_rounded, '产品'),
-    _NavDef(2, Icons.view_kanban_rounded, '销售'),
-    _NavDef(3, Icons.analytics_rounded, '统计'),
+    _NavDef(0, Icons.analytics_rounded, '统计'),
+    _NavDef(1, Icons.view_kanban_rounded, '销售'),
+    _NavDef(2, Icons.science_rounded, '产品'),
+    _NavDef(3, Icons.precision_manufacturing, '生产'),
     _NavDef(4, Icons.auto_awesome, '智能'),
   ];
 
   // 下行导航项 (管理线 + 我的)
   static const _bottomRow = [
-    _NavDef(5, Icons.calendar_month, '任务'),
-    _NavDef(6, Icons.group_rounded, '团队'),
-    _NavDef(7, Icons.people_rounded, '人脉'),
-    _NavDef(8, Icons.hub_rounded, '图谱'),
+    _NavDef(5, Icons.people_rounded, '人脉'),
+    _NavDef(6, Icons.hub_rounded, '图谱'),
+    _NavDef(7, Icons.group_rounded, '团队'),
+    _NavDef(8, Icons.calendar_month, '任务'),
     _NavDef(9, Icons.person_rounded, '我的'),
   ];
 
@@ -79,19 +79,16 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // 上行：生产 / 产品 / 销售 / 人脉
                 Row(
                   children: _topRow.map((n) => Expanded(child: _navItem(n))).toList(),
                 ),
                 const SizedBox(height: 2),
-                // 分割线
                 Container(
                   margin: const EdgeInsets.symmetric(horizontal: 16),
                   height: 0.5,
                   color: AppTheme.textSecondary.withValues(alpha: 0.15),
                 ),
                 const SizedBox(height: 2),
-                // 下行：任务 / 团队 / 图谱 / 统计 / 我的
                 Row(
                   children: _bottomRow.map((n) => Expanded(child: _navItem(n))).toList(),
                 ),
