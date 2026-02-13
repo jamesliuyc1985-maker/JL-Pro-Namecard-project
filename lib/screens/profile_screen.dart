@@ -624,14 +624,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ]),
         const SizedBox(height: 8),
         if (isFirebase) ...[
-          _actionTile(Icons.sync, '同步云端数据', () async {
-            setState(() => _syncStatus = '正在同步...');
+          _actionTile(Icons.cloud_download, '从云端拉取数据', () async {
+            setState(() => _syncStatus = '正在从云端拉取...');
             try {
               final crm = context.read<CrmProvider>();
-              await crm.syncFromCloud().timeout(const Duration(seconds: 8));
-              if (mounted) setState(() => _syncStatus = crm.syncStatus ?? '同步成功');
+              await crm.syncFromCloud().timeout(const Duration(seconds: 12));
+              if (mounted) {
+                setState(() => _syncStatus = crm.syncStatus ?? '拉取成功');
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('云端数据已同步到本地'), backgroundColor: AppTheme.success));
+              }
             } catch (e) {
-              if (mounted) setState(() => _syncStatus = '同步超时');
+              if (mounted) setState(() => _syncStatus = '同步超时，请重试');
+            }
+          }),
+          _actionTile(Icons.cloud_upload, '上传本地数据到云端', () async {
+            final confirm = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+              backgroundColor: AppTheme.cardBg,
+              title: const Text('上传确认', style: TextStyle(color: AppTheme.textPrimary)),
+              content: const Text('将本地所有数据推送到云端，其他设备登录同一账号即可拉取。确定上传？', style: TextStyle(color: AppTheme.textSecondary)),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+                ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('确定上传')),
+              ],
+            ));
+            if (confirm != true) return;
+            setState(() => _syncStatus = '正在上传到云端...');
+            try {
+              final crm = context.read<CrmProvider>();
+              await crm.pushToCloud().timeout(const Duration(seconds: 15));
+              if (mounted) {
+                setState(() => _syncStatus = crm.syncStatus ?? '上传成功');
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('本地数据已上传到云端'), backgroundColor: AppTheme.success));
+              }
+            } catch (e) {
+              if (mounted) setState(() => _syncStatus = '上传超时，请重试');
+            }
+          }),
+          _actionTile(Icons.sync, '双向同步（拉取+上传）', () async {
+            setState(() => _syncStatus = '正在双向同步...');
+            try {
+              final crm = context.read<CrmProvider>();
+              await crm.syncFromCloud().timeout(const Duration(seconds: 12));
+              await crm.pushToCloud().timeout(const Duration(seconds: 12));
+              if (mounted) {
+                setState(() => _syncStatus = '双向同步完成 (${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, "0")})');
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('双向同步完成！所有终端数据已一致'), backgroundColor: AppTheme.success));
+              }
+            } catch (e) {
+              if (mounted) setState(() => _syncStatus = '同步异常: $e');
             }
           }),
           _actionTile(Icons.lock_outline, '修改密码', () => _showChangePassword(context)),
