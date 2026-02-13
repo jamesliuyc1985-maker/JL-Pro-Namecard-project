@@ -9,7 +9,7 @@ import '../utils/theme.dart';
 import '../utils/formatters.dart';
 import '../utils/download_helper.dart';
 
-const String appVersion = 'v23.0';
+const String appVersion = 'v24.0';
 
 /// 角色工具类
 class AppRole {
@@ -613,6 +613,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildActionsCard(BuildContext context, bool isFirebase) {
+    final isAdmin = _appUser?.role == UserRole.admin;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(14)),
@@ -624,56 +625,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ]),
         const SizedBox(height: 8),
         if (isFirebase) ...[
-          _actionTile(Icons.cloud_download, '从云端拉取数据', () async {
-            setState(() => _syncStatus = '正在从云端拉取...');
+          _actionTile(Icons.sync, '立即同步最新数据', () async {
+            setState(() => _syncStatus = '正在同步...');
             try {
               final crm = context.read<CrmProvider>();
-              await crm.syncFromCloud().timeout(const Duration(seconds: 12));
+              await crm.syncFromCloud().timeout(const Duration(seconds: 15));
               if (mounted) {
-                setState(() => _syncStatus = crm.syncStatus ?? '拉取成功');
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('云端数据已同步到本地'), backgroundColor: AppTheme.success));
+                setState(() => _syncStatus = crm.syncStatus ?? '同步成功');
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已拉取最新公共数据'), backgroundColor: AppTheme.success));
               }
             } catch (e) {
               if (mounted) setState(() => _syncStatus = '同步超时，请重试');
             }
           }),
-          _actionTile(Icons.cloud_upload, '上传本地数据到云端', () async {
-            final confirm = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
-              backgroundColor: AppTheme.cardBg,
-              title: const Text('上传确认', style: TextStyle(color: AppTheme.textPrimary)),
-              content: const Text('将本地所有数据推送到云端，其他设备登录同一账号即可拉取。确定上传？', style: TextStyle(color: AppTheme.textSecondary)),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-                ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('确定上传')),
-              ],
-            ));
-            if (confirm != true) return;
-            setState(() => _syncStatus = '正在上传到云端...');
-            try {
-              final crm = context.read<CrmProvider>();
-              await crm.pushToCloud().timeout(const Duration(seconds: 15));
-              if (mounted) {
-                setState(() => _syncStatus = crm.syncStatus ?? '上传成功');
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('本地数据已上传到云端'), backgroundColor: AppTheme.success));
-              }
-            } catch (e) {
-              if (mounted) setState(() => _syncStatus = '上传超时，请重试');
-            }
-          }),
-          _actionTile(Icons.sync, '双向同步（拉取+上传）', () async {
-            setState(() => _syncStatus = '正在双向同步...');
-            try {
-              final crm = context.read<CrmProvider>();
-              await crm.syncFromCloud().timeout(const Duration(seconds: 12));
-              await crm.pushToCloud().timeout(const Duration(seconds: 12));
-              if (mounted) {
-                setState(() => _syncStatus = '双向同步完成 (${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, "0")})');
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('双向同步完成！所有终端数据已一致'), backgroundColor: AppTheme.success));
-              }
-            } catch (e) {
-              if (mounted) setState(() => _syncStatus = '同步异常: $e');
-            }
-          }),
+          // 管理员专属：数据备份
+          if (isAdmin) _actionTile(Icons.backup, '📦 数据备份（管理员）', () => _showBackupDialog(context), color: AppTheme.accentGold),
+          if (isAdmin) _actionTile(Icons.restore, '📂 恢复备份（管理员）', () => _showRestoreDialog(context), color: AppTheme.accentGold),
           _actionTile(Icons.lock_outline, '修改密码', () => _showChangePassword(context)),
         ],
         _actionTile(Icons.info_outline, '关于 Deal Navigator', () {
@@ -683,7 +650,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             applicationVersion: '$appVersion ${isFirebase ? "(Cloud)" : "(Local)"}',
             children: [
               Text(isFirebase
-                ? 'CRM & 商务管理系统\nFirebase 云端同步模式\n\nBuild: ${DateTime.now().year}.${DateTime.now().month}'
+                ? 'CRM & 商务管理系统\nFirebase 公共协作模式\n所有成员共享同一份数据\n\nBuild: ${DateTime.now().year}.${DateTime.now().month}'
                 : 'CRM & 商务管理系统\n本地模式\n\nBuild: ${DateTime.now().year}.${DateTime.now().month}'),
             ],
           );
@@ -692,6 +659,139 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _actionTile(Icons.logout, '退出登录', () => _confirmLogout(context), color: AppTheme.danger),
       ]),
     );
+  }
+
+  // ========== 管理员备份功能 ==========
+  void _showBackupDialog(BuildContext context) async {
+    final confirm = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      backgroundColor: AppTheme.cardBg,
+      title: const Row(children: [
+        Icon(Icons.backup, color: AppTheme.accentGold, size: 22),
+        SizedBox(width: 8),
+        Text('数据备份', style: TextStyle(color: AppTheme.textPrimary)),
+      ]),
+      content: const Text('将当前所有公共数据创建快照备份到云端。\n备份包含：人脉、交易、订单、产品、库存、生产等全部数据。\n\n建议每天备份一次。', style: TextStyle(color: AppTheme.textSecondary)),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.backup, size: 16),
+          label: const Text('立即备份'),
+          onPressed: () => Navigator.pop(ctx, true),
+        ),
+      ],
+    ));
+    if (confirm != true || !mounted) return;
+
+    setState(() => _syncStatus = '正在创建备份...');
+    try {
+      final crm = context.read<CrmProvider>();
+      final backupId = await crm.createBackup(_appUser?.displayName ?? 'admin')
+          .timeout(const Duration(seconds: 30));
+      if (mounted) {
+        setState(() => _syncStatus = '备份成功: $backupId');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('备份创建成功！ID: $backupId'),
+          backgroundColor: AppTheme.success,
+          duration: const Duration(seconds: 4),
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _syncStatus = '备份失败: $e');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('备份失败: $e'), backgroundColor: AppTheme.danger));
+      }
+    }
+  }
+
+  void _showRestoreDialog(BuildContext context) async {
+    setState(() => _syncStatus = '正在获取备份列表...');
+    List<Map<String, dynamic>> backups = [];
+    try {
+      final crm = context.read<CrmProvider>();
+      backups = await crm.getBackupList().timeout(const Duration(seconds: 10));
+    } catch (e) {
+      if (mounted) {
+        setState(() => _syncStatus = '获取备份列表失败');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('获取备份列表失败: $e'), backgroundColor: AppTheme.danger));
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _syncStatus = null);
+
+    if (backups.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('暂无备份记录'), backgroundColor: AppTheme.warning));
+      return;
+    }
+
+    final selected = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
+      backgroundColor: AppTheme.cardBg,
+      title: const Row(children: [
+        Icon(Icons.restore, color: AppTheme.accentGold, size: 22),
+        SizedBox(width: 8),
+        Text('选择要恢复的备份', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16)),
+      ]),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: 300,
+        child: ListView.builder(
+          itemCount: backups.length,
+          itemBuilder: (_, i) {
+            final b = backups[i];
+            final ts = DateTime.tryParse(b['timestamp'] ?? '');
+            final dateStr = ts != null ? '${ts.year}/${ts.month.toString().padLeft(2, "0")}/${ts.day.toString().padLeft(2, "0")} ${ts.hour.toString().padLeft(2, "0")}:${ts.minute.toString().padLeft(2, "0")}' : '未知';
+            return Card(
+              color: AppTheme.cardBgLight,
+              child: ListTile(
+                leading: const Icon(Icons.archive, color: AppTheme.accentGold),
+                title: Text(dateStr, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+                subtitle: Text('操作人: ${b['createdBy'] ?? '未知'} | ${b['summary'] ?? ''}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                onTap: () => Navigator.pop(ctx, b['id'] as String?),
+              ),
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+      ],
+    ));
+    if (selected == null || !mounted) return;
+
+    final confirmRestore = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      backgroundColor: AppTheme.cardBg,
+      title: const Text('确认恢复', style: TextStyle(color: AppTheme.danger)),
+      content: const Text('恢复备份将覆盖当前所有数据！此操作不可撤销。\n\n确定要恢复吗？', style: TextStyle(color: AppTheme.textSecondary)),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('确认恢复'),
+        ),
+      ],
+    ));
+    if (confirmRestore != true || !mounted) return;
+
+    setState(() => _syncStatus = '正在恢复备份...');
+    try {
+      final crm = context.read<CrmProvider>();
+      await crm.restoreBackup(selected).timeout(const Duration(seconds: 30));
+      if (mounted) {
+        setState(() => _syncStatus = '恢复成功');
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('数据已恢复！'), backgroundColor: AppTheme.success));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _syncStatus = '恢复失败: $e');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('恢复失败: $e'), backgroundColor: AppTheme.danger));
+      }
+    }
   }
 
   Widget _buildPermissionsCard(AppUser user) {

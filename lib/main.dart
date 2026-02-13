@@ -121,15 +121,15 @@ class _AuthGate extends StatelessWidget {
           );
         }
 
-        // 已登录 → 设置 userId + 进入主页
+        // 已登录 → 设置 userId + 强制从云端拉取公共数据
         if (snapshot.hasData && snapshot.data != null) {
           final user = snapshot.data!;
           final crm = context.read<CrmProvider>();
           crm.setUserId(user.uid);
-          // 后台异步同步（不阻塞 UI，完成后自动刷新）
+          // 登录后立即拉取云端最新公共数据（所有用户看到同一份）
           Future.microtask(() async {
             try {
-              await crm.syncFromCloud().timeout(const Duration(seconds: 15));
+              await crm.syncFromCloud().timeout(const Duration(seconds: 20));
             } catch (_) {}
           });
 

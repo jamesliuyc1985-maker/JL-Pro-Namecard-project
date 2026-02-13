@@ -454,6 +454,101 @@ class DataService {
 
   String generateId() => _uuid.v4();
 
+  // ========== 管理员备份/恢复 (Firestore backups 集合) ==========
+  Future<void> saveBackup(String backupId, Map<String, dynamic> backupData) async {
+    if (!_firestoreEnabled || _db == null) throw Exception('Firestore未启用');
+    await _db!.collection('backups').doc(backupId).set(backupData)
+        .timeout(const Duration(seconds: 25));
+  }
+
+  Future<List<Map<String, dynamic>>> getBackupList() async {
+    if (!_firestoreEnabled || _db == null) throw Exception('Firestore未启用');
+    final snap = await _db!.collection('backups')
+        .orderBy('timestamp', descending: true)
+        .limit(20)
+        .get()
+        .timeout(const Duration(seconds: 8));
+    return snap.docs.map((d) => {
+      'id': d.id,
+      'timestamp': d.data()['timestamp'] as String? ?? '',
+      'createdBy': d.data()['createdBy'] as String? ?? '',
+      'summary': d.data()['summary'] as String? ?? '',
+    }).toList();
+  }
+
+  Future<void> restoreFromBackup(String backupId) async {
+    if (!_firestoreEnabled || _db == null) throw Exception('Firestore未启用');
+    final doc = await _db!.collection('backups').doc(backupId).get()
+        .timeout(const Duration(seconds: 15));
+    if (!doc.exists) throw Exception('备份不存在');
+
+    final data = doc.data()!['data'] as Map<String, dynamic>? ?? {};
+    
+    // 恢复每个集合
+    if (data['contacts'] is List) {
+      _contactsCache = (data['contacts'] as List).map((j) {
+        try { return Contact.fromJson(j as Map<String, dynamic>); } catch (_) { return null; }
+      }).whereType<Contact>().toList();
+    }
+    if (data['deals'] is List) {
+      _dealsCache = (data['deals'] as List).map((j) {
+        try { return Deal.fromJson(j as Map<String, dynamic>); } catch (_) { return null; }
+      }).whereType<Deal>().toList();
+    }
+    if (data['relations'] is List) {
+      _relationsCache = (data['relations'] as List).map((j) {
+        try { return ContactRelation.fromJson(j as Map<String, dynamic>); } catch (_) { return null; }
+      }).whereType<ContactRelation>().toList();
+    }
+    if (data['products'] is List) {
+      _productsCache = (data['products'] as List).map((j) {
+        try { return Product.fromJson(j as Map<String, dynamic>); } catch (_) { return null; }
+      }).whereType<Product>().toList();
+    }
+    if (data['sales_orders'] is List) {
+      _ordersCache = (data['sales_orders'] as List).map((j) {
+        try { return SalesOrder.fromJson(j as Map<String, dynamic>); } catch (_) { return null; }
+      }).whereType<SalesOrder>().toList();
+    }
+    if (data['interactions'] is List) {
+      _interactionsCache = (data['interactions'] as List).map((j) {
+        try { return Interaction.fromJson(j as Map<String, dynamic>); } catch (_) { return null; }
+      }).whereType<Interaction>().toList();
+    }
+    if (data['inventory'] is List) {
+      _inventoryCache = (data['inventory'] as List).map((j) {
+        try { return InventoryRecord.fromJson(j as Map<String, dynamic>); } catch (_) { return null; }
+      }).whereType<InventoryRecord>().toList();
+    }
+    if (data['team'] is List) {
+      _teamCache = (data['team'] as List).map((j) {
+        try { return TeamMember.fromJson(j as Map<String, dynamic>); } catch (_) { return null; }
+      }).whereType<TeamMember>().toList();
+    }
+    if (data['tasks'] is List) {
+      _taskCache = (data['tasks'] as List).map((j) {
+        try { return Task.fromJson(j as Map<String, dynamic>); } catch (_) { return null; }
+      }).whereType<Task>().toList();
+    }
+    if (data['assignments'] is List) {
+      _assignmentCache = (data['assignments'] as List).map((j) {
+        try { return ContactAssignment.fromJson(j as Map<String, dynamic>); } catch (_) { return null; }
+      }).whereType<ContactAssignment>().toList();
+    }
+    if (data['factories'] is List) {
+      _factoryCache = (data['factories'] as List).map((j) {
+        try { return ProductionFactory.fromJson(j as Map<String, dynamic>); } catch (_) { return null; }
+      }).whereType<ProductionFactory>().toList();
+    }
+    if (data['production'] is List) {
+      _productionCache = (data['production'] as List).map((j) {
+        try { return ProductionOrder.fromJson(j as Map<String, dynamic>); } catch (_) { return null; }
+      }).whereType<ProductionOrder>().toList();
+    }
+
+    if (kDebugMode) debugPrint('[DataService] Restored from backup: $backupId');
+  }
+
   // ========== Firestore 辅助方法 ==========
   void _firestoreWrite(String collection, String docId, Map<String, dynamic> data) {
     if (!_firestoreEnabled || _db == null) return;

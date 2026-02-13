@@ -165,6 +165,54 @@ class CrmProvider extends ChangeNotifier {
     for (final p in _productionOrders) { await _syncService.put('production', p.id, {...p.toJson(), 'updatedAt': DateTime.now().toIso8601String()}); }
   }
 
+  // ========== 管理员备份/恢复功能 ==========
+  /// 创建数据快照备份到 Firestore backups 集合
+  Future<String> createBackup(String createdBy) async {
+    final now = DateTime.now();
+    final backupId = 'backup_${now.year}${now.month.toString().padLeft(2, "0")}${now.day.toString().padLeft(2, "0")}_${now.hour.toString().padLeft(2, "0")}${now.minute.toString().padLeft(2, "0")}';
+    
+    // 先确保内存数据是最新的
+    await _persistAllToHive();
+    
+    // 收集所有数据
+    final backupData = <String, dynamic>{
+      'id': backupId,
+      'timestamp': now.toIso8601String(),
+      'createdBy': createdBy,
+      'summary': '人脉${_contacts.length} 交易${_deals.length} 订单${_orders.length} 产品${_products.length}',
+      'data': {
+        'contacts': _contacts.map((c) => c.toJson()).toList(),
+        'deals': _deals.map((d) => d.toJson()).toList(),
+        'relations': _relations.map((r) => r.toJson()).toList(),
+        'products': _products.map((p) => p.toJson()).toList(),
+        'sales_orders': _orders.map((o) => o.toJson()).toList(),
+        'interactions': _interactions.map((i) => i.toJson()).toList(),
+        'inventory': _inventoryRecords.map((r) => r.toJson()).toList(),
+        'team': _teamMembers.map((m) => m.toJson()).toList(),
+        'tasks': _tasks.map((t) => t.toJson()).toList(),
+        'assignments': _assignments.map((a) => a.toJson()).toList(),
+        'factories': _factories.map((f) => f.toJson()).toList(),
+        'production': _productionOrders.map((p) => p.toJson()).toList(),
+      },
+    };
+    
+    await _dataService.saveBackup(backupId, backupData);
+    return backupId;
+  }
+
+  /// 获取备份列表
+  Future<List<Map<String, dynamic>>> getBackupList() async {
+    return await _dataService.getBackupList();
+  }
+
+  /// 从备份恢复
+  Future<void> restoreBackup(String backupId) async {
+    await _dataService.restoreFromBackup(backupId);
+    _refreshAll();
+    // 恢复后推送到 Firestore 确保所有终端同步
+    await pushToCloud();
+  }
+
   void setIndustryFilter(Industry? industry) {
     _selectedIndustry = industry == _selectedIndustry ? null : industry;
     notifyListeners();
