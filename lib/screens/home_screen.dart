@@ -19,104 +19,29 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.onLogout});
   @override
   State<HomeScreen> createState() => _HomeScreenState();
-}
 
-class _HomeScreenState extends State<HomeScreen> {
-  int _currentIndex = 0;
-
-  late final List<Widget> _screens;
-
-  @override
-  void initState() {
-    super.initState();
-    _screens = [
-      const StatsDashboardScreen(),
-      const PipelineScreen(),
-      const ProductInventoryScreen(),
-      const ProductionScreen(),
-      const SmartPriorityScreen(),
-      const ContactsScreen(),
-      const NetworkScreen(),
-      const TeamScreen(),
-      const CalendarTaskScreen(),
-      ProfileScreen(onLogout: widget.onLogout),
-    ];
-  }
-
-  static const _topRow = [
-    _NavDef(0, Icons.bar_chart_rounded, '统计'),
-    _NavDef(1, Icons.view_kanban_rounded, '销售'),
-    _NavDef(2, Icons.science_outlined, '产品'),
-    _NavDef(3, Icons.precision_manufacturing_outlined, '生产'),
-    _NavDef(4, Icons.auto_awesome_outlined, '智能'),
-  ];
-
-  static const _bottomRow = [
-    _NavDef(5, Icons.people_outline, '人脉'),
-    _NavDef(6, Icons.hub_outlined, '图谱'),
-    _NavDef(7, Icons.group_outlined, '团队'),
-    _NavDef(8, Icons.calendar_month_outlined, '任务'),
-    _NavDef(9, Icons.person_outline, '我的'),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(children: [
-        _screens[_currentIndex],
-        _buildNotificationBell(context),
-      ]),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: AppTheme.navy,
-          border: Border(top: BorderSide(color: AppTheme.steel.withValues(alpha: 0.3))),
+  /// Notification bell widget - accessible from any screen
+  static Widget buildNotificationBell(BuildContext context) {
+    return Consumer<NotificationService>(builder: (context, ns, _) {
+      return GestureDetector(
+        onTap: () => _showNotificationPanel(context, ns),
+        child: Container(
+          padding: const EdgeInsets.all(6),
+          child: Stack(clipBehavior: Clip.none, children: [
+            const Icon(Icons.notifications_none, color: AppTheme.slate, size: 20),
+            if (ns.unreadCount > 0)
+              Positioned(top: -4, right: -4, child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: const BoxDecoration(color: AppTheme.danger, shape: BoxShape.circle),
+                child: Text('${ns.unreadCount}', style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+              )),
+          ]),
         ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(4, 4, 4, 2),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(children: _topRow.map((n) => Expanded(child: _navItem(n))).toList()),
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 1),
-                  height: 1,
-                  color: AppTheme.steel.withValues(alpha: 0.15),
-                ),
-                Row(children: _bottomRow.map((n) => Expanded(child: _navItem(n))).toList()),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+      );
+    });
   }
 
-  Widget _buildNotificationBell(BuildContext context) {
-    return Positioned(
-      top: MediaQuery.of(context).padding.top + 8,
-      right: 8,
-      child: Consumer<NotificationService>(builder: (context, ns, _) {
-        return GestureDetector(
-          onTap: () => _showNotificationPanel(context, ns),
-          child: Container(
-            padding: const EdgeInsets.all(6),
-            child: Stack(clipBehavior: Clip.none, children: [
-              const Icon(Icons.notifications_none, color: AppTheme.slate, size: 22),
-              if (ns.unreadCount > 0)
-                Positioned(top: -4, right: -4, child: Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: const BoxDecoration(color: AppTheme.danger, shape: BoxShape.circle),
-                  child: Text('${ns.unreadCount}', style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
-                )),
-            ]),
-          ),
-        );
-      }),
-    );
-  }
-
-  void _showNotificationPanel(BuildContext context, NotificationService ns) {
+  static void _showNotificationPanel(BuildContext context, NotificationService ns) {
     showModalBottomSheet(
       context: context, isScrollControlled: true, backgroundColor: AppTheme.navyLight,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(12))),
@@ -165,6 +90,77 @@ class _HomeScreenState extends State<HomeScreen> {
       },
     );
   }
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int _currentIndex = 0;
+
+  late final List<Widget> _screens;
+
+  @override
+  void initState() {
+    super.initState();
+    _screens = [
+      const StatsDashboardScreen(),
+      const PipelineScreen(),
+      const ProductInventoryScreen(),
+      const ProductionScreen(),
+      const SmartPriorityScreen(),
+      const ContactsScreen(),
+      const NetworkScreen(),
+      const TeamScreen(),
+      const CalendarTaskScreen(),
+      ProfileScreen(onLogout: widget.onLogout),
+    ];
+  }
+
+  static const _topRow = [
+    _NavDef(0, Icons.bar_chart_rounded, '统计'),
+    _NavDef(1, Icons.view_kanban_rounded, '销售'),
+    _NavDef(2, Icons.science_outlined, '产品'),
+    _NavDef(3, Icons.precision_manufacturing_outlined, '生产'),
+    _NavDef(4, Icons.auto_awesome_outlined, '智能'),
+  ];
+
+  static const _bottomRow = [
+    _NavDef(5, Icons.people_outline, '人脉'),
+    _NavDef(6, Icons.hub_outlined, '图谱'),
+    _NavDef(7, Icons.group_outlined, '团队'),
+    _NavDef(8, Icons.calendar_month_outlined, '任务'),
+    _NavDef(9, Icons.person_outline, '我的'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: _screens[_currentIndex],
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: AppTheme.navy,
+          border: Border(top: BorderSide(color: AppTheme.steel.withValues(alpha: 0.3))),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(4, 4, 4, 2),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(children: _topRow.map((n) => Expanded(child: _navItem(n))).toList()),
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 1),
+                  height: 1,
+                  color: AppTheme.steel.withValues(alpha: 0.15),
+                ),
+                Row(children: _bottomRow.map((n) => Expanded(child: _navItem(n))).toList()),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Notification methods moved to HomeScreen static class
 
   Widget _navItem(_NavDef nav) {
     final isSelected = _currentIndex == nav.index;

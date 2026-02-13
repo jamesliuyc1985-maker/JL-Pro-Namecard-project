@@ -346,8 +346,9 @@ class _NetworkScreenState extends State<NetworkScreen> {
     if (rels.isEmpty) return const SizedBox.shrink();
 
     return Container(
-      height: 130,
-      padding: const EdgeInsets.only(top: 8),
+      height: 140,
+      padding: const EdgeInsets.only(top: 8, bottom: 8),
+      margin: const EdgeInsets.only(bottom: 4),
       decoration: const BoxDecoration(
         color: AppTheme.cardBg,
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),

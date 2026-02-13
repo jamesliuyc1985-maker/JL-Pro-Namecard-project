@@ -10,6 +10,8 @@ import '../models/team.dart';
 import '../utils/theme.dart';
 import '../utils/formatters.dart';
 
+import 'home_screen.dart';
+
 class PipelineScreen extends StatefulWidget {
   const PipelineScreen({super.key});
   @override
@@ -23,7 +25,7 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
   bool _showSearch = false;
 
   @override
-  void initState() { super.initState(); _tabController = TabController(length: 5, vsync: this); }
+  void initState() { super.initState(); _tabController = TabController(length: 4, vsync: this); }
   @override
   void dispose() { _tabController.dispose(); _searchCtrl.dispose(); super.dispose(); }
 
@@ -50,7 +52,6 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
           _allPipelineTab(crm),
           _stageTab(crm),
           _top20Tab(crm),
-          _financeTab(crm),
           _staffSalesTab(crm),
         ])),
       ]));
@@ -59,24 +60,37 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
 
   Widget _header(BuildContext context, CrmProvider crm) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 8, 4),
+      padding: const EdgeInsets.fromLTRB(16, 10, 8, 4),
       child: Row(children: [
         const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('销售管线', style: TextStyle(color: AppTheme.offWhite, fontSize: 20, fontWeight: FontWeight.w600)),
           Text('Sales Pipeline & Finance', style: TextStyle(color: AppTheme.slate, fontSize: 11)),
         ])),
-        IconButton(
-          icon: Icon(_showSearch ? Icons.search_off : Icons.search, color: AppTheme.gold, size: 20),
-          onPressed: () => setState(() { _showSearch = !_showSearch; if (!_showSearch) { _searchQuery = ''; _searchCtrl.clear(); } }),
+        // 按钮紧凑排列，避免重叠
+        SizedBox(
+          width: 32, height: 32,
+          child: IconButton(
+            padding: EdgeInsets.zero, constraints: const BoxConstraints(),
+            icon: Icon(_showSearch ? Icons.search_off : Icons.search, color: AppTheme.gold, size: 20),
+            onPressed: () => setState(() { _showSearch = !_showSearch; if (!_showSearch) { _searchQuery = ''; _searchCtrl.clear(); } }),
+          ),
         ),
-        IconButton(
-          tooltip: '新增订单',
-          icon: Container(
+        const SizedBox(width: 4),
+        SizedBox(
+          width: 32, height: 32,
+          child: HomeScreen.buildNotificationBell(context),
+        ),
+        const SizedBox(width: 4),
+        GestureDetector(
+          onTap: () => _showNewOrderSheet(context, crm),
+          child: Container(
             padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(border: Border.all(color: AppTheme.steel.withValues(alpha: 0.4)), borderRadius: BorderRadius.circular(6)),
+            decoration: BoxDecoration(
+              border: Border.all(color: AppTheme.gold.withValues(alpha: 0.5)),
+              borderRadius: BorderRadius.circular(6),
+            ),
             child: const Icon(Icons.add_shopping_cart, color: AppTheme.gold, size: 18),
           ),
-          onPressed: () => _showNewOrderSheet(context, crm),
         ),
       ]),
     );
@@ -143,7 +157,7 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
       labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11),
       isScrollable: true, tabAlignment: TabAlignment.start,
       dividerColor: AppTheme.steel.withValues(alpha: 0.2),
-      tabs: const [Tab(text: '全管线'), Tab(text: '按阶段'), Tab(text: 'TOP 20'), Tab(text: '财务收款'), Tab(text: '员工业绩')],
+      tabs: const [Tab(text: '全管线'), Tab(text: '按阶段'), Tab(text: 'TOP 20'), Tab(text: '员工业绩')],
     );
   }
 
@@ -252,176 +266,6 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
       }),
       const SizedBox(height: 30),
     ]);
-  }
-
-  // ====== TAB 4: 财务收款 ======
-  Widget _financeTab(CrmProvider crm) {
-    final orders = crm.orders;
-    double totalAmount = 0, collected = 0, pending = 0;
-    int collectedCount = 0, pendingCount = 0;
-    for (final o in orders) {
-      totalAmount += o.totalAmount;
-      collected += o.paidAmount;
-      if (o.isFullyPaid) { collectedCount++; }
-      if (!o.isFullyPaid && o.status != 'cancelled') { pending += o.unpaidAmount; pendingCount++; }
-    }
-
-    return ListView(padding: const EdgeInsets.all(12), children: [
-      Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: AppTheme.navyLight, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppTheme.steel.withValues(alpha: 0.2))),
-        child: Row(children: [
-          _finKpi('订单总额', Formatters.currency(totalAmount), AppTheme.gold),
-          _vd(),
-          _finKpi('已收款', Formatters.currency(collected), AppTheme.success),
-          _vd(),
-          _finKpi('待收款', Formatters.currency(pending), AppTheme.warning),
-          _vd(),
-          _finKpi('回款率', totalAmount > 0 ? '${(collected / totalAmount * 100).toStringAsFixed(1)}%' : '0%', AppTheme.info),
-        ]),
-      ),
-      const SizedBox(height: 12),
-      const Padding(padding: EdgeInsets.only(bottom: 6), child: Text('客户应收账款', style: TextStyle(color: AppTheme.offWhite, fontSize: 14, fontWeight: FontWeight.w600))),
-      ..._customerReceivables(crm),
-      const SizedBox(height: 12),
-      Padding(padding: const EdgeInsets.only(bottom: 6), child: Text('订单明细 (${orders.length})', style: const TextStyle(color: AppTheme.offWhite, fontSize: 14, fontWeight: FontWeight.w600))),
-      ...orders.map((o) => _orderCard(crm, o)),
-      const SizedBox(height: 30),
-    ]);
-  }
-
-  List<Widget> _customerReceivables(CrmProvider crm) {
-    final byCustomer = <String, Map<String, dynamic>>{};
-    for (final o in crm.orders) {
-      byCustomer.putIfAbsent(o.contactId, () => {'name': o.contactName, 'total': 0.0, 'collected': 0.0, 'pending': 0.0, 'count': 0});
-      final c = byCustomer[o.contactId]!;
-      c['total'] = (c['total'] as double) + o.totalAmount;
-      c['count'] = (c['count'] as int) + 1;
-      c['collected'] = (c['collected'] as double) + o.paidAmount;
-      if (!o.isFullyPaid && o.status != 'cancelled') { c['pending'] = (c['pending'] as double) + o.unpaidAmount; }
-    }
-    if (byCustomer.isEmpty) return [const Padding(padding: EdgeInsets.all(20), child: Text('暂无订单数据', style: TextStyle(color: AppTheme.slate)))];
-    final sorted = byCustomer.entries.toList()..sort((a, b) => (b.value['pending'] as double).compareTo(a.value['pending'] as double));
-    return sorted.map((e) {
-      final c = e.value; final hasPending = (c['pending'] as double) > 0;
-      return Container(
-        margin: const EdgeInsets.only(bottom: 4), padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: AppTheme.navyLight, borderRadius: BorderRadius.circular(6),
-          border: hasPending ? Border.all(color: AppTheme.warning.withValues(alpha: 0.3)) : null),
-        child: Row(children: [
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(c['name'] as String, style: const TextStyle(color: AppTheme.offWhite, fontWeight: FontWeight.w600, fontSize: 12)),
-            Text('${c['count']}笔订单 | 已收${Formatters.currency(c['collected'] as double)}', style: const TextStyle(color: AppTheme.slate, fontSize: 10)),
-          ])),
-          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text(Formatters.currency(c['pending'] as double), style: TextStyle(color: hasPending ? AppTheme.warning : AppTheme.success, fontWeight: FontWeight.bold, fontSize: 13)),
-            Text(hasPending ? '待收款' : '已结清', style: TextStyle(color: hasPending ? AppTheme.warning : AppTheme.success, fontSize: 9)),
-          ]),
-        ]),
-      );
-    }).toList();
-  }
-
-  // 订单卡片 - 增强收款+物流状态
-  Widget _orderCard(CrmProvider crm, SalesOrder o) {
-    final c = _orderColor(o.status);
-    final payC = o.isFullyPaid ? AppTheme.success : o.paidAmount > 0 ? AppTheme.warning : AppTheme.danger;
-    return GestureDetector(
-      onTap: () => _showOrderDetail(crm, o),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 6), padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: AppTheme.navyLight, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppTheme.steel.withValues(alpha: 0.15))),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Container(width: 4, height: 44, decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(2))),
-            const SizedBox(width: 10),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Expanded(child: Text(o.contactName, style: const TextStyle(color: AppTheme.offWhite, fontWeight: FontWeight.w600, fontSize: 13))),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: c.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
-                  child: Text(SalesOrder.statusLabel(o.status), style: TextStyle(color: c, fontSize: 9, fontWeight: FontWeight.w600)),
-                ),
-              ]),
-              const SizedBox(height: 2),
-              Text('${o.items.length}项产品 | ${SalesOrder.priceTypeLabel(o.priceType)} | ${Formatters.dateShort(o.createdAt)}', style: const TextStyle(color: AppTheme.slate, fontSize: 10)),
-            ])),
-            const SizedBox(width: 8),
-            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text(Formatters.currency(o.totalAmount), style: const TextStyle(color: AppTheme.gold, fontWeight: FontWeight.bold, fontSize: 14)),
-              // 收款状态标签
-              Container(
-                margin: const EdgeInsets.only(top: 3),
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(color: payC.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(3)),
-                child: Text(PaymentStatus.label(o.paymentStatus), style: TextStyle(color: payC, fontSize: 8, fontWeight: FontWeight.w600)),
-              ),
-            ]),
-          ]),
-          // 产品明细
-          const SizedBox(height: 8),
-          ...o.items.map((item) => Padding(
-            padding: const EdgeInsets.only(left: 14, bottom: 2),
-            child: Row(children: [
-              const Icon(Icons.inventory_2, color: AppTheme.slate, size: 12),
-              const SizedBox(width: 6),
-              Expanded(child: Text(item.productName, style: const TextStyle(color: AppTheme.silver, fontSize: 10), overflow: TextOverflow.ellipsis)),
-              Text('x${item.quantity}', style: const TextStyle(color: AppTheme.slate, fontSize: 10)),
-              const SizedBox(width: 8),
-              Text(Formatters.currency(item.subtotal), style: const TextStyle(color: AppTheme.gold, fontSize: 10)),
-            ]),
-          )),
-          // 标签行: 配送+付款+收款+物流
-          Padding(
-            padding: const EdgeInsets.only(left: 14, top: 4),
-            child: Wrap(spacing: 6, runSpacing: 4, children: [
-              if (o.shippingMethod.isNotEmpty) _miniTag(Icons.local_shipping, SalesOrder.shippingLabel(o.shippingMethod), AppTheme.info),
-              if (o.paymentTerms.isNotEmpty) _miniTag(Icons.payment, SalesOrder.paymentLabel(o.paymentTerms), AppTheme.warning),
-              if (o.trackingNumber.isNotEmpty) _miniTag(Icons.qr_code, o.trackingNumber.length > 10 ? '${o.trackingNumber.substring(0, 10)}...' : o.trackingNumber, AppTheme.info),
-              if (o.expectedDeliveryDate != null) _miniTag(Icons.calendar_today, '交付:${Formatters.dateShort(o.expectedDeliveryDate!)}',
-                o.expectedDeliveryDate!.isBefore(DateTime.now()) ? AppTheme.danger : AppTheme.success),
-              // 快捷操作按钮
-              if (o.status == 'confirmed') GestureDetector(
-                onTap: () => _showShipDialog(crm, o),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: AppTheme.info.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(4)),
-                  child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.local_shipping, color: AppTheme.info, size: 10),
-                    SizedBox(width: 2),
-                    Text('出货', style: TextStyle(color: AppTheme.info, fontSize: 9, fontWeight: FontWeight.w600)),
-                  ]),
-                ),
-              ),
-              if (!o.isFullyPaid && o.status != 'cancelled' && o.status != 'draft') GestureDetector(
-                onTap: () => _showPaymentDialog(crm, o),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: AppTheme.success.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(4)),
-                  child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.attach_money, color: AppTheme.success, size: 10),
-                    SizedBox(width: 2),
-                    Text('收款', style: TextStyle(color: AppTheme.success, fontSize: 9, fontWeight: FontWeight.w600)),
-                  ]),
-                ),
-              ),
-            ]),
-          ),
-        ]),
-      ),
-    );
-  }
-
-  Widget _miniTag(IconData icon, String text, Color c) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-      decoration: BoxDecoration(color: c.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, color: c, size: 10), const SizedBox(width: 3),
-        Text(text, style: TextStyle(color: c, fontSize: 9)),
-      ]),
-    );
   }
 
   // === 收款对话框 ===
@@ -589,133 +433,7 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
     );
   }
 
-  // 订单详情弹窗 - 增强
-  void _showOrderDetail(CrmProvider crm, SalesOrder o) {
-    final c = _orderColor(o.status);
-    final payC = o.isFullyPaid ? AppTheme.success : o.paidAmount > 0 ? AppTheme.warning : AppTheme.danger;
-    showModalBottomSheet(
-      context: context, isScrollControlled: true, backgroundColor: AppTheme.navyLight,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(12))),
-      builder: (ctx) => ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.85),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Padding(padding: const EdgeInsets.all(16), child: Row(children: [
-            Container(width: 4, height: 24, decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(2))),
-            const SizedBox(width: 8),
-            const Expanded(child: Text('订单详情', style: TextStyle(color: AppTheme.offWhite, fontSize: 16, fontWeight: FontWeight.w600))),
-            Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3), decoration: BoxDecoration(color: c.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
-              child: Text(SalesOrder.statusLabel(o.status), style: TextStyle(color: c, fontSize: 11, fontWeight: FontWeight.w600))),
-            const SizedBox(width: 8),
-            IconButton(icon: const Icon(Icons.close, color: AppTheme.slate, size: 18), onPressed: () => Navigator.pop(ctx)),
-          ])),
-          Flexible(child: ListView(padding: const EdgeInsets.symmetric(horizontal: 16), children: [
-            _detailRow('订单编号', o.id.substring(0, 8).toUpperCase()),
-            _detailRow('客户', o.contactName),
-            if (o.contactCompany.isNotEmpty) _detailRow('公司', o.contactCompany),
-            if (o.contactPhone.isNotEmpty) _detailRow('电话', o.contactPhone),
-            _detailRow('价格类型', SalesOrder.priceTypeLabel(o.priceType)),
-            if (o.dealStage.isNotEmpty) _detailRow('交易阶段', o.dealStage),
-            _detailRow('创建日期', Formatters.dateShort(o.createdAt)),
-            if (o.shippingMethod.isNotEmpty) _detailRow('配送方式', SalesOrder.shippingLabel(o.shippingMethod)),
-            if (o.paymentTerms.isNotEmpty) _detailRow('付款条件', SalesOrder.paymentLabel(o.paymentTerms)),
-            if (o.deliveryAddress.isNotEmpty) _detailRow('配送地址', o.deliveryAddress),
-            if (o.expectedDeliveryDate != null) _detailRow('预计交付', Formatters.dateShort(o.expectedDeliveryDate!)),
-            if (o.notes.isNotEmpty) _detailRow('备注', o.notes),
-            const SizedBox(height: 8),
-            // === 收款信息 ===
-            Container(
-              padding: const EdgeInsets.all(12), margin: const EdgeInsets.only(bottom: 8),
-              decoration: BoxDecoration(color: payC.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(8), border: Border.all(color: payC.withValues(alpha: 0.3))),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Icon(Icons.account_balance_wallet, color: payC, size: 16),
-                  const SizedBox(width: 6),
-                  Text('收款状态: ${PaymentStatus.label(o.paymentStatus)}', style: TextStyle(color: payC, fontWeight: FontWeight.w600, fontSize: 13)),
-                ]),
-                const SizedBox(height: 6),
-                Row(children: [
-                  Text('已收: ${Formatters.currency(o.paidAmount)}', style: const TextStyle(color: AppTheme.success, fontSize: 12)),
-                  const SizedBox(width: 16),
-                  Text('待收: ${Formatters.currency(o.unpaidAmount)}', style: TextStyle(color: o.unpaidAmount > 0 ? AppTheme.danger : AppTheme.success, fontSize: 12)),
-                ]),
-                if (o.paidAt != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text('最后收款: ${Formatters.dateShort(o.paidAt!)}', style: const TextStyle(color: AppTheme.slate, fontSize: 10))),
-                if (o.paymentNote.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text('备注: ${o.paymentNote}', style: const TextStyle(color: AppTheme.slate, fontSize: 10))),
-              ]),
-            ),
-            // === 物流信息 ===
-            if (o.trackingNumber.isNotEmpty || o.shippedAt != null) Container(
-              padding: const EdgeInsets.all(12), margin: const EdgeInsets.only(bottom: 8),
-              decoration: BoxDecoration(color: AppTheme.info.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(8), border: Border.all(color: AppTheme.info.withValues(alpha: 0.3))),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  const Icon(Icons.local_shipping, color: AppTheme.info, size: 16),
-                  const SizedBox(width: 6),
-                  Text('物流: ${SalesOrder.trackingStatusLabel(o.trackingStatus)}', style: const TextStyle(color: AppTheme.info, fontWeight: FontWeight.w600, fontSize: 13)),
-                ]),
-                if (o.trackingCarrier.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text('物流公司: ${o.trackingCarrier}', style: const TextStyle(color: AppTheme.offWhite, fontSize: 11))),
-                if (o.trackingNumber.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text('单号: ${o.trackingNumber}', style: const TextStyle(color: AppTheme.gold, fontSize: 12, fontWeight: FontWeight.w500))),
-                if (o.shippedAt != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text('出货: ${Formatters.dateShort(o.shippedAt!)}', style: const TextStyle(color: AppTheme.slate, fontSize: 10))),
-                if (o.trackingNote.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text('备注: ${o.trackingNote}', style: const TextStyle(color: AppTheme.slate, fontSize: 10))),
-                if (o.trackingPhotos.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text('凭证照片: ${o.trackingPhotos.length}张', style: const TextStyle(color: AppTheme.info, fontSize: 10))),
-              ]),
-            ),
-            const SizedBox(height: 4),
-            const Text('产品明细', style: TextStyle(color: AppTheme.offWhite, fontSize: 13, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 6),
-            ...o.items.map((item) => Container(
-              margin: const EdgeInsets.only(bottom: 4), padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: AppTheme.navyMid, borderRadius: BorderRadius.circular(6)),
-              child: Row(children: [
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(item.productName, style: const TextStyle(color: AppTheme.offWhite, fontSize: 12, fontWeight: FontWeight.w500)),
-                  Text('单价: ${Formatters.currency(item.unitPrice)} | 数量: ${item.quantity}', style: const TextStyle(color: AppTheme.slate, fontSize: 10)),
-                ])),
-                Text(Formatters.currency(item.subtotal), style: const TextStyle(color: AppTheme.gold, fontWeight: FontWeight.bold, fontSize: 13)),
-              ]),
-            )),
-            const Divider(color: AppTheme.steel, height: 20),
-            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-              const Text('合计: ', style: TextStyle(color: AppTheme.slate, fontSize: 14)),
-              Text(Formatters.currency(o.totalAmount), style: const TextStyle(color: AppTheme.gold, fontSize: 20, fontWeight: FontWeight.bold)),
-            ]),
-            // 快捷操作按钮
-            const SizedBox(height: 12),
-            Row(children: [
-              if (o.status == 'confirmed') Expanded(child: ElevatedButton.icon(
-                onPressed: () { Navigator.pop(ctx); _showShipDialog(crm, o); },
-                icon: const Icon(Icons.local_shipping, size: 16),
-                label: const Text('出货', style: TextStyle(fontSize: 12)),
-                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.info),
-              )),
-              if (o.status == 'confirmed') const SizedBox(width: 8),
-              if (!o.isFullyPaid && o.status != 'cancelled' && o.status != 'draft') Expanded(child: ElevatedButton.icon(
-                onPressed: () { Navigator.pop(ctx); _showPaymentDialog(crm, o); },
-                icon: const Icon(Icons.attach_money, size: 16),
-                label: const Text('收款', style: TextStyle(fontSize: 12)),
-                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.success),
-              )),
-            ]),
-            const SizedBox(height: 20),
-          ])),
-        ]),
-      ),
-    );
-  }
-
-  Widget _detailRow(String label, String value) {
-    return Padding(padding: const EdgeInsets.only(bottom: 6), child: Row(children: [
-      SizedBox(width: 80, child: Text(label, style: const TextStyle(color: AppTheme.slate, fontSize: 11))),
-      Expanded(child: Text(value, style: const TextStyle(color: AppTheme.offWhite, fontSize: 12))),
-    ]));
-  }
-
-  Widget _finKpi(String label, String val, Color c) => Expanded(child: Column(children: [
-    FittedBox(child: Text(val, style: TextStyle(color: c, fontWeight: FontWeight.bold, fontSize: 13))),
-    const SizedBox(height: 2),
-    Text(label, style: const TextStyle(color: AppTheme.slate, fontSize: 9)),
-  ]));
-
-  // ====== TAB 5: 员工业绩 ======
+  // ====== TAB 4: 员工业绩 ======
   Widget _staffSalesTab(CrmProvider crm) {
     final members = crm.teamMembers;
     final memberSales = <String, Map<String, dynamic>>{};
@@ -841,7 +559,66 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
         const SizedBox(height: 4),
         ClipRRect(borderRadius: BorderRadius.circular(2),
           child: LinearProgressIndicator(value: deal.probability / 100, backgroundColor: AppTheme.steel.withValues(alpha: 0.2), valueColor: AlwaysStoppedAnimation(c), minHeight: 2)),
+        // 关联订单收款状态
+        if (deal.orderId != null) _buildDealPaymentInfo(crm, deal),
       ]),
+    );
+  }
+
+  /// 交易关联的订单收款/物流信息
+  Widget _buildDealPaymentInfo(CrmProvider crm, Deal deal) {
+    final order = crm.orders.where((o) => o.id == deal.orderId).firstOrNull;
+    if (order == null) return const SizedBox.shrink();
+    final payC = order.isFullyPaid ? AppTheme.success : order.paidAmount > 0 ? AppTheme.warning : AppTheme.slate;
+    final payLabel = order.isFullyPaid ? '已结清' : order.paidAmount > 0 ? '部分收款' : '待收款';
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(color: payC.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: payC.withValues(alpha: 0.2))),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Row(children: [
+            Icon(order.isFullyPaid ? Icons.check_circle : Icons.account_balance_wallet_outlined, color: payC, size: 14),
+            const SizedBox(width: 6),
+            Text(payLabel, style: TextStyle(color: payC, fontSize: 10, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 8),
+            Expanded(child: Text('${Formatters.currency(order.paidAmount)} / ${Formatters.currency(order.totalAmount)}',
+              style: TextStyle(color: payC, fontSize: 10), overflow: TextOverflow.ellipsis)),
+            // 出货快捷按钮
+            if (order.status == 'confirmed')
+              GestureDetector(
+                onTap: () => _showShipDialog(crm, order),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  margin: const EdgeInsets.only(right: 4),
+                  decoration: BoxDecoration(color: AppTheme.info.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                  child: const Text('出货', style: TextStyle(color: AppTheme.info, fontSize: 9, fontWeight: FontWeight.w600)),
+                ),
+              ),
+            // 收款快捷按钮
+            if (!order.isFullyPaid)
+              GestureDetector(
+                onTap: () => _showPaymentDialog(crm, order),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(color: AppTheme.success.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                  child: const Text('收款', style: TextStyle(color: AppTheme.success, fontSize: 9, fontWeight: FontWeight.w600)),
+                ),
+              ),
+          ]),
+          // 物流信息 (如果已出货)
+          if (order.trackingNumber.isNotEmpty) Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Row(children: [
+              const Icon(Icons.local_shipping, color: AppTheme.info, size: 12),
+              const SizedBox(width: 4),
+              Text('${order.trackingCarrier.isNotEmpty ? "${order.trackingCarrier}: " : ""}${order.trackingNumber}',
+                style: const TextStyle(color: AppTheme.info, fontSize: 9)),
+            ]),
+          ),
+        ]),
+      ),
     );
   }
 
@@ -1047,10 +824,6 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
         ]),
       ),
     );
-  }
-
-  Color _orderColor(String s) {
-    switch (s) { case 'draft': return AppTheme.slate; case 'confirmed': return AppTheme.warning; case 'shipped': return AppTheme.info; case 'completed': return AppTheme.success; case 'cancelled': return AppTheme.danger; default: return AppTheme.slate; }
   }
 
   Color _color(DealStage s) {
