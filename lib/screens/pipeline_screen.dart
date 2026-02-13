@@ -784,12 +784,46 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
           const SizedBox(width: 6),
           if (deal.isStarred) const Padding(padding: EdgeInsets.only(right: 4), child: Icon(Icons.star, color: AppTheme.gold, size: 14)),
           Expanded(child: Text(deal.title, style: const TextStyle(color: AppTheme.offWhite, fontWeight: FontWeight.w600, fontSize: 13), overflow: TextOverflow.ellipsis)),
-          PopupMenuButton<DealStage>(
-            icon: const Icon(Icons.swap_horiz, color: AppTheme.slate, size: 16), color: AppTheme.navyMid,
-            onSelected: (s) async { await crm.moveDealStage(deal.id, s); setState(() {}); },
-            itemBuilder: (_) => DealStage.values.where((s) => s != deal.stage).map((s) => PopupMenuItem(value: s,
-              child: Row(children: [Container(width: 8, height: 8, decoration: BoxDecoration(color: _color(s), shape: BoxShape.circle)), const SizedBox(width: 8),
-                Text(s.label, style: const TextStyle(color: AppTheme.offWhite, fontSize: 12))]))).toList(),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: AppTheme.slate, size: 18), color: AppTheme.navyMid,
+            onSelected: (action) async {
+              if (action == 'edit') {
+                _showEditDealSheet(context, crm, deal);
+              } else if (action == 'delete') {
+                _confirmDeleteDeal(context, crm, deal);
+              } else if (action == 'star') {
+                deal.isStarred = !deal.isStarred;
+                await crm.updateDeal(deal);
+                setState(() {});
+              } else if (action.startsWith('stage_')) {
+                final stageName = action.substring(6);
+                final newStage = DealStage.values.firstWhere((s) => s.name == stageName, orElse: () => deal.stage);
+                await crm.moveDealStage(deal.id, newStage);
+                setState(() {});
+              }
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'edit', child: Row(children: [
+                Icon(Icons.edit, color: AppTheme.info, size: 16), SizedBox(width: 8),
+                Text('编辑', style: TextStyle(color: AppTheme.offWhite, fontSize: 12))])),
+              PopupMenuItem(value: 'star', child: Row(children: [
+                Icon(deal.isStarred ? Icons.star_border : Icons.star, color: AppTheme.gold, size: 16), const SizedBox(width: 8),
+                Text(deal.isStarred ? '取消星标' : '设为星标', style: const TextStyle(color: AppTheme.offWhite, fontSize: 12))])),
+              const PopupMenuDivider(),
+              // 阶段快速切换子菜单
+              ...DealStage.values.where((s) => s != deal.stage).map((s) => PopupMenuItem(
+                value: 'stage_${s.name}',
+                child: Row(children: [
+                  Container(width: 8, height: 8, decoration: BoxDecoration(color: _color(s), shape: BoxShape.circle)),
+                  const SizedBox(width: 8),
+                  Text('→ ${s.label}', style: const TextStyle(color: AppTheme.offWhite, fontSize: 11)),
+                ]),
+              )),
+              const PopupMenuDivider(),
+              const PopupMenuItem(value: 'delete', child: Row(children: [
+                Icon(Icons.delete_outline, color: AppTheme.danger, size: 16), SizedBox(width: 8),
+                Text('删除', style: TextStyle(color: AppTheme.danger, fontSize: 12))])),
+            ],
           ),
         ]),
         Text(deal.contactName, style: const TextStyle(color: AppTheme.slate, fontSize: 11)),
@@ -810,6 +844,172 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
       ]),
     );
   }
+
+  // ========== 删除确认 ==========
+  void _confirmDeleteDeal(BuildContext context, CrmProvider crm, Deal deal) {
+    showDialog(context: context, builder: (ctx) => AlertDialog(
+      backgroundColor: AppTheme.navyMid,
+      title: const Text('确认删除', style: TextStyle(color: AppTheme.offWhite, fontSize: 16)),
+      content: Text('确定要删除交易「${deal.title}」吗？\n金额: ${Formatters.currency(deal.amount)}\n此操作不可撤销。',
+        style: const TextStyle(color: AppTheme.slate, fontSize: 13)),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx),
+          child: const Text('取消', style: TextStyle(color: AppTheme.slate))),
+        TextButton(onPressed: () async {
+          Navigator.pop(ctx);
+          await crm.deleteDeal(deal.id);
+          setState(() {});
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('已删除: ${deal.title}'), backgroundColor: AppTheme.danger));
+          }
+        }, child: const Text('删除', style: TextStyle(color: AppTheme.danger, fontWeight: FontWeight.bold))),
+      ],
+    ));
+  }
+
+  // ========== 编辑交易弹窗 ==========
+  void _showEditDealSheet(BuildContext context, CrmProvider crm, Deal deal) {
+    final titleCtrl = TextEditingController(text: deal.title);
+    final descCtrl = TextEditingController(text: deal.description);
+    final amountCtrl = TextEditingController(text: deal.amount > 0 ? deal.amount.toStringAsFixed(0) : '');
+    final probCtrl = TextEditingController(text: deal.probability.toStringAsFixed(0));
+    final notesCtrl = TextEditingController(text: deal.notes);
+    final tagsCtrl = TextEditingController(text: deal.tags.join(', '));
+    String selectedStage = deal.stage.name;
+    String selectedCurrency = deal.currency;
+    DateTime expectedDate = deal.expectedCloseDate;
+    String? selectedContactId = deal.contactId;
+    String selectedContactName = deal.contactName;
+    final contacts = crm.allContacts;
+
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: AppTheme.navyLight,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(12))),
+      builder: (ctx) => StatefulBuilder(builder: (ctx, set) {
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 16, right: 16, top: 16),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.88),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                const Text('编辑交易', style: TextStyle(color: AppTheme.offWhite, fontSize: 16, fontWeight: FontWeight.w600)),
+                const Spacer(),
+                IconButton(icon: const Icon(Icons.close, color: AppTheme.slate), onPressed: () => Navigator.pop(ctx)),
+              ]),
+              const SizedBox(height: 6),
+              Flexible(child: ListView(shrinkWrap: true, children: [
+                // 标题
+                TextField(controller: titleCtrl, style: const TextStyle(color: AppTheme.offWhite, fontSize: 13),
+                  decoration: _editInputDeco('交易标题 *')),
+                const SizedBox(height: 8),
+                // 客户
+                DropdownButtonFormField<String>(
+                  value: contacts.any((c) => c.id == selectedContactId) ? selectedContactId : null,
+                  decoration: const InputDecoration(labelText: '关联客户', contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                  dropdownColor: AppTheme.navyMid, style: const TextStyle(color: AppTheme.offWhite, fontSize: 12),
+                  items: contacts.map((c) => DropdownMenuItem(value: c.id, child: Text('${c.name} - ${c.company}', style: const TextStyle(fontSize: 11)))).toList(),
+                  onChanged: (v) { if (v != null) set(() { selectedContactId = v; selectedContactName = contacts.firstWhere((c) => c.id == v).name; }); },
+                ),
+                const SizedBox(height: 8),
+                // 描述
+                TextField(controller: descCtrl, style: const TextStyle(color: AppTheme.offWhite, fontSize: 12),
+                  maxLines: 2, decoration: _editInputDeco('描述')),
+                const SizedBox(height: 8),
+                // 金额 + 货币
+                Row(children: [
+                  Expanded(flex: 3, child: TextField(controller: amountCtrl, keyboardType: TextInputType.number,
+                    style: const TextStyle(color: AppTheme.gold, fontSize: 14, fontWeight: FontWeight.bold),
+                    decoration: _editInputDeco('金额'))),
+                  const SizedBox(width: 8),
+                  Expanded(flex: 1, child: DropdownButtonFormField<String>(
+                    value: selectedCurrency,
+                    decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
+                    dropdownColor: AppTheme.navyMid, style: const TextStyle(color: AppTheme.offWhite, fontSize: 12),
+                    items: ['JPY', 'USD', 'CNY', 'EUR'].map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 11)))).toList(),
+                    onChanged: (v) { if (v != null) set(() => selectedCurrency = v); },
+                  )),
+                ]),
+                const SizedBox(height: 8),
+                // 交易阶段
+                const Text('交易阶段', style: TextStyle(color: AppTheme.slate, fontSize: 11)),
+                const SizedBox(height: 4),
+                Wrap(spacing: 4, runSpacing: 4, children: DealStage.values.map((s) {
+                  final sel = selectedStage == s.name;
+                  return ChoiceChip(label: Text(s.label, style: TextStyle(fontSize: 9, color: sel ? AppTheme.navy : AppTheme.offWhite)),
+                    selected: sel, onSelected: (_) => set(() => selectedStage = s.name),
+                    selectedColor: _color(s), backgroundColor: AppTheme.navyMid,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact);
+                }).toList()),
+                const SizedBox(height: 8),
+                // 概率
+                Row(children: [
+                  const Text('成交概率: ', style: TextStyle(color: AppTheme.slate, fontSize: 11)),
+                  SizedBox(width: 60, child: TextField(controller: probCtrl, keyboardType: TextInputType.number,
+                    textAlign: TextAlign.center, style: const TextStyle(color: AppTheme.offWhite, fontSize: 12),
+                    decoration: _editInputDeco(''))),
+                  const Text(' %', style: TextStyle(color: AppTheme.slate, fontSize: 11)),
+                ]),
+                const SizedBox(height: 8),
+                // 预计成交日期
+                GestureDetector(
+                  onTap: () async {
+                    final picked = await showDatePicker(context: ctx, initialDate: expectedDate,
+                      firstDate: DateTime(2024), lastDate: DateTime(2030));
+                    if (picked != null) set(() => expectedDate = picked);
+                  },
+                  child: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: AppTheme.navyMid, borderRadius: BorderRadius.circular(6)),
+                    child: Row(children: [const Icon(Icons.calendar_today, color: AppTheme.slate, size: 16), const SizedBox(width: 8),
+                      Text('预计成交: ${Formatters.dateShort(expectedDate)}', style: const TextStyle(color: AppTheme.offWhite, fontSize: 11))])),
+                ),
+                const SizedBox(height: 8),
+                // 标签
+                TextField(controller: tagsCtrl, style: const TextStyle(color: AppTheme.offWhite, fontSize: 12),
+                  decoration: _editInputDeco('标签 (逗号分隔)')),
+                const SizedBox(height: 8),
+                // 备注
+                TextField(controller: notesCtrl, style: const TextStyle(color: AppTheme.offWhite, fontSize: 12),
+                  maxLines: 2, decoration: _editInputDeco('备注')),
+              ])),
+              const SizedBox(height: 8),
+              SizedBox(width: double.infinity, child: ElevatedButton(
+                onPressed: titleCtrl.text.trim().isEmpty ? null : () async {
+                  deal.title = titleCtrl.text.trim();
+                  deal.description = descCtrl.text.trim();
+                  deal.contactId = selectedContactId ?? deal.contactId;
+                  deal.contactName = selectedContactName;
+                  deal.amount = double.tryParse(amountCtrl.text) ?? deal.amount;
+                  deal.currency = selectedCurrency;
+                  deal.stage = DealStage.values.firstWhere((s) => s.name == selectedStage, orElse: () => deal.stage);
+                  deal.probability = (double.tryParse(probCtrl.text) ?? deal.probability).clamp(0, 100);
+                  deal.expectedCloseDate = expectedDate;
+                  deal.notes = notesCtrl.text.trim();
+                  deal.tags = tagsCtrl.text.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList();
+                  deal.updatedAt = DateTime.now();
+                  await crm.updateDeal(deal);
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  setState(() {});
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('已更新: ${deal.title}'), backgroundColor: AppTheme.success));
+                  }
+                },
+                child: const Text('保存修改'),
+              )),
+              const SizedBox(height: 12),
+            ]),
+          ),
+        );
+      }),
+    );
+  }
+
+  InputDecoration _editInputDeco(String label) => InputDecoration(
+    labelText: label.isNotEmpty ? label : null, labelStyle: const TextStyle(fontSize: 11),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    filled: true, fillColor: AppTheme.navyMid,
+    border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
+  );
 
   Widget _miniDealCard(CrmProvider crm, Deal deal) {
     final c = _color(deal.stage);
