@@ -126,8 +126,12 @@ class _AuthGate extends StatelessWidget {
           final user = snapshot.data!;
           final crm = context.read<CrmProvider>();
           crm.setUserId(user.uid);
-          // 后台异步同步（不阻塞 UI）
-          crm.syncFromCloud().timeout(const Duration(seconds: 8)).catchError((_) {});
+          // 后台异步同步（不阻塞 UI，完成后自动刷新）
+          Future.microtask(() async {
+            try {
+              await crm.syncFromCloud().timeout(const Duration(seconds: 15));
+            } catch (_) {}
+          });
 
           return HomeScreen(
             onLogout: () async {

@@ -236,26 +236,36 @@ class SyncService extends ChangeNotifier {
     try {
       final snap = await _db!.collection(collection).get().timeout(const Duration(seconds: 8));
       final box = _boxFor(collection);
-      final remoteIds = <String>{};
 
       for (final doc in snap.docs) {
-        remoteIds.add(doc.id);
         final remoteData = doc.data();
         final localJson = box.get(doc.id);
 
         if (localJson == null) {
-          // New from cloud
+          // New from cloud — always accept
           await box.put(doc.id, jsonEncode(remoteData));
         } else {
-          // Merge: compare updatedAt
+          // Merge: compare updatedAt (last-write-wins)
           final localData = jsonDecode(localJson) as Map<String, dynamic>;
-          final localTime = DateTime.tryParse(localData['updatedAt']?.toString() ?? '') ?? DateTime(2000);
-          final remoteTime = DateTime.tryParse(remoteData['updatedAt']?.toString() ?? '') ?? DateTime(2000);
-          if (remoteTime.isAfter(localTime)) {
+          final localTimeStr = localData['updatedAt']?.toString() ?? localData['updated_at']?.toString() ?? '';
+          final remoteTimeStr = remoteData['updatedAt']?.toString() ?? remoteData['updated_at']?.toString() ?? '';
+          final localTime = DateTime.tryParse(localTimeStr);
+          final remoteTime = DateTime.tryParse(remoteTimeStr);
+
+          if (localTime == null && remoteTime == null) {
+            // Both lack updatedAt — remote wins (cloud is source of truth for cross-device)
+            await box.put(doc.id, jsonEncode(remoteData));
+          } else if (localTime == null) {
+            // Local has no timestamp — remote wins
+            await box.put(doc.id, jsonEncode(remoteData));
+          } else if (remoteTime == null) {
+            // Remote has no timestamp — keep local (it's newer since it has timestamp)
+          } else if (remoteTime.isAfter(localTime)) {
             await box.put(doc.id, jsonEncode(remoteData));
           }
         }
       }
+      if (kDebugMode) debugPrint('[SyncService] Pulled $collection: ${snap.docs.length} docs');
     } catch (e) {
       if (kDebugMode) debugPrint('[SyncService] Pull $collection error: $e');
     }

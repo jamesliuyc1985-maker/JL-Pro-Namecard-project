@@ -137,6 +137,9 @@ class CrmProvider extends ChangeNotifier {
     _syncStatus = '正在上传...';
     notifyListeners();
     try {
+      // 先将 DataService 内存数据全量写入 Hive，确保 Hive 是最新的
+      await _persistAllToHive();
+      // 然后 SyncService 将 Hive 全量推到 Firestore
       await _syncService.pushToCloud();
       _syncStatus = '上传成功 (${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, "0")})';
     } catch (e) {
@@ -144,6 +147,22 @@ class CrmProvider extends ChangeNotifier {
     }
     _isLoading = false;
     notifyListeners();
+  }
+
+  /// 将 DataService 全部内存数据持久化到 Hive（用于手动上传前的保底）
+  Future<void> _persistAllToHive() async {
+    for (final c in _contacts) { await _syncService.put('contacts', c.id, {...c.toJson(), 'updatedAt': DateTime.now().toIso8601String()}); }
+    for (final d in _deals) { await _syncService.put('deals', d.id, {...d.toJson(), 'updatedAt': DateTime.now().toIso8601String()}); }
+    for (final r in _relations) { await _syncService.put('relations', r.id, {...r.toJson(), 'updatedAt': DateTime.now().toIso8601String()}); }
+    for (final p in _products) { await _syncService.put('products', p.id, {...p.toJson(), 'updatedAt': DateTime.now().toIso8601String()}); }
+    for (final o in _orders) { await _syncService.put('sales_orders', o.id, {...o.toJson(), 'updatedAt': DateTime.now().toIso8601String()}); }
+    for (final i in _interactions) { await _syncService.put('interactions', i.id, {...i.toJson(), 'updatedAt': DateTime.now().toIso8601String()}); }
+    for (final r in _inventoryRecords) { await _syncService.put('inventory', r.id, {...r.toJson(), 'updatedAt': DateTime.now().toIso8601String()}); }
+    for (final m in _teamMembers) { await _syncService.put('team', m.id, {...m.toJson(), 'updatedAt': DateTime.now().toIso8601String()}); }
+    for (final t in _tasks) { await _syncService.put('tasks', t.id, {...t.toJson(), 'updatedAt': DateTime.now().toIso8601String()}); }
+    for (final a in _assignments) { await _syncService.put('assignments', a.id, {...a.toJson(), 'updatedAt': DateTime.now().toIso8601String()}); }
+    for (final f in _factories) { await _syncService.put('factories', f.id, {...f.toJson(), 'updatedAt': DateTime.now().toIso8601String()}); }
+    for (final p in _productionOrders) { await _syncService.put('production', p.id, {...p.toJson(), 'updatedAt': DateTime.now().toIso8601String()}); }
   }
 
   void setIndustryFilter(Industry? industry) {

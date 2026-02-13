@@ -9,7 +9,7 @@ import '../utils/theme.dart';
 import '../utils/formatters.dart';
 import '../utils/download_helper.dart';
 
-const String appVersion = 'v22.2';
+const String appVersion = 'v23.0';
 
 /// 角色工具类
 class AppRole {

@@ -53,7 +53,10 @@ class DataService {
   /// 通用Hive持久化辅助 - 每次CRUD自动调用
   Future<void> _persistToHive(String collection, String docId, Map<String, dynamic> data) async {
     try {
-      await _syncService?.put(collection, docId, data);
+      // 统一注入 updatedAt 时间戳，确保多端同步 merge 正确
+      final syncData = Map<String, dynamic>.from(data);
+      syncData['updatedAt'] = DateTime.now().toIso8601String();
+      await _syncService?.put(collection, docId, syncData);
     } catch (e) {
       if (kDebugMode) debugPrint('[DataService] Hive persist error ($collection/$docId): $e');
     }
@@ -454,7 +457,10 @@ class DataService {
   // ========== Firestore 辅助方法 ==========
   void _firestoreWrite(String collection, String docId, Map<String, dynamic> data) {
     if (!_firestoreEnabled || _db == null) return;
-    _db!.collection(collection).doc(docId).set(data).catchError((e) {
+    // 统一注入 updatedAt 时间戳，确保多端同步 merge 正确
+    final syncData = Map<String, dynamic>.from(data);
+    syncData['updatedAt'] = DateTime.now().toIso8601String();
+    _db!.collection(collection).doc(docId).set(syncData).catchError((e) {
       if (kDebugMode) debugPrint('[DataService] Firestore write error ($collection/$docId): $e');
     });
   }
@@ -469,59 +475,61 @@ class DataService {
   /// 从 Firestore 拉取数据到本地缓存
   Future<void> syncFromCloud() async {
     if (!_firestoreEnabled || _db == null) return;
-    const t = Duration(seconds: 5);
+    const t = Duration(seconds: 8);
+
+    Future<List<T>> pullCol<T>(String col, T Function(Map<String, dynamic>) fromJson) async {
+      try {
+        final snap = await _db!.collection(col).get().timeout(t);
+        if (snap.docs.isNotEmpty) {
+          return snap.docs.map((d) {
+            try { return fromJson(d.data()); } catch (_) { return null; }
+          }).whereType<T>().toList();
+        }
+      } catch (e) {
+        if (kDebugMode) debugPrint('[DataService] syncFromCloud pull $col error: $e');
+      }
+      return [];
+    }
+
     try {
-      try {
-        final snap = await _db!.collection('contacts').get().timeout(t);
-        if (snap.docs.isNotEmpty) {
-          _contactsCache = snap.docs.map((d) {
-            try { return Contact.fromJson(d.data()); } catch (_) { return null; }
-          }).whereType<Contact>().toList();
-        }
-      } catch (_) {}
-      try {
-        final snap = await _db!.collection('deals').get().timeout(t);
-        if (snap.docs.isNotEmpty) {
-          _dealsCache = snap.docs.map((d) {
-            try { return Deal.fromJson(d.data()); } catch (_) { return null; }
-          }).whereType<Deal>().toList();
-        }
-      } catch (_) {}
-      try {
-        final snap = await _db!.collection('relations').get().timeout(t);
-        if (snap.docs.isNotEmpty) {
-          _relationsCache = snap.docs.map((d) {
-            try { return ContactRelation.fromJson(d.data()); } catch (_) { return null; }
-          }).whereType<ContactRelation>().toList();
-        }
-      } catch (_) {}
-      try {
-        final snap = await _db!.collection('products').get().timeout(t);
-        if (snap.docs.isNotEmpty) {
-          _productsCache = snap.docs.map((d) {
-            try { return Product.fromJson(d.data()); } catch (_) { return null; }
-          }).whereType<Product>().toList();
-        }
-      } catch (_) {}
-      try {
-        final snap = await _db!.collection('sales_orders').get().timeout(t);
-        if (snap.docs.isNotEmpty) {
-          _ordersCache = snap.docs.map((d) {
-            try { return SalesOrder.fromJson(d.data()); } catch (_) { return null; }
-          }).whereType<SalesOrder>().toList();
-        }
-      } catch (_) {}
-      try {
-        final snap = await _db!.collection('inventory').get().timeout(t);
-        if (snap.docs.isNotEmpty) {
-          _inventoryCache = snap.docs.map((d) {
-            try { return InventoryRecord.fromJson(d.data()); } catch (_) { return null; }
-          }).whereType<InventoryRecord>().toList();
-        }
-      } catch (_) {}
+      var result = await pullCol<Contact>('contacts', Contact.fromJson);
+      if (result.isNotEmpty) _contactsCache = result;
+
+      var deals = await pullCol<Deal>('deals', Deal.fromJson);
+      if (deals.isNotEmpty) _dealsCache = deals;
+
+      var rels = await pullCol<ContactRelation>('relations', ContactRelation.fromJson);
+      if (rels.isNotEmpty) _relationsCache = rels;
+
+      var prods = await pullCol<Product>('products', Product.fromJson);
+      if (prods.isNotEmpty) _productsCache = prods;
+
+      var orders = await pullCol<SalesOrder>('sales_orders', SalesOrder.fromJson);
+      if (orders.isNotEmpty) _ordersCache = orders;
+
+      var inv = await pullCol<InventoryRecord>('inventory', InventoryRecord.fromJson);
+      if (inv.isNotEmpty) _inventoryCache = inv;
+
+      var inter = await pullCol<Interaction>('interactions', Interaction.fromJson);
+      if (inter.isNotEmpty) _interactionsCache = inter;
+
+      var team = await pullCol<TeamMember>('team', TeamMember.fromJson);
+      if (team.isNotEmpty) _teamCache = team;
+
+      var tasks = await pullCol<Task>('tasks', Task.fromJson);
+      if (tasks.isNotEmpty) _taskCache = tasks;
+
+      var assigns = await pullCol<ContactAssignment>('assignments', ContactAssignment.fromJson);
+      if (assigns.isNotEmpty) _assignmentCache = assigns;
+
+      var facs = await pullCol<ProductionFactory>('factories', ProductionFactory.fromJson);
+      if (facs.isNotEmpty) _factoryCache = facs;
+
+      var prods2 = await pullCol<ProductionOrder>('production', ProductionOrder.fromJson);
+      if (prods2.isNotEmpty) _productionCache = prods2;
 
       if (kDebugMode) {
-        debugPrint('[DataService] Cloud sync: ${_contactsCache.length} contacts, ${_dealsCache.length} deals, ${_ordersCache.length} orders');
+        debugPrint('[DataService] Cloud sync complete: ${_contactsCache.length} contacts, ${_dealsCache.length} deals, ${_ordersCache.length} orders');
       }
     } catch (e) {
       if (kDebugMode) debugPrint('[DataService] syncFromCloud error: $e');
