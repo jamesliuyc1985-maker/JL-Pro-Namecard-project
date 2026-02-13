@@ -6,6 +6,7 @@ import '../providers/crm_provider.dart';
 import '../models/deal.dart';
 import '../models/contact.dart';
 import '../models/product.dart';
+import '../models/factory.dart';
 import '../models/team.dart';
 import '../utils/theme.dart';
 import '../utils/formatters.dart';
@@ -412,18 +413,28 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
           ),
           const SizedBox(height: 12),
           SizedBox(width: double.infinity, child: ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               o.trackingNumber = trackCtrl.text;
               o.trackingCarrier = carrierCtrl.text;
               o.trackingNote = noteCtrl.text;
               o.trackingStatus = 'picked_up';
               o.shippedAt = DateTime.now();
-              crm.shipOrder(o.id);
-              Navigator.pop(ctx);
+              await crm.updateOrder(o);
+              final shipErr = await crm.shipOrder(o.id);
+              if (shipErr != null) {
+                if (ctx.mounted) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                    content: Text('\u274C \u51FA\u8D27\u5931\u8D25: $shipErr'), backgroundColor: AppTheme.danger, duration: const Duration(seconds: 4)));
+                }
+                return;
+              }
+              if (ctx.mounted) Navigator.pop(ctx);
               setState(() {});
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text('${o.contactName} 的订单已出货${trackCtrl.text.isNotEmpty ? " | 单号: ${trackCtrl.text}" : ""}'),
-                backgroundColor: AppTheme.success));
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text('${o.contactName} 的订单已出货${trackCtrl.text.isNotEmpty ? " | 单号: ${trackCtrl.text}" : ""}'),
+                  backgroundColor: AppTheme.success));
+              }
             },
             child: const Text('确认出货并扣减库存'),
           )),
@@ -565,60 +576,150 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
     );
   }
 
-  /// 交易关联的订单收款/物流信息
+  /// 交易关联的订单 - 状态流水线 + 醒目操作按钮
   Widget _buildDealPaymentInfo(CrmProvider crm, Deal deal) {
     final order = crm.orders.where((o) => o.id == deal.orderId).firstOrNull;
     if (order == null) return const SizedBox.shrink();
     final payC = order.isFullyPaid ? AppTheme.success : order.paidAmount > 0 ? AppTheme.warning : AppTheme.slate;
-    final payLabel = order.isFullyPaid ? '已结清' : order.paidAmount > 0 ? '部分收款' : '待收款';
+    final payLabel = order.isFullyPaid ? '\u2705 \u5DF2\u7ED3\u6E05' : order.paidAmount > 0 ? '\u23F3 \u90E8\u5206\u6536\u6B3E' : '\u26A0 \u5F85\u6536\u6B3E';
     return Padding(
-      padding: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.only(top: 8),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-        decoration: BoxDecoration(color: payC.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: payC.withValues(alpha: 0.2))),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: AppTheme.navyMid,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: payC.withValues(alpha: 0.3)),
+        ),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
+          // 状态流水线
+          Row(children: [
+            _statusStep('\u5DF2\u4E0B\u5355', true, const Color(0xFF1ABC9C)),
+            _statusLine(order.status != 'draft' && order.status != 'confirmed'),
+            _statusStep('\u5DF2\u51FA\u8D27', order.status == 'shipped' || order.status == 'completed', AppTheme.info),
+            _statusLine(order.isFullyPaid),
+            _statusStep('\u5DF2\u6536\u6B3E', order.isFullyPaid, AppTheme.success),
+          ]),
+          const SizedBox(height: 8),
+          // 收款进度条
           Row(children: [
             Icon(order.isFullyPaid ? Icons.check_circle : Icons.account_balance_wallet_outlined, color: payC, size: 14),
             const SizedBox(width: 6),
             Text(payLabel, style: TextStyle(color: payC, fontSize: 10, fontWeight: FontWeight.w600)),
-            const SizedBox(width: 8),
-            Expanded(child: Text('${Formatters.currency(order.paidAmount)} / ${Formatters.currency(order.totalAmount)}',
-              style: TextStyle(color: payC, fontSize: 10), overflow: TextOverflow.ellipsis)),
-            // 出货快捷按钮
-            if (order.status == 'confirmed')
-              GestureDetector(
-                onTap: () => _showShipDialog(crm, order),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  margin: const EdgeInsets.only(right: 4),
-                  decoration: BoxDecoration(color: AppTheme.info.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
-                  child: const Text('出货', style: TextStyle(color: AppTheme.info, fontSize: 9, fontWeight: FontWeight.w600)),
-                ),
-              ),
-            // 收款快捷按钮
-            if (!order.isFullyPaid)
-              GestureDetector(
-                onTap: () => _showPaymentDialog(crm, order),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(color: AppTheme.success.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
-                  child: const Text('收款', style: TextStyle(color: AppTheme.success, fontSize: 9, fontWeight: FontWeight.w600)),
-                ),
-              ),
+            const Spacer(),
+            Text('${Formatters.currency(order.paidAmount)} / ${Formatters.currency(order.totalAmount)}',
+              style: TextStyle(color: payC, fontSize: 10, fontWeight: FontWeight.bold)),
           ]),
-          // 物流信息 (如果已出货)
+          const SizedBox(height: 4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: LinearProgressIndicator(
+              value: order.totalAmount > 0 ? (order.paidAmount / order.totalAmount).clamp(0, 1) : 0,
+              backgroundColor: AppTheme.steel.withValues(alpha: 0.2),
+              valueColor: AlwaysStoppedAnimation(payC),
+              minHeight: 4,
+            ),
+          ),
+          // 物流信息
           if (order.trackingNumber.isNotEmpty) Padding(
-            padding: const EdgeInsets.only(top: 4),
+            padding: const EdgeInsets.only(top: 6),
             child: Row(children: [
-              const Icon(Icons.local_shipping, color: AppTheme.info, size: 12),
+              const Icon(Icons.local_shipping, color: AppTheme.info, size: 13),
               const SizedBox(width: 4),
-              Text('${order.trackingCarrier.isNotEmpty ? "${order.trackingCarrier}: " : ""}${order.trackingNumber}',
-                style: const TextStyle(color: AppTheme.info, fontSize: 9)),
+              Expanded(child: Text('${order.trackingCarrier.isNotEmpty ? "${order.trackingCarrier}: " : ""}${order.trackingNumber}',
+                style: const TextStyle(color: AppTheme.info, fontSize: 10))),
             ]),
           ),
+          const SizedBox(height: 8),
+          // 醒目操作按钮行
+          Row(children: [
+            if (order.status == 'confirmed')
+              Expanded(child: GestureDetector(
+                onTap: () => _showShipDialog(crm, order),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  margin: const EdgeInsets.only(right: 4),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [Color(0xFF0984E3), Color(0xFF74B9FF)]),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Icon(Icons.local_shipping, color: Colors.white, size: 16),
+                    SizedBox(width: 4),
+                    Text('\u786E\u8BA4\u51FA\u8D27', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                  ]),
+                ),
+              )),
+            if (!order.isFullyPaid && order.status != 'cancelled' && order.status != 'draft')
+              Expanded(child: GestureDetector(
+                onTap: () => _showPaymentDialog(crm, order),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  margin: const EdgeInsets.only(left: 4),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [Color(0xFF00B894), Color(0xFF55EFC4)]),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    const Icon(Icons.attach_money, color: Colors.white, size: 16),
+                    const SizedBox(width: 4),
+                    Text('\u6536\u6B3E \u00A5${order.unpaidAmount.toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                  ]),
+                ),
+              )),
+            if (order.status == 'shipped' && order.isFullyPaid)
+              Expanded(child: GestureDetector(
+                onTap: () async {
+                  order.status = 'completed';
+                  order.updatedAt = DateTime.now();
+                  await crm.updateOrder(order);
+                  final linkedDeal = crm.deals.where((d) => d.orderId == order.id).toList();
+                  for (final d in linkedDeal) {
+                    await crm.moveDealStage(d.id, DealStage.completed);
+                  }
+                  setState(() {});
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('\u2705 \u4EA4\u6613\u5DF2\u5B8C\u6210!'), backgroundColor: AppTheme.success));
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [Color(0xFFD4A017), Color(0xFFF1C40F)]),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Icon(Icons.check_circle, color: Colors.white, size: 16),
+                    SizedBox(width: 4),
+                    Text('\u5B8C\u6210\u4EA4\u6613', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                  ]),
+                ),
+              )),
+          ]),
         ]),
       ),
+    );
+  }
+
+  Widget _statusStep(String label, bool active, Color color) {
+    return Expanded(child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Container(
+        width: 18, height: 18,
+        decoration: BoxDecoration(
+          color: active ? color : AppTheme.steel.withValues(alpha: 0.3),
+          shape: BoxShape.circle,
+        ),
+        child: active ? const Icon(Icons.check, color: Colors.white, size: 12) : null,
+      ),
+      const SizedBox(height: 2),
+      Text(label, style: TextStyle(color: active ? color : AppTheme.slate, fontSize: 9, fontWeight: active ? FontWeight.bold : FontWeight.normal)),
+    ]));
+  }
+
+  Widget _statusLine(bool active) {
+    return Container(
+      width: 30, height: 2, margin: const EdgeInsets.only(bottom: 14),
+      color: active ? AppTheme.success.withValues(alpha: 0.6) : AppTheme.steel.withValues(alpha: 0.2),
     );
   }
 
@@ -930,6 +1031,9 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
                   double up;
                   switch (priceType) { case 'agent': up = p.agentPrice; break; case 'clinic': up = p.clinicPrice; break; default: up = p.retailPrice; break; }
                   final stock = crm.getProductStock(p.id);
+                  final reserved = crm.getReservedStock(p.id);
+                  final available = stock - reserved;
+                  final hasProduction = crm.getProductionByProduct(p.id).where((po) => ProductionStatus.activeStatuses.contains(po.status)).isNotEmpty;
                   qtyControllers.putIfAbsent(p.id, () => TextEditingController(text: qty > 0 ? '$qty' : ''));
                   return Container(
                     margin: const EdgeInsets.only(bottom: 3), padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -942,9 +1046,17 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
                         Row(children: [
                           Text(Formatters.currency(up), style: const TextStyle(color: AppTheme.gold, fontSize: 10)),
                           const SizedBox(width: 6),
-                          Text('库存:$stock', style: TextStyle(color: stock <= 0 ? AppTheme.danger : AppTheme.slate, fontSize: 9)),
+                          Text('可用:$available', style: TextStyle(color: available <= 0 ? AppTheme.danger : AppTheme.slate, fontSize: 9)),
+                          if (reserved > 0) ...[const SizedBox(width: 3), Text('(预留$reserved)', style: const TextStyle(color: AppTheme.warning, fontSize: 8))],
                           const SizedBox(width: 6),
                           Text('${p.unitsPerBox}瓶/套', style: const TextStyle(color: AppTheme.slate, fontSize: 8)),
+                          if (available <= 0) ...[const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(color: (hasProduction ? AppTheme.warning : AppTheme.danger).withValues(alpha: 0.2), borderRadius: BorderRadius.circular(3)),
+                              child: Text(hasProduction ? '有排产' : '无排产', style: TextStyle(color: hasProduction ? AppTheme.warning : AppTheme.danger, fontSize: 7, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
                         ]),
                       ])),
                       SizedBox(width: 52, height: 30, child: TextField(
@@ -1008,7 +1120,7 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
               ]),
               const SizedBox(height: 8),
               SizedBox(width: double.infinity, child: ElevatedButton(
-                onPressed: (selectedContactId == null || selectedProducts.isEmpty) ? null : () {
+                onPressed: (selectedContactId == null || selectedProducts.isEmpty) ? null : () async {
                   final items = selectedProducts.entries.map((e) {
                     final p = products.firstWhere((p) => p.id == e.key);
                     double up;
@@ -1016,15 +1128,21 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
                     return OrderItem(productId: p.id, productName: p.name, productCode: p.code, quantity: e.value, unitPrice: up, subtotal: up * e.value);
                   }).toList();
                   final dealStage = DealStage.values.firstWhere((s) => s.name == selectedStage, orElse: () => DealStage.ordered);
-                  crm.createOrderWithDeal(SalesOrder(
+                  final err = await crm.createOrderWithDeal(SalesOrder(
                     id: crm.generateId(), contactId: selectedContactId!, contactName: selectedContactName,
                     contactCompany: selectedContactCompany, contactPhone: selectedContactPhone,
                     items: items, totalAmount: total, priceType: priceType, dealStage: dealStage.label,
                     shippingMethod: shippingMethod, paymentTerms: paymentTerms,
                     deliveryAddress: addressCtrl.text, notes: notesCtrl.text, expectedDeliveryDate: expectedDate,
                   ));
+                  if (err != null) {
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                        content: Text('\u274C \u65E0\u6CD5\u4E0B\u5355: $err'), backgroundColor: AppTheme.danger, duration: const Duration(seconds: 4)));
+                    }
+                    return;
+                  }
                   Navigator.pop(ctx);
-                  // 立即刷新UI
                   setState(() {});
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                     content: Text('订单已创建: $selectedContactName | ${Formatters.currency(total)}'),

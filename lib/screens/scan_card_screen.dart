@@ -231,20 +231,34 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
         source: source,
         maxWidth: 1920,
         maxHeight: 1080,
-        imageQuality: 85,
+        imageQuality: 90,
       );
       if (image == null || !mounted) return;
 
       final bytes = await image.readAsBytes();
+      if (bytes.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('图片读取失败，请重试'), backgroundColor: AppTheme.danger),
+          );
+        }
+        return;
+      }
+
       setState(() {
         _imagePath = image.path;
         _imageBytes = bytes;
         _isScanning = true;
-        _recognitionLog = '正在调用 Gemini Vision API...';
+        _recognitionLog = '正在调用 Gemini Vision API (${bytes.length} bytes)...';
       });
 
-      // 调用 Gemini Vision API
-      await _recognizeWithGemini(bytes, image.mimeType ?? 'image/jpeg');
+      // 确定 MIME 类型
+      String mimeType = image.mimeType ?? 'image/jpeg';
+      if (mimeType.isEmpty || !mimeType.startsWith('image/')) {
+        mimeType = 'image/jpeg';
+      }
+
+      await _recognizeWithGemini(bytes, mimeType);
 
     } catch (e) {
       if (mounted) {
@@ -265,21 +279,19 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
       final model = GenerativeModel(
         model: 'gemini-2.0-flash',
         apiKey: _apiKey,
+        generationConfig: GenerationConfig(
+          temperature: 0.1,
+          maxOutputTokens: 2048,
+        ),
       );
 
-      final prompt = '''请识别这张名片/图片中的联系人信息，严格返回以下JSON格式（不要markdown代码块）:
-{
-  "name": "姓名",
-  "company": "公司名",
-  "position": "职位",
-  "phone": "电话号码",
-  "email": "邮箱",
-  "address": "地址",
-  "industry": "行业(healthcare/finance/technology/trading/consulting/manufacturing/realestate/other)",
-  "relation_type": "关系类型(agent/clinic/retailer/advisor/investor/partner/other)",
-  "confidence": 0.95
-}
-如果有多个电话号码，用逗号分隔放在phone字段。如果某项无法识别，返回空字符串。''';
+      const prompt = 'You are a business card OCR expert. Analyze this image carefully.\n'
+          'Extract ALL contact information visible. Support Chinese, Japanese, English, Korean.\n'
+          'Return ONLY a JSON object (no markdown, no code blocks):\n'
+          '{"name":"","company":"","position":"","phone":"","email":"","address":"",'
+          '"industry":"healthcare|finance|technology|trading|consulting|construction|realestate|other",'
+          '"relation_type":"agent|clinic|retailer|advisor|investor|partner|other","confidence":0.9}\n'
+          'If multiple phones, comma-separate. If unrecognizable, use empty string.';
 
       final content = Content.multi([
         TextPart(prompt),
@@ -290,10 +302,20 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
       final text = response.text ?? '';
 
       if (mounted) {
-        setState(() => _recognitionLog = 'AI返回: ${text.substring(0, text.length > 100 ? 100 : text.length)}...');
+        setState(() => _recognitionLog = 'AI返回: ${text.length > 150 ? text.substring(0, 150) : text}...');
       }
 
-      // 解析JSON
+      if (text.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _isScanning = false;
+            _showResult = true;
+            _recognitionLog = 'AI返回空结果，请手动录入';
+          });
+        }
+        return;
+      }
+
       _parseGeminiResponse(text);
 
     } catch (e) {
@@ -302,7 +324,6 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
           _isScanning = false;
           _recognitionLog = 'Gemini API调用失败: $e';
         });
-        // 回退到手动录入
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('AI识别失败, 可手动录入: $e'), backgroundColor: AppTheme.warning),
         );

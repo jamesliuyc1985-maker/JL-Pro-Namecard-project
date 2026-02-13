@@ -17,11 +17,13 @@ class ContactsScreen extends StatelessWidget {
     return Consumer<CrmProvider>(
       builder: (context, crm, _) {
         final contacts = crm.contacts;
+        final bizContacts = crm.allContacts.where((c) => c.myRelation.isMedChannel).toList();
         return SafeArea(
           child: Column(children: [
             _buildHeader(context, crm),
             _buildSearchBar(crm),
             _buildIndustryChips(crm),
+            if (bizContacts.isNotEmpty) _buildBusinessRelBar(context, bizContacts),
             _buildContactCount(contacts.length),
             Expanded(child: _buildContactList(context, contacts)),
           ]),
@@ -101,6 +103,83 @@ class ContactsScreen extends StatelessWidget {
           );
         }).toList(),
       ),
+    );
+  }
+
+  Widget _buildBusinessRelBar(BuildContext context, List<Contact> bizContacts) {
+    final agents = bizContacts.where((c) => c.myRelation == MyRelationType.agent).toList();
+    final clinics = bizContacts.where((c) => c.myRelation == MyRelationType.clinic).toList();
+    final retailers = bizContacts.where((c) => c.myRelation == MyRelationType.retailer).toList();
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [AppTheme.primaryPurple.withValues(alpha: 0.1), AppTheme.primaryBlue.withValues(alpha: 0.05)],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.primaryPurple.withValues(alpha: 0.2)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Row(children: [
+          Icon(Icons.storefront, color: AppTheme.accentGold, size: 16),
+          SizedBox(width: 6),
+          Text('\u4E1A\u52A1\u5173\u7CFB \u00B7 \u4E0B\u5355\u7528', style: TextStyle(color: AppTheme.textPrimary, fontSize: 12, fontWeight: FontWeight.bold)),
+        ]),
+        const SizedBox(height: 6),
+        SizedBox(
+          height: 30,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              _bizChip('\u4EE3\u7406', agents.length, MyRelationType.agent.color),
+              const SizedBox(width: 6),
+              _bizChip('\u8BCA\u6240', clinics.length, MyRelationType.clinic.color),
+              const SizedBox(width: 6),
+              _bizChip('\u96F6\u552E', retailers.length, MyRelationType.retailer.color),
+              const SizedBox(width: 12),
+              ...bizContacts.take(8).map((c) => Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: GestureDetector(
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ContactDetailScreen(contactId: c.id))),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: c.myRelation.color.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Container(
+                        width: 18, height: 18,
+                        decoration: BoxDecoration(color: c.myRelation.color.withValues(alpha: 0.3), shape: BoxShape.circle),
+                        child: Center(child: Text(c.name.isNotEmpty ? c.name[0] : '?', style: TextStyle(color: c.myRelation.color, fontSize: 10, fontWeight: FontWeight.bold))),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(c.name, style: TextStyle(color: c.myRelation.color, fontSize: 10, fontWeight: FontWeight.w600)),
+                    ]),
+                  ),
+                ),
+              )),
+            ],
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _bizChip(String label, int count, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(6)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600)),
+        const SizedBox(width: 4),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+          decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)),
+          child: Text('$count', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+        ),
+      ]),
     );
   }
 

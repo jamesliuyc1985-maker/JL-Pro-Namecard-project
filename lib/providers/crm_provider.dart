@@ -307,6 +307,10 @@ class CrmProvider extends ChangeNotifier {
     }
     _refreshAll();
   }
+  Future<void> updateInteraction(Interaction interaction) async {
+    await _dataService.saveInteraction(interaction);
+    _refreshAll();
+  }
   Future<void> deleteInteraction(String id) async {
     await _dataService.deleteInteraction(id);
     _refreshAll();
@@ -316,6 +320,10 @@ class CrmProvider extends ChangeNotifier {
   Product? getProduct(String id) => _dataService.getProduct(id);
   List<Product> getProductsByCategory(String category) => _products.where((p) => p.category == category).toList();
   Future<void> addProduct(Product product) async {
+    await _dataService.saveProduct(product);
+    _refreshAll();
+  }
+  Future<void> updateProduct(Product product) async {
     await _dataService.saveProduct(product);
     _refreshAll();
   }
@@ -339,8 +347,51 @@ class CrmProvider extends ChangeNotifier {
     _refreshAll();
   }
 
+  /// 检查产品是否可销售 (有库存或有生产排期能赶上交货日期)
+  /// 返回 null 表示可以销售, 否则返回拒绝原因
+  String? checkProductSellability(String productId, int requiredQty, DateTime? deliveryDate) {
+    final currentStock = getProductStock(productId);
+    final reserved = getReservedStock(productId);
+    final available = currentStock - reserved;
+    if (available >= requiredQty) return null; // 库存充足
+
+    // 检查生产排期中是否有该产品的在产/计划订单
+    final productions = _productionOrders.where((p) =>
+      p.productId == productId &&
+      ProductionStatus.activeStatuses.contains(p.status)
+    ).toList();
+
+    if (productions.isEmpty) {
+      return '库存不足(可用$available, 需要$requiredQty), 且无生产排期';
+    }
+
+    // 有生产排期, 检查预计完成日期是否能赶上交货日
+    if (deliveryDate != null) {
+      int incomingQty = 0;
+      for (final p in productions) {
+        if (!p.plannedDate.isAfter(deliveryDate)) {
+          incomingQty += p.quantity;
+        }
+      }
+      final totalAvailable = available + incomingQty;
+      if (totalAvailable < requiredQty) {
+        return '库存不足(可用$available+排产$incomingQty=$totalAvailable, 需要$requiredQty), 排期无法赶上交货日';
+      }
+    }
+    // 有排期且无明确交货日 → 允许下单
+    return null;
+  }
+
   /// 创建订单+Deal (预定模式: 不扣库存, 出货时才扣) - 即时刷新
-  Future<void> createOrderWithDeal(SalesOrder order) async {
+  /// 返回 null 成功, 否则返回错误信息
+  Future<String?> createOrderWithDeal(SalesOrder order) async {
+    // 库存/排期校验
+    for (final item in order.items) {
+      final reason = checkProductSellability(item.productId, item.quantity, order.expectedDeliveryDate);
+      if (reason != null) {
+        return '${item.productName}: $reason';
+      }
+    }
     order.status = 'confirmed';
     await _dataService.saveOrder(order);
     DealStage targetStage = DealStage.ordered;
@@ -368,11 +419,20 @@ class CrmProvider extends ChangeNotifier {
       NotificationType.orderCreated, relatedId: order.id);
     // 立即刷新所有模块
     _refreshAll();
+    return null; // 成功
   }
 
   /// 出货: 扣减库存 + 更新订单状态 + 推进管线 - 即时刷新
-  Future<void> shipOrder(String orderId) async {
+  /// 返回 null 成功, 否则返回错误信息
+  Future<String?> shipOrder(String orderId) async {
     final order = _orders.firstWhere((o) => o.id == orderId);
+    // 出货前校验库存
+    for (final item in order.items) {
+      final stock = getProductStock(item.productId);
+      if (stock < item.quantity) {
+        return '${item.productName}库存不足: 当前${stock}, 需要${item.quantity}';
+      }
+    }
     order.status = 'shipped';
     order.updatedAt = DateTime.now();
     await _dataService.saveOrder(order);
@@ -396,6 +456,7 @@ class CrmProvider extends ChangeNotifier {
     _notify('订单已出货', '${order.contactName} 的订单已出货，库存已扣减',
       NotificationType.orderShipped, relatedId: orderId);
     _refreshAll();
+    return null; // 成功
   }
 
   int getReservedStock(String productId) {
@@ -451,6 +512,13 @@ class CrmProvider extends ChangeNotifier {
   List<InventoryRecord> getInventoryByProduct(String productId) =>
       _inventoryRecords.where((r) => r.productId == productId).toList();
   Future<void> addInventoryRecord(InventoryRecord record) async {
+    // 库存不能为负数校验
+    if (record.type == 'out') {
+      final currentStock = getProductStock(record.productId);
+      if (currentStock < record.quantity) {
+        throw Exception('库存不足: 当前${record.productName}库存${currentStock}, 需要出库${record.quantity}');
+      }
+    }
     await _dataService.addInventoryRecord(record);
     _refreshAll();
   }
