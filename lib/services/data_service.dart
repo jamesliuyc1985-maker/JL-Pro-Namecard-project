@@ -198,35 +198,48 @@ class DataService {
     return stats;
   }
 
-  // ========== Init: Hive优先 → 种子数据兜底 ==========
+  // ========== Init: 只加载系统配置（产品/工厂/团队），业务数据从云端拉取 ==========
   Future<void> init() async {
-    // 先加载种子数据作为基础
+    // 系统配置：产品目录、工厂、团队（这些是固定配置不是业务数据）
     _productsCache = _builtInProducts();
     _factoryCache.addAll(_builtInFactories());
     _teamCache.addAll(_builtInTeam());
-    _contactsCache = _builtInContacts();
-    _dealsCache = _builtInDeals();
-    _relationsCache = _builtInRelations();
+    // 业务数据（联系人/交易/关系/订单等）初始化为空
+    // 登录后从 Firestore 拉取，确保所有用户看到同一份实时数据
+    _contactsCache = [];
+    _dealsCache = [];
+    _relationsCache = [];
+    _ordersCache = [];
+    _inventoryCache = [];
+    _interactionsCache = [];
+    _taskCache = [];
+    _assignmentCache = [];
+    _productionCache = [];
 
     if (kDebugMode) {
-      debugPrint('[DataService] Seed loaded: ${_contactsCache.length} contacts, ${_dealsCache.length} deals');
+      debugPrint('[DataService] Init: ${_productsCache.length} products, ${_factoryCache.length} factories, ${_teamCache.length} team (business data empty, awaiting cloud sync)');
     }
   }
 
-  /// 从 Hive 恢复持久化数据（替换种子数据）
+  /// 从 Hive 恢复持久化数据
   /// 在 SyncService.init() 之后调用
   Future<void> loadFromHive(SyncService sync) async {
     _syncService = sync;
 
-    // 尝试从 Hive 加载每个集合，如果有数据则替换种子数据
-    _contactsCache = _loadCollection<Contact>(sync, 'contacts', Contact.fromJson) ?? _contactsCache;
-    _dealsCache = _loadCollection<Deal>(sync, 'deals', Deal.fromJson) ?? _dealsCache;
-    _interactionsCache = _loadCollection<Interaction>(sync, 'interactions', Interaction.fromJson) ?? _interactionsCache;
-    _relationsCache = _loadCollection<ContactRelation>(sync, 'relations', ContactRelation.fromJson) ?? _relationsCache;
-    _productsCache = _loadCollection<Product>(sync, 'products', Product.fromJson) ?? _productsCache;
-    _ordersCache = _loadCollection<SalesOrder>(sync, 'sales_orders', SalesOrder.fromJson) ?? _ordersCache;
+    // 业务数据: Hive有数据则加载，无则保持空（不回退到种子数据）
+    _contactsCache = _loadCollection<Contact>(sync, 'contacts', Contact.fromJson) ?? [];
+    _dealsCache = _loadCollection<Deal>(sync, 'deals', Deal.fromJson) ?? [];
+    _interactionsCache = _loadCollection<Interaction>(sync, 'interactions', Interaction.fromJson) ?? [];
+    _relationsCache = _loadCollection<ContactRelation>(sync, 'relations', ContactRelation.fromJson) ?? [];
+    _ordersCache = _loadCollection<SalesOrder>(sync, 'sales_orders', SalesOrder.fromJson) ?? [];
+    _inventoryCache = _loadCollection<InventoryRecord>(sync, 'inventory', InventoryRecord.fromJson) ?? [];
+    _taskCache = _loadCollection<Task>(sync, 'tasks', Task.fromJson) ?? [];
+    _assignmentCache = _loadCollection<ContactAssignment>(sync, 'assignments', ContactAssignment.fromJson) ?? [];
+    _productionCache = _loadCollection<ProductionOrder>(sync, 'production', ProductionOrder.fromJson) ?? [];
 
-    // 对于还没持久化的集合（team/task/factory/inventory/assignment/production），保留种子数据
+    // 系统配置: Hive有数据则用Hive版本，无则保留内置
+    final hiveProducts = _loadCollection<Product>(sync, 'products', Product.fromJson);
+    if (hiveProducts != null && hiveProducts.isNotEmpty) _productsCache = hiveProducts;
     final hiveTeam = _loadCollection<TeamMember>(sync, 'team', TeamMember.fromJson);
     if (hiveTeam != null && hiveTeam.isNotEmpty) {
       _teamCache.clear();
@@ -237,29 +250,9 @@ class DataService {
       _factoryCache.clear();
       _factoryCache.addAll(hiveFactories);
     }
-    final hiveTasks = _loadCollection<Task>(sync, 'tasks', Task.fromJson);
-    if (hiveTasks != null && hiveTasks.isNotEmpty) {
-      _taskCache.clear();
-      _taskCache.addAll(hiveTasks);
-    }
-    final hiveAssignments = _loadCollection<ContactAssignment>(sync, 'assignments', ContactAssignment.fromJson);
-    if (hiveAssignments != null && hiveAssignments.isNotEmpty) {
-      _assignmentCache.clear();
-      _assignmentCache.addAll(hiveAssignments);
-    }
-    final hiveInventory = _loadCollection<InventoryRecord>(sync, 'inventory', InventoryRecord.fromJson);
-    if (hiveInventory != null && hiveInventory.isNotEmpty) {
-      _inventoryCache.clear();
-      _inventoryCache.addAll(hiveInventory);
-    }
-    final hiveProduction = _loadCollection<ProductionOrder>(sync, 'production', ProductionOrder.fromJson);
-    if (hiveProduction != null && hiveProduction.isNotEmpty) {
-      _productionCache.clear();
-      _productionCache.addAll(hiveProduction);
-    }
 
     if (kDebugMode) {
-      debugPrint('[DataService] After Hive merge: ${_contactsCache.length} contacts, ${_dealsCache.length} deals, ${_ordersCache.length} orders, ${_inventoryCache.length} inventory, ${_taskCache.length} tasks');
+      debugPrint('[DataService] After Hive load: ${_contactsCache.length} contacts, ${_dealsCache.length} deals, ${_ordersCache.length} orders, ${_productsCache.length} products');
     }
   }
 
@@ -587,26 +580,19 @@ class DataService {
     }
 
     try {
-      var result = await pullCol<Contact>('contacts', Contact.fromJson);
-      if (result.isNotEmpty) _contactsCache = result;
+      // 云端数据直接替换本地（包括空数据 = 清空本地）
+      _contactsCache = await pullCol<Contact>('contacts', Contact.fromJson);
+      _dealsCache = await pullCol<Deal>('deals', Deal.fromJson);
+      _relationsCache = await pullCol<ContactRelation>('relations', ContactRelation.fromJson);
+      _ordersCache = await pullCol<SalesOrder>('sales_orders', SalesOrder.fromJson);
+      _inventoryCache = await pullCol<InventoryRecord>('inventory', InventoryRecord.fromJson);
+      _interactionsCache = await pullCol<Interaction>('interactions', Interaction.fromJson);
+      _assignmentCache = await pullCol<ContactAssignment>('assignments', ContactAssignment.fromJson);
+      _productionCache = await pullCol<ProductionOrder>('production', ProductionOrder.fromJson);
 
-      var deals = await pullCol<Deal>('deals', Deal.fromJson);
-      if (deals.isNotEmpty) _dealsCache = deals;
-
-      var rels = await pullCol<ContactRelation>('relations', ContactRelation.fromJson);
-      if (rels.isNotEmpty) _relationsCache = rels;
-
+      // 产品/工厂/团队：云端有则替换，无则保留内置配置
       var prods = await pullCol<Product>('products', Product.fromJson);
       if (prods.isNotEmpty) _productsCache = prods;
-
-      var orders = await pullCol<SalesOrder>('sales_orders', SalesOrder.fromJson);
-      if (orders.isNotEmpty) _ordersCache = orders;
-
-      var inv = await pullCol<InventoryRecord>('inventory', InventoryRecord.fromJson);
-      if (inv.isNotEmpty) _inventoryCache = inv;
-
-      var inter = await pullCol<Interaction>('interactions', Interaction.fromJson);
-      if (inter.isNotEmpty) _interactionsCache = inter;
 
       var team = await pullCol<TeamMember>('team', TeamMember.fromJson);
       if (team.isNotEmpty) _teamCache = team;
@@ -614,14 +600,8 @@ class DataService {
       var tasks = await pullCol<Task>('tasks', Task.fromJson);
       if (tasks.isNotEmpty) _taskCache = tasks;
 
-      var assigns = await pullCol<ContactAssignment>('assignments', ContactAssignment.fromJson);
-      if (assigns.isNotEmpty) _assignmentCache = assigns;
-
       var facs = await pullCol<ProductionFactory>('factories', ProductionFactory.fromJson);
       if (facs.isNotEmpty) _factoryCache = facs;
-
-      var prods2 = await pullCol<ProductionOrder>('production', ProductionOrder.fromJson);
-      if (prods2.isNotEmpty) _productionCache = prods2;
 
       if (kDebugMode) {
         debugPrint('[DataService] Cloud sync complete: ${_contactsCache.length} contacts, ${_dealsCache.length} deals, ${_ordersCache.length} orders');
@@ -700,115 +680,6 @@ class DataService {
     TeamMember(id: 'member-003', name: '王小明', role: 'member', email: 'xiaoming@dealnavigator.com'),
   ];
 
-  List<Contact> _builtInContacts() {
-    final now = DateTime.now();
-    return [
-      Contact(id: 'c-001', name: '张伟', company: '上海泰康医美', position: '总经理',
-        phone: '+86-138-0000-1001', email: 'zhangwei@taikang.com', address: '上海市静安区',
-        industry: Industry.healthcare, strength: RelationshipStrength.hot, myRelation: MyRelationType.agent,
-        notes: '华东区总代理，月采购量稳定', tags: ['VIP', '代理'],
-        createdAt: now.subtract(const Duration(days: 400)), lastContactedAt: now.subtract(const Duration(days: 1)),
-        businessCategory: 'agent'),
-      Contact(id: 'c-002', name: 'Dr. 田中美咲', nameReading: 'たなか みさき', company: '六本木スキンクリニック', position: '院长',
-        phone: '+81-3-5555-0001', email: 'misaki@roppongi-skin.jp', address: '東京都港区六本木3-1-1',
-        industry: Industry.healthcare, strength: RelationshipStrength.hot, myRelation: MyRelationType.clinic,
-        notes: '月采购外泌体冻干粉20支', tags: ['诊所', '东京', 'VIP'],
-        createdAt: now.subtract(const Duration(days: 380)), lastContactedAt: now.subtract(const Duration(hours: 6)),
-        businessCategory: 'clinic'),
-      Contact(id: 'c-003', name: '李明', company: '深圳健康优选', position: '采购总监',
-        phone: '+86-135-0000-2002', email: 'liming@healthbest.cn', address: '深圳市南山区',
-        industry: Industry.trading, strength: RelationshipStrength.warm, myRelation: MyRelationType.retailer,
-        notes: '跨境电商渠道，NMN产品为主', tags: ['零售', '电商'],
-        createdAt: now.subtract(const Duration(days: 340)), lastContactedAt: now.subtract(const Duration(days: 3)),
-        businessCategory: 'retail'),
-      Contact(id: 'c-004', name: '佐藤健一', nameReading: 'さとう けんいち', company: '东京美容协会', position: '理事',
-        phone: '+81-3-6666-0001', email: 'sato.k@beauty-assoc.jp', address: '東京都渋谷区',
-        industry: Industry.consulting, strength: RelationshipStrength.warm, myRelation: MyRelationType.advisor,
-        notes: '行业资源介绍，关键人脉节点', tags: ['顾问', '东京'],
-        createdAt: now.subtract(const Duration(days: 310)), lastContactedAt: now.subtract(const Duration(days: 22))),
-      Contact(id: 'c-005', name: '王芳', company: '杭州悦颜医美', position: '运营总监',
-        phone: '+86-139-0000-3003', email: 'wangfang@yueyan.com', address: '杭州市西湖区',
-        industry: Industry.healthcare, strength: RelationshipStrength.hot, myRelation: MyRelationType.clinic,
-        notes: '3家连锁诊所，月销稳定', tags: ['诊所', '杭州', 'VIP'],
-        createdAt: now.subtract(const Duration(days: 270)), lastContactedAt: now.subtract(const Duration(days: 2)),
-        businessCategory: 'clinic'),
-      Contact(id: 'c-006', name: 'Mike Chen', company: 'Pacific Health Group', position: 'VP Business Dev',
-        phone: '+1-415-555-0088', email: 'mchen@pacifichealth.com', address: 'San Francisco, CA',
-        industry: Industry.trading, strength: RelationshipStrength.cool, myRelation: MyRelationType.agent,
-        notes: '北美市场潜在代理', tags: ['北美', '开发中'],
-        createdAt: now.subtract(const Duration(days: 175)), lastContactedAt: now.subtract(const Duration(days: 12)),
-        businessCategory: 'agent'),
-      Contact(id: 'c-007', name: '山本真由美', nameReading: 'やまもと まゆみ', company: '銀座ビューティーラボ', position: 'オーナー',
-        phone: '+81-3-7777-0001', email: 'yamamoto@ginza-beauty.jp', address: '東京都中央区銀座5-1-1',
-        industry: Industry.healthcare, strength: RelationshipStrength.warm, myRelation: MyRelationType.clinic,
-        notes: '高端美容院，对外泌体冻干粉感兴趣', tags: ['诊所', '银座'],
-        createdAt: now.subtract(const Duration(days: 160)), lastContactedAt: now.subtract(const Duration(days: 6)),
-        businessCategory: 'clinic'),
-      Contact(id: 'c-008', name: '赵大力', company: '成都康复堂', position: '合伙人',
-        phone: '+86-136-0000-4004', email: 'zhaodl@kangfutang.cn', address: '成都市锦江区',
-        industry: Industry.healthcare, strength: RelationshipStrength.cool, myRelation: MyRelationType.retailer,
-        notes: '线下零售+社群团购', tags: ['零售', '成都'],
-        createdAt: now.subtract(const Duration(days: 130)), lastContactedAt: now.subtract(const Duration(days: 17)),
-        businessCategory: 'retail'),
-      Contact(id: 'c-009', name: '金相哲', nameReading: '김상철', company: 'Seoul Derm Clinic', position: 'Director',
-        phone: '+82-2-555-0099', email: 'kim@seoulderm.kr', address: '서울 강남구',
-        industry: Industry.healthcare, strength: RelationshipStrength.cool, myRelation: MyRelationType.clinic,
-        notes: '韩国皮肤科诊所，考察中', tags: ['诊所', '韩国'],
-        createdAt: now.subtract(const Duration(days: 95)), lastContactedAt: now.subtract(const Duration(days: 28)),
-        businessCategory: 'clinic'),
-      Contact(id: 'c-010', name: '林志远', company: '台北生技股份有限公司', position: 'CEO',
-        phone: '+886-2-8888-0001', email: 'lin@taipei-biotech.tw', address: '台北市信义区',
-        industry: Industry.healthcare, strength: RelationshipStrength.warm, myRelation: MyRelationType.agent,
-        notes: '台湾区NMN代理意向', tags: ['代理', '台湾'],
-        createdAt: now.subtract(const Duration(days: 225)), lastContactedAt: now.subtract(const Duration(days: 4)),
-        businessCategory: 'agent'),
-    ];
-  }
-
-  List<Deal> _builtInDeals() {
-    final now = DateTime.now();
-    return [
-      Deal(id: 'd-001', title: '上海泰康 外泌体300亿 代理批发', description: '华东区首批500瓶试销',
-        contactId: 'c-001', contactName: '张伟', stage: DealStage.negotiation, amount: 7500000, currency: 'JPY',
-        createdAt: now.subtract(const Duration(days: 72)), expectedCloseDate: now.add(const Duration(days: 33)),
-        updatedAt: now.subtract(const Duration(days: 1)), probability: 70, tags: ['代理', '华东']),
-      Deal(id: 'd-002', title: '六本木诊所 冻干粉月度订单', description: '月度20支外泌体冻干粉',
-        contactId: 'c-002', contactName: 'Dr. 田中美咲', stage: DealStage.ordered, amount: 2800000, currency: 'JPY',
-        createdAt: now.subtract(const Duration(days: 88)), expectedCloseDate: now.add(const Duration(days: 17)),
-        updatedAt: now.subtract(const Duration(hours: 6)), probability: 95, tags: ['诊所', '月度']),
-      Deal(id: 'd-003', title: '深圳健康优选 NMN跨境电商', description: 'NMN胶囊首批200瓶',
-        contactId: 'c-003', contactName: '李明', stage: DealStage.proposal, amount: 1800000, currency: 'JPY',
-        createdAt: now.subtract(const Duration(days: 32)), expectedCloseDate: now.add(const Duration(days: 49)),
-        updatedAt: now.subtract(const Duration(days: 3)), probability: 40, tags: ['零售', '电商']),
-      Deal(id: 'd-004', title: '悦颜医美 外泌体冻干粉', description: '3家连锁诊所月度采购',
-        contactId: 'c-005', contactName: '王芳', stage: DealStage.ordered, amount: 3000000, currency: 'JPY',
-        createdAt: now.subtract(const Duration(days: 114)), expectedCloseDate: now.add(const Duration(days: 9)),
-        updatedAt: now.subtract(const Duration(days: 2)), probability: 90, tags: ['诊所', '连锁']),
-      Deal(id: 'd-005', title: 'Pacific Health 北美独家代理', description: '北美市场独家代理权谈判',
-        contactId: 'c-006', contactName: 'Mike Chen', stage: DealStage.contacted, amount: 50000000, currency: 'JPY',
-        createdAt: now.subtract(const Duration(days: 22)), expectedCloseDate: now.add(const Duration(days: 139)),
-        updatedAt: now.subtract(const Duration(days: 12)), probability: 15, tags: ['北美', '独家']),
-      Deal(id: 'd-006', title: '银座美容院 冻干粉试用采购', description: '高端外泌体冻干粉试用装',
-        contactId: 'c-007', contactName: '山本真由美', stage: DealStage.proposal, amount: 400000, currency: 'JPY',
-        createdAt: now.subtract(const Duration(days: 17)), expectedCloseDate: now.add(const Duration(days: 18)),
-        updatedAt: now.subtract(const Duration(days: 6)), probability: 55, tags: ['诊所', '面膜']),
-      Deal(id: 'd-007', title: '台北生技 NMN Premium 台湾代理', description: '台湾区NMN全线产品独家代理',
-        contactId: 'c-010', contactName: '林志远', stage: DealStage.negotiation, amount: 12000000, currency: 'JPY',
-        createdAt: now.subtract(const Duration(days: 58)), expectedCloseDate: now.add(const Duration(days: 64)),
-        updatedAt: now.subtract(const Duration(days: 4)), probability: 50, tags: ['代理', '台湾']),
-    ];
-  }
-
-  List<ContactRelation> _builtInRelations() => [
-    ContactRelation(id: 'rel-001', fromContactId: 'c-001', toContactId: 'c-005', fromName: '张伟', toName: '王芳', relationType: '同行/同业', strength: RelationStrength.strong, isBidirectional: true, description: '华东医美圈核心人脉，互相推荐客户', tags: ['商业伙伴', '行业联盟']),
-    ContactRelation(id: 'rel-002', fromContactId: 'c-002', toContactId: 'c-007', fromName: 'Dr. 田中美咲', toName: '山本真由美', relationType: '同行/同业', strength: RelationStrength.normal, isBidirectional: true, description: '东京美容医疗圈，偶尔转介客户', tags: ['商业伙伴', '同事']),
-    ContactRelation(id: 'rel-003', fromContactId: 'c-004', toContactId: 'c-002', fromName: '佐藤健一', toName: 'Dr. 田中美咲', relationType: '介绍人-被介绍人', strength: RelationStrength.strong, isBidirectional: false, description: '佐藤理事将田中院长介绍给我们', tags: ['引荐人']),
-    ContactRelation(id: 'rel-004', fromContactId: 'c-004', toContactId: 'c-007', fromName: '佐藤健一', toName: '山本真由美', relationType: '介绍人-被介绍人', strength: RelationStrength.normal, isBidirectional: false, description: '美容协会推荐银座Beauty Lab', tags: ['引荐人', '行业联盟']),
-    ContactRelation(id: 'rel-005', fromContactId: 'c-001', toContactId: 'c-003', fromName: '张伟', toName: '李明', relationType: '客户-供应商', strength: RelationStrength.normal, isBidirectional: true, description: '张伟代理产品部分通过李明的电商渠道分销', tags: ['上下游', '商业伙伴']),
-    ContactRelation(id: 'rel-006', fromContactId: 'c-006', toContactId: 'c-010', fromName: 'Mike Chen', toName: '林志远', relationType: '同行/同业', strength: RelationStrength.weak, isBidirectional: true, description: '北美-台湾保健品行业联系', tags: ['商业伙伴']),
-    ContactRelation(id: 'rel-007', fromContactId: 'c-005', toContactId: 'c-008', fromName: '王芳', toName: '赵大力', relationType: '介绍人-被介绍人', strength: RelationStrength.normal, isBidirectional: false, description: '悦颜医美推荐成都康复堂作为线下渠道', tags: ['引荐人', '上下游']),
-    ContactRelation(id: 'rel-008', fromContactId: 'c-009', toContactId: 'c-002', fromName: '金相哲', toName: 'Dr. 田中美咲', relationType: '同行/同业', strength: RelationStrength.weak, isBidirectional: true, description: '中日韩皮肤医疗学术交流认识', tags: ['行业联盟', '同事']),
-    ContactRelation(id: 'rel-009', fromContactId: 'c-001', toContactId: 'c-010', fromName: '张伟', toName: '林志远', relationType: '渠道伙伴', strength: RelationStrength.strong, isBidirectional: true, description: '华东+台湾联合代理战略伙伴', tags: ['商业伙伴', '行业联盟']),
-    ContactRelation(id: 'rel-010', fromContactId: 'c-004', toContactId: 'c-009', fromName: '佐藤健一', toName: '金相哲', relationType: '行业协会', strength: RelationStrength.weak, isBidirectional: true, description: '亚洲美容医疗协会理事成员', tags: ['行业联盟']),
-  ];
+  // 种子业务数据已移除 - 所有业务数据（联系人/交易/关系）从Firestore云端获取
+  // 确保多用户协作时数据一致性
 }

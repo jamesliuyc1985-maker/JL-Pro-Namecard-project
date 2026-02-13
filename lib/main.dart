@@ -126,9 +126,11 @@ class _AuthGate extends StatelessWidget {
           final user = snapshot.data!;
           final crm = context.read<CrmProvider>();
           crm.setUserId(user.uid);
-          // 登录后立即拉取云端最新公共数据（所有用户看到同一份）
+          // 登录后: 先清理本地Hive旧数据，再从云端拉取最新公共数据
           Future.microtask(() async {
             try {
+              final sync = context.read<SyncService>();
+              await sync.clearLocal(); // 清空本地缓存确保干净
               await crm.syncFromCloud().timeout(const Duration(seconds: 20));
             } catch (_) {}
           });
