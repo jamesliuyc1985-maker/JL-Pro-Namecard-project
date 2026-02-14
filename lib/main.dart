@@ -12,25 +12,15 @@ import 'services/sync_service.dart';
 import 'utils/theme.dart';
 import 'screens/home_screen.dart';
 import 'screens/auth_screen.dart';
-import 'screens/profile_screen.dart' show appVersion;
 
-/// Firebase 初始化状态
+/// Firebase 初始化状态 — 全局可读，可被后台重试更新
 bool _firebaseReady = false;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // 1. Firebase 初始化（带超时容错，失败不阻塞启动）
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    ).timeout(const Duration(seconds: 8));
-    _firebaseReady = true;
-    if (kDebugMode) debugPrint('[Main] Firebase initialized successfully');
-  } catch (e) {
-    _firebaseReady = false;
-    if (kDebugMode) debugPrint('[Main] Firebase init failed (local mode): $e');
-  }
+  _firebaseReady = await _initFirebase();
 
   // 2. SyncService 初始化（Hive 本地持久化）
   final syncService = SyncService();
@@ -49,22 +39,85 @@ void main() async {
     syncService.enableFirestore();
   }
 
-  runApp(DealNavigatorApp(dataService: dataService, syncService: syncService));
+  runApp(DealNavigatorApp(
+    dataService: dataService,
+    syncService: syncService,
+    firebaseReady: _firebaseReady,
+  ));
 }
 
-class DealNavigatorApp extends StatelessWidget {
+/// Firebase 初始化，最多重试 2 次（首次 10s，重试 8s）
+Future<bool> _initFirebase() async {
+  for (int attempt = 1; attempt <= 2; attempt++) {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      ).timeout(Duration(seconds: attempt == 1 ? 10 : 8));
+      if (kDebugMode) debugPrint('[Main] Firebase initialized (attempt $attempt)');
+      return true;
+    } catch (e) {
+      if (kDebugMode) debugPrint('[Main] Firebase init attempt $attempt failed: $e');
+      if (attempt < 2) await Future.delayed(const Duration(seconds: 1));
+    }
+  }
+  return false;
+}
+
+class DealNavigatorApp extends StatefulWidget {
   final DataService dataService;
   final SyncService syncService;
-  const DealNavigatorApp({super.key, required this.dataService, required this.syncService});
+  final bool firebaseReady;
+  const DealNavigatorApp({
+    super.key,
+    required this.dataService,
+    required this.syncService,
+    required this.firebaseReady,
+  });
+
+  @override
+  State<DealNavigatorApp> createState() => _DealNavigatorAppState();
+}
+
+class _DealNavigatorAppState extends State<DealNavigatorApp> {
+  late bool _fbReady;
+
+  @override
+  void initState() {
+    super.initState();
+    _fbReady = widget.firebaseReady;
+    // 如果首次启动 Firebase 失败，后台静默重试
+    if (!_fbReady) _retryFirebaseInBackground();
+  }
+
+  /// 后台静默重试 Firebase 初始化（5 秒后，最多 3 次）
+  Future<void> _retryFirebaseInBackground() async {
+    for (int i = 1; i <= 3; i++) {
+      await Future.delayed(Duration(seconds: 3 + i * 2));
+      if (_fbReady) return;
+      try {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        ).timeout(const Duration(seconds: 8));
+        _firebaseReady = true;
+        widget.dataService.enableFirestore();
+        widget.syncService.enableFirestore();
+        if (mounted) setState(() => _fbReady = true);
+        if (kDebugMode) debugPrint('[Main] Firebase background retry #$i succeeded');
+        return;
+      } catch (e) {
+        if (kDebugMode) debugPrint('[Main] Firebase background retry #$i failed: $e');
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider.value(value: syncService),
+        ChangeNotifierProvider.value(value: widget.syncService),
         ChangeNotifierProvider(create: (_) {
           final ns = NotificationService();
-          final crm = CrmProvider(dataService, syncService);
+          final crm = CrmProvider(widget.dataService, widget.syncService);
           crm.setNotificationService(ns);
           crm.loadAll();
           return crm;
@@ -80,9 +133,11 @@ class DealNavigatorApp extends StatelessWidget {
           title: 'Deal Navigator',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.darkTheme,
-          // 始终显示 AuthGate（如果 Firebase 就绪）
-          // AuthGate 内部处理: 未登录→登录页, 已登录→主页
-          home: _firebaseReady ? const _AuthGate() : const HomeScreen(),
+          home: _fbReady ? const _AuthGate() : _LocalModeWithRetryBanner(
+            onFirebaseReady: () {
+              if (mounted) setState(() => _fbReady = true);
+            },
+          ),
         );
       }),
     );
@@ -106,7 +161,7 @@ class _AuthGate extends StatelessWidget {
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 const CircularProgressIndicator(),
                 const SizedBox(height: 16),
-                const Text('正在连接...', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+                const Text('正在连接 Firebase...', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
                 const SizedBox(height: 24),
                 TextButton(
                   onPressed: () {
@@ -151,6 +206,83 @@ class _AuthGate extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+/// 本地模式 + 顶部重连横幅
+class _LocalModeWithRetryBanner extends StatefulWidget {
+  final VoidCallback onFirebaseReady;
+  const _LocalModeWithRetryBanner({required this.onFirebaseReady});
+  @override
+  State<_LocalModeWithRetryBanner> createState() => _LocalModeWithRetryBannerState();
+}
+
+class _LocalModeWithRetryBannerState extends State<_LocalModeWithRetryBanner> {
+  bool _retrying = false;
+
+  Future<void> _manualRetry() async {
+    if (_retrying) return;
+    setState(() => _retrying = true);
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      ).timeout(const Duration(seconds: 10));
+      _firebaseReady = true;
+      if (mounted) {
+        // 启用 Firestore
+        final sync = context.read<SyncService>();
+        sync.enableFirestore();
+        widget.onFirebaseReady();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('连接失败: $e'), backgroundColor: AppTheme.danger, duration: const Duration(seconds: 3)),
+        );
+      }
+    }
+    if (mounted) setState(() => _retrying = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // 黄色顶部横幅 — 提示离线
+        Material(
+          color: AppTheme.warning.withValues(alpha: 0.9),
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Row(children: [
+                const Icon(Icons.cloud_off, color: Colors.white, size: 16),
+                const SizedBox(width: 8),
+                const Expanded(child: Text(
+                  '当前为本地模式 — Firebase 连接失败',
+                  style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                )),
+                if (_retrying)
+                  const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                else
+                  GestureDetector(
+                    onTap: _manualRetry,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.25),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text('重新连接', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+              ]),
+            ),
+          ),
+        ),
+        const Expanded(child: HomeScreen()),
+      ],
     );
   }
 }

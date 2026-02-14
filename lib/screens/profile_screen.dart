@@ -5,11 +5,12 @@ import 'package:csv/csv.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/crm_provider.dart';
 import '../services/auth_service.dart';
+import '../services/sync_service.dart';
 import '../utils/theme.dart';
 import '../utils/formatters.dart';
 import '../utils/download_helper.dart';
 
-const String appVersion = 'v25.2';
+const String appVersion = 'v25.5';
 
 /// 角色工具类
 class AppRole {
@@ -115,6 +116,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 20),
           _buildProfileCard(user, isFirebase),
           const SizedBox(height: 16),
+          _buildSyncStatusCard(context, isFirebase),
+          const SizedBox(height: 16),
           _buildMyWorkCard(context, user),
           const SizedBox(height: 16),
           _buildExportCard(context),
@@ -208,6 +211,114 @@ class _ProfileScreenState extends State<ProfileScreen> {
         )),
       ]),
     );
+  }
+
+  /// 同步状态详细卡片
+  Widget _buildSyncStatusCard(BuildContext context, bool isFirebase) {
+    return Consumer2<SyncService, CrmProvider>(builder: (context, sync, crm, _) {
+      final status = sync.status;
+      final pending = sync.pendingWriteCount;
+      final lastSync = sync.lastSyncTime;
+
+      Color statusColor;
+      IconData statusIcon;
+      String statusText;
+
+      if (!isFirebase) {
+        statusColor = AppTheme.textSecondary;
+        statusIcon = Icons.cloud_off;
+        statusText = '本地模式 — 请登录以启用云端同步';
+      } else if (status == SyncStatus.syncing) {
+        statusColor = AppTheme.primaryBlue;
+        statusIcon = Icons.sync;
+        statusText = '正在同步数据...';
+      } else if (status == SyncStatus.error) {
+        statusColor = AppTheme.danger;
+        statusIcon = Icons.error_outline;
+        statusText = '同步失败: ${sync.lastError ?? "未知错误"}';
+      } else if (pending > 0) {
+        statusColor = AppTheme.warning;
+        statusIcon = Icons.cloud_upload;
+        statusText = '$pending 条数据等待上传';
+      } else {
+        statusColor = AppTheme.success;
+        statusIcon = Icons.cloud_done;
+        statusText = '云端已同步';
+      }
+
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: statusColor.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: statusColor.withValues(alpha: 0.2)),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Icon(statusIcon, color: statusColor, size: 20),
+            const SizedBox(width: 8),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('数据同步', style: TextStyle(color: statusColor, fontSize: 15, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 2),
+              Text(statusText, style: TextStyle(color: statusColor.withValues(alpha: 0.7), fontSize: 11)),
+            ])),
+            if (isFirebase && status != SyncStatus.syncing) ...[
+              GestureDetector(
+                onTap: () async {
+                  setState(() => _syncStatus = '正在同步...');
+                  try {
+                    await crm.syncFromCloud().timeout(const Duration(seconds: 20));
+                    if (mounted) setState(() => _syncStatus = crm.syncStatus ?? '同步成功');
+                  } catch (e) {
+                    if (mounted) setState(() => _syncStatus = '同步超时');
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.sync, color: statusColor, size: 14),
+                    const SizedBox(width: 4),
+                    Text('同步', style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                  ]),
+                ),
+              ),
+            ],
+          ]),
+          if (lastSync != null) ...[
+            const SizedBox(height: 8),
+            Row(children: [
+              Icon(Icons.access_time, color: statusColor.withValues(alpha: 0.5), size: 12),
+              const SizedBox(width: 4),
+              Text('最近同步: ${Formatters.timeAgo(lastSync)}', style: TextStyle(color: statusColor.withValues(alpha: 0.5), fontSize: 10)),
+            ]),
+          ],
+          if (pending > 0 && isFirebase) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(foregroundColor: AppTheme.warning, side: BorderSide(color: AppTheme.warning.withValues(alpha: 0.3))),
+                icon: const Icon(Icons.cloud_upload, size: 16),
+                label: Text('立即上传 $pending 条待同步数据'),
+                onPressed: () async {
+                  setState(() => _syncStatus = '正在上传...');
+                  try {
+                    await crm.pushToCloud().timeout(const Duration(seconds: 20));
+                    if (mounted) setState(() => _syncStatus = crm.syncStatus ?? '上传成功');
+                  } catch (e) {
+                    if (mounted) setState(() => _syncStatus = '上传超时');
+                  }
+                },
+              ),
+            ),
+          ],
+        ]),
+      );
+    });
   }
 
   Widget _buildMyWorkCard(BuildContext context, AppUser user) {

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../services/notification_service.dart';
+import '../services/sync_service.dart';
+import '../providers/crm_provider.dart';
 import '../utils/theme.dart';
 import '../utils/formatters.dart';
 import 'stats_dashboard_screen.dart';
@@ -133,7 +136,13 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _screens[_currentIndex],
+      body: Column(
+        children: [
+          // 连接状态横幅
+          _SyncStatusBar(),
+          Expanded(child: _screens[_currentIndex]),
+        ],
+      ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: AppTheme.navy,
@@ -200,4 +209,155 @@ class _NavDef {
   final IconData icon;
   final String label;
   const _NavDef(this.index, this.icon, this.label);
+}
+
+/// 顶部同步状态横幅 — 实时显示 Firebase/Hive 同步状态
+class _SyncStatusBar extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<SyncService>(builder: (context, sync, _) {
+      bool isFirebase = false;
+      try {
+        isFirebase = FirebaseAuth.instance.currentUser != null;
+      } catch (_) {}
+
+      final status = sync.status;
+      final pending = sync.pendingWriteCount;
+      final lastSync = sync.lastSyncTime;
+
+      // 不显示横幅的条件：Firebase已连接+无pending+状态正常+最近同步过
+      if (isFirebase && pending == 0 && (status == SyncStatus.success || status == SyncStatus.idle)) {
+        // 简洁的绿色在线指示条
+        return SafeArea(
+          bottom: false,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppTheme.success.withValues(alpha: 0.08),
+              border: Border(bottom: BorderSide(color: AppTheme.success.withValues(alpha: 0.15))),
+            ),
+            child: Row(children: [
+              Container(
+                width: 6, height: 6,
+                decoration: const BoxDecoration(color: AppTheme.success, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '云端已连接${lastSync != null ? '  |  上次同步 ${Formatters.timeAgo(lastSync)}' : ''}',
+                style: TextStyle(color: AppTheme.success.withValues(alpha: 0.7), fontSize: 10),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () {
+                  final crm = context.read<CrmProvider>();
+                  crm.syncFromCloud();
+                },
+                child: const Icon(Icons.sync, color: AppTheme.success, size: 14),
+              ),
+            ]),
+          ),
+        );
+      }
+
+      // 同步中
+      if (status == SyncStatus.syncing) {
+        return SafeArea(
+          bottom: false,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            color: AppTheme.primaryBlue.withValues(alpha: 0.12),
+            child: const Row(children: [
+              SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5, color: AppTheme.primaryBlue)),
+              SizedBox(width: 8),
+              Text('正在同步数据...', style: TextStyle(color: AppTheme.primaryBlue, fontSize: 11, fontWeight: FontWeight.w500)),
+            ]),
+          ),
+        );
+      }
+
+      // 有 pending writes（离线队列）
+      if (pending > 0) {
+        return SafeArea(
+          bottom: false,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            color: AppTheme.warning.withValues(alpha: 0.12),
+            child: Row(children: [
+              const Icon(Icons.cloud_upload, color: AppTheme.warning, size: 14),
+              const SizedBox(width: 8),
+              Text('$pending 条数据等待上传', style: const TextStyle(color: AppTheme.warning, fontSize: 11, fontWeight: FontWeight.w500)),
+              const Spacer(),
+              GestureDetector(
+                onTap: () {
+                  final crm = context.read<CrmProvider>();
+                  crm.pushToCloud();
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(color: AppTheme.warning.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(6)),
+                  child: const Text('立即上传', style: TextStyle(color: AppTheme.warning, fontSize: 10, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ]),
+          ),
+        );
+      }
+
+      // 本地模式（未登录 Firebase）
+      if (!isFirebase) {
+        return SafeArea(
+          bottom: false,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppTheme.textSecondary.withValues(alpha: 0.06),
+              border: Border(bottom: BorderSide(color: AppTheme.textSecondary.withValues(alpha: 0.1))),
+            ),
+            child: Row(children: [
+              Container(
+                width: 6, height: 6,
+                decoration: BoxDecoration(color: AppTheme.textSecondary.withValues(alpha: 0.4), shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '本地模式  |  登录后可云端同步',
+                style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.5), fontSize: 10),
+              ),
+            ]),
+          ),
+        );
+      }
+
+      // 错误状态
+      if (status == SyncStatus.error) {
+        return SafeArea(
+          bottom: false,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            color: AppTheme.danger.withValues(alpha: 0.1),
+            child: Row(children: [
+              const Icon(Icons.error_outline, color: AppTheme.danger, size: 14),
+              const SizedBox(width: 8),
+              Expanded(child: Text(
+                '同步异常: ${sync.lastError ?? "未知错误"}',
+                style: const TextStyle(color: AppTheme.danger, fontSize: 10),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+              )),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () {
+                  final crm = context.read<CrmProvider>();
+                  crm.syncFromCloud();
+                },
+                child: const Text('重试', style: TextStyle(color: AppTheme.danger, fontSize: 10, fontWeight: FontWeight.bold)),
+              ),
+            ]),
+          ),
+        );
+      }
+
+      // 默认不显示
+      return const SizedBox.shrink();
+    });
+  }
 }
