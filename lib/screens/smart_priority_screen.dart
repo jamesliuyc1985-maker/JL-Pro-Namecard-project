@@ -215,6 +215,27 @@ class _SmartPriorityScreenState extends State<SmartPriorityScreen> with SingleTi
                     ]),
                     if (ds.suggestedAction.isNotEmpty) ...[const SizedBox(height: 6),
                       Text(ds.suggestedAction, style: TextStyle(color: ds.signal.color, fontSize: 10))],
+                    // 备注显示
+                    if (ds.deal.notes.isNotEmpty || ds.deal.description.isNotEmpty) ...[const SizedBox(height: 6),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppTheme.accentGold.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border(left: BorderSide(color: AppTheme.accentGold.withValues(alpha: 0.5), width: 2)),
+                        ),
+                        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Icon(Icons.note_outlined, color: AppTheme.accentGold.withValues(alpha: 0.6), size: 11),
+                          const SizedBox(width: 4),
+                          Expanded(child: Text(
+                            ds.deal.notes.isNotEmpty ? ds.deal.notes : ds.deal.description,
+                            style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.8), fontSize: 10, fontStyle: FontStyle.italic),
+                            maxLines: 2, overflow: TextOverflow.ellipsis,
+                          )),
+                        ]),
+                      ),
+                    ],
                   ]),
                 );
               },
@@ -370,6 +391,28 @@ class _SmartPriorityScreenState extends State<SmartPriorityScreen> with SingleTi
             child: Text(t, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 8)),
           )).toList()),
         ],
+        // 备注/描述 — 与项目优先级卡片一致
+        if (deal.notes.isNotEmpty || deal.description.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppTheme.accentGold.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(6),
+              border: Border(left: BorderSide(color: AppTheme.accentGold.withValues(alpha: 0.5), width: 2)),
+            ),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(Icons.note_outlined, color: AppTheme.textSecondary.withValues(alpha: 0.6), size: 13),
+              const SizedBox(width: 6),
+              Expanded(child: Text(
+                deal.notes.isNotEmpty ? deal.notes : deal.description,
+                style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.8), fontSize: 10, fontStyle: FontStyle.italic),
+                maxLines: 2, overflow: TextOverflow.ellipsis,
+              )),
+            ]),
+          ),
+        ],
       ]),
     );
   }
@@ -473,6 +516,24 @@ class _SmartPriorityScreenState extends State<SmartPriorityScreen> with SingleTi
               Icon(Icons.lightbulb_outline, color: signalColor, size: 14),
               const SizedBox(width: 6),
               Expanded(child: Text(ds.suggestedAction, style: TextStyle(color: signalColor, fontSize: 11))),
+            ]),
+          ),
+        ],
+        // 备注/描述
+        if (ds.deal.notes.isNotEmpty || ds.deal.description.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(color: AppTheme.cardBgLight, borderRadius: BorderRadius.circular(6)),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(Icons.note_outlined, color: AppTheme.textSecondary.withValues(alpha: 0.6), size: 13),
+              const SizedBox(width: 6),
+              Expanded(child: Text(
+                ds.deal.notes.isNotEmpty ? ds.deal.notes : ds.deal.description,
+                style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.8), fontSize: 10),
+                maxLines: 2, overflow: TextOverflow.ellipsis,
+              )),
             ]),
           ),
         ],

@@ -557,6 +557,11 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
         ]),
         Text(deal.contactName, style: const TextStyle(color: AppTheme.slate, fontSize: 11)),
         if (deal.description.isNotEmpty) Text(deal.description, style: const TextStyle(color: AppTheme.slate, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
+        if (deal.notes.isNotEmpty) Row(children: [
+          Icon(Icons.note_outlined, color: AppTheme.slate.withValues(alpha: 0.6), size: 11),
+          const SizedBox(width: 3),
+          Expanded(child: Text(deal.notes, style: TextStyle(color: AppTheme.gold.withValues(alpha: 0.7), fontSize: 10, fontStyle: FontStyle.italic), maxLines: 1, overflow: TextOverflow.ellipsis)),
+        ]),
         const SizedBox(height: 6),
         Row(children: [
           Text(Formatters.currency(deal.amount), style: const TextStyle(color: AppTheme.gold, fontWeight: FontWeight.bold, fontSize: 15)),
@@ -1137,8 +1142,7 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
                   ));
                   if (err != null) {
                     if (ctx.mounted) {
-                      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-                        content: Text('\u274C \u65E0\u6CD5\u4E0B\u5355: $err'), backgroundColor: AppTheme.danger, duration: const Duration(seconds: 4)));
+                      _showStockShortageDialog(ctx, crm, err, selectedProducts, products);
                     }
                     return;
                   }
@@ -1156,5 +1160,120 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
         );
       }),
     );
+  }
+
+  /// 库存不足详细弹窗 — 替代一闪而过的SnackBar
+  void _showStockShortageDialog(BuildContext context, CrmProvider crm, String errorMsg,
+      Map<String, int> selectedProducts, List<Product> products) {
+    // 解析每个产品的库存状况
+    final details = <Map<String, dynamic>>[];
+    for (final e in selectedProducts.entries) {
+      final p = products.firstWhere((p) => p.id == e.key);
+      final stock = crm.getProductStock(p.id);
+      final reserved = crm.getReservedStock(p.id);
+      final available = stock - reserved;
+      final required = e.value;
+      final hasProduction = crm.getProductionByProduct(p.id)
+          .where((po) => ProductionStatus.activeStatuses.contains(po.status)).isNotEmpty;
+      if (available < required) {
+        details.add({
+          'name': p.name,
+          'required': required,
+          'available': available,
+          'stock': stock,
+          'reserved': reserved,
+          'shortage': required - available,
+          'hasProduction': hasProduction,
+        });
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.navyLight,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(color: AppTheme.danger.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
+            child: const Icon(Icons.inventory_2_outlined, color: AppTheme.danger, size: 20),
+          ),
+          const SizedBox(width: 10),
+          const Expanded(child: Text('库存不足, 无法下单', style: TextStyle(color: AppTheme.danger, fontSize: 16, fontWeight: FontWeight.bold))),
+        ]),
+        content: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          // 总体原因
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: AppTheme.danger.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(8)),
+            child: Text(errorMsg, style: const TextStyle(color: AppTheme.danger, fontSize: 12)),
+          ),
+          if (details.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            const Text('缺货明细:', style: TextStyle(color: AppTheme.offWhite, fontSize: 13, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            ...details.map((d) => Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.navyMid, borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.danger.withValues(alpha: 0.3)),
+              ),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(d['name'] as String, style: const TextStyle(color: AppTheme.offWhite, fontWeight: FontWeight.w600, fontSize: 12)),
+                const SizedBox(height: 4),
+                Row(children: [
+                  _shortageMetric('需要', '${d['required']}', AppTheme.offWhite),
+                  _shortageMetric('可用', '${d['available']}', d['available'] as int <= 0 ? AppTheme.danger : AppTheme.warning),
+                  _shortageMetric('缺口', '-${d['shortage']}', AppTheme.danger),
+                  if ((d['reserved'] as int) > 0) _shortageMetric('预留', '${d['reserved']}', AppTheme.warning),
+                ]),
+                const SizedBox(height: 4),
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: ((d['hasProduction'] as bool) ? AppTheme.warning : AppTheme.danger).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      (d['hasProduction'] as bool) ? '有排产中' : '无排产计划',
+                      style: TextStyle(color: (d['hasProduction'] as bool) ? AppTheme.warning : AppTheme.danger, fontSize: 9, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ]),
+              ]),
+            )),
+          ],
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: AppTheme.info.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(8)),
+            child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('建议操作:', style: TextStyle(color: AppTheme.info, fontSize: 12, fontWeight: FontWeight.w600)),
+              SizedBox(height: 4),
+              Text('1. 前往"生产"板块安排排产计划', style: TextStyle(color: AppTheme.slate, fontSize: 11)),
+              Text('2. 前往"产品&库存"手动入库/调整', style: TextStyle(color: AppTheme.slate, fontSize: 11)),
+              Text('3. 减少下单数量至可用库存以内', style: TextStyle(color: AppTheme.slate, fontSize: 11)),
+              Text('4. 设置交货日期晚于排产完成日', style: TextStyle(color: AppTheme.slate, fontSize: 11)),
+            ]),
+          ),
+        ])),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('知道了, 返回修改', style: TextStyle(fontSize: 13)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _shortageMetric(String label, String value, Color color) {
+    return Expanded(child: Column(children: [
+      Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
+      Text(label, style: const TextStyle(color: AppTheme.slate, fontSize: 9)),
+    ]));
   }
 }

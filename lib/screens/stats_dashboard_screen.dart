@@ -249,6 +249,9 @@ class _StatsDashboardScreenState extends State<StatsDashboardScreen> with Single
     // 交易动态
     for (final d in crm.deals) {
       if (d.updatedAt.isAfter(thisWeek)) {
+        final noteParts = <String>[];
+        if (d.notes.isNotEmpty) noteParts.add(d.notes);
+        if (d.description.isNotEmpty && d.description != d.notes) noteParts.add(d.description);
         events.add(_ActivityEvent(
           time: d.updatedAt,
           icon: Icons.trending_up,
@@ -256,6 +259,7 @@ class _StatsDashboardScreenState extends State<StatsDashboardScreen> with Single
           title: '交易: ${d.title}',
           subtitle: '${d.contactName} | ${d.stage.label} | ${Formatters.currency(d.amount)}',
           type: 'deal',
+          notes: noteParts.join(' | '),
         ));
       }
     }
@@ -378,7 +382,7 @@ class _StatsDashboardScreenState extends State<StatsDashboardScreen> with Single
       margin: const EdgeInsets.only(bottom: 4),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(color: AppTheme.navyLight, borderRadius: BorderRadius.circular(8)),
-      child: Row(children: [
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Container(
           width: 32, height: 32,
           decoration: BoxDecoration(color: event.color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
@@ -387,7 +391,24 @@ class _StatsDashboardScreenState extends State<StatsDashboardScreen> with Single
         const SizedBox(width: 10),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(event.title, style: const TextStyle(color: AppTheme.offWhite, fontWeight: FontWeight.w600, fontSize: 12)),
-          Text(event.subtitle, style: const TextStyle(color: AppTheme.slate, fontSize: 10)),
+          Text(event.subtitle, style: const TextStyle(color: AppTheme.slate, fontSize: 10), maxLines: 2, overflow: TextOverflow.ellipsis),
+          // 备注单独突出显示
+          if (event.notes.isNotEmpty) ...[const SizedBox(height: 4),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppTheme.gold.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(4),
+                border: Border(left: BorderSide(color: AppTheme.gold.withValues(alpha: 0.5), width: 2)),
+              ),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Icon(Icons.note_outlined, color: AppTheme.gold.withValues(alpha: 0.7), size: 11),
+                const SizedBox(width: 4),
+                Expanded(child: Text(event.notes, style: TextStyle(color: AppTheme.gold.withValues(alpha: 0.85), fontSize: 10, fontStyle: FontStyle.italic), maxLines: 2, overflow: TextOverflow.ellipsis)),
+              ]),
+            ),
+          ],
         ])),
         Text(_timeLabel(event.time), style: TextStyle(color: AppTheme.slate.withValues(alpha: 0.8), fontSize: 9)),
       ]),
@@ -813,5 +834,6 @@ class _ActivityEvent {
   final String title;
   final String subtitle;
   final String type;
-  _ActivityEvent({required this.time, required this.icon, required this.color, required this.title, required this.subtitle, required this.type});
+  final String notes; // 独立的备注字段，用于突出显示
+  _ActivityEvent({required this.time, required this.icon, required this.color, required this.title, required this.subtitle, required this.type, this.notes = ''});
 }
