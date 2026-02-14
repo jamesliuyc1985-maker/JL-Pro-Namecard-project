@@ -729,6 +729,15 @@ class _SmartPriorityScreenState extends State<SmartPriorityScreen> with SingleTi
           Text(o.contactName, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 12)),
           Text('${o.items.length}项产品 | ${SalesOrder.statusLabel(o.status)} | ${SalesOrder.trackingStatusLabel(o.trackingStatus)}',
             style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+          // 订单备注/管线备注推送
+          if (o.notes.isNotEmpty) Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Row(children: [
+              Icon(Icons.note_outlined, color: AppTheme.accentGold.withValues(alpha: 0.6), size: 10),
+              const SizedBox(width: 3),
+              Expanded(child: Text(o.notes, style: TextStyle(color: AppTheme.accentGold.withValues(alpha: 0.7), fontSize: 9, fontStyle: FontStyle.italic), maxLines: 1, overflow: TextOverflow.ellipsis)),
+            ]),
+          ),
         ])),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Text(isOverdue ? '逾期${-days}天' : '${days}天后', style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
@@ -747,6 +756,7 @@ class _SmartPriorityScreenState extends State<SmartPriorityScreen> with SingleTi
           Text(o.contactName, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 11, fontWeight: FontWeight.w500)),
           Text('${PaymentStatus.label(o.paymentStatus)} | 已收${Formatters.currency(o.paidAmount)}',
             style: const TextStyle(color: AppTheme.textSecondary, fontSize: 9)),
+          if (o.notes.isNotEmpty) Text(o.notes, style: TextStyle(color: AppTheme.accentGold.withValues(alpha: 0.7), fontSize: 8, fontStyle: FontStyle.italic), maxLines: 1, overflow: TextOverflow.ellipsis),
         ])),
         Text(Formatters.currency(o.unpaidAmount), style: const TextStyle(color: AppTheme.warning, fontWeight: FontWeight.bold, fontSize: 12)),
       ]),

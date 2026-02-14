@@ -264,10 +264,19 @@ class _StatsDashboardScreenState extends State<StatsDashboardScreen> with Single
       }
     }
 
-    // 订单动态
+    // 订单动态 (含备注推送)
     for (final o in crm.orders) {
       if (o.updatedAt.isAfter(thisWeek)) {
         final c = o.status == 'completed' ? AppTheme.success : o.status == 'shipped' ? AppTheme.info : AppTheme.warning;
+        final orderNotes = <String>[];
+        if (o.notes.isNotEmpty) orderNotes.add(o.notes);
+        if (o.paymentNote.isNotEmpty) orderNotes.add('收款: ${o.paymentNote}');
+        if (o.trackingNote.isNotEmpty) orderNotes.add('物流: ${o.trackingNote}');
+        // 关联deal的备注
+        final linkedDeal = crm.deals.where((d) => d.orderId == o.id).firstOrNull;
+        if (linkedDeal != null && linkedDeal.notes.isNotEmpty && !orderNotes.contains(linkedDeal.notes)) {
+          orderNotes.add('管线: ${linkedDeal.notes}');
+        }
         events.add(_ActivityEvent(
           time: o.updatedAt,
           icon: Icons.receipt_long,
@@ -275,6 +284,7 @@ class _StatsDashboardScreenState extends State<StatsDashboardScreen> with Single
           title: '订单: ${o.contactName}',
           subtitle: '${SalesOrder.statusLabel(o.status)} | ${o.items.length}项 | ${Formatters.currency(o.totalAmount)}',
           type: 'order',
+          notes: orderNotes.join(' | '),
         ));
       }
     }

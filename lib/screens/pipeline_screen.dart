@@ -1039,19 +1039,24 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
                   final reserved = crm.getReservedStock(p.id);
                   final available = stock - reserved;
                   final hasProduction = crm.getProductionByProduct(p.id).where((po) => ProductionStatus.activeStatuses.contains(po.status)).isNotEmpty;
+                  final isOverStock = qty > 0 && qty > available; // 数量超可用库存
                   qtyControllers.putIfAbsent(p.id, () => TextEditingController(text: qty > 0 ? '$qty' : ''));
                   return Container(
                     margin: const EdgeInsets.only(bottom: 3), padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: qty > 0 ? AppTheme.gold.withValues(alpha: 0.06) : AppTheme.navyMid, borderRadius: BorderRadius.circular(6),
-                      border: qty > 0 ? Border.all(color: AppTheme.gold.withValues(alpha: 0.3)) : null),
+                      color: isOverStock ? AppTheme.danger.withValues(alpha: 0.08) : (qty > 0 ? AppTheme.gold.withValues(alpha: 0.06) : AppTheme.navyMid),
+                      borderRadius: BorderRadius.circular(6),
+                      border: isOverStock ? Border.all(color: AppTheme.danger.withValues(alpha: 0.5)) : (qty > 0 ? Border.all(color: AppTheme.gold.withValues(alpha: 0.3)) : null)),
                     child: Row(children: [
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(p.name, style: const TextStyle(color: AppTheme.offWhite, fontSize: 11, fontWeight: FontWeight.w500)),
+                        Row(children: [
+                          if (isOverStock) const Padding(padding: EdgeInsets.only(right: 4), child: Icon(Icons.warning_amber, color: AppTheme.danger, size: 12)),
+                          Flexible(child: Text(p.name, style: TextStyle(color: isOverStock ? AppTheme.danger : AppTheme.offWhite, fontSize: 11, fontWeight: FontWeight.w500))),
+                        ]),
                         Row(children: [
                           Text(Formatters.currency(up), style: const TextStyle(color: AppTheme.gold, fontSize: 10)),
                           const SizedBox(width: 6),
-                          Text('可用:$available', style: TextStyle(color: available <= 0 ? AppTheme.danger : AppTheme.slate, fontSize: 9)),
+                          Text('可用:$available', style: TextStyle(color: available <= 0 ? AppTheme.danger : (isOverStock ? AppTheme.danger : AppTheme.slate), fontSize: 9, fontWeight: isOverStock ? FontWeight.bold : FontWeight.normal)),
                           if (reserved > 0) ...[const SizedBox(width: 3), Text('(预留$reserved)', style: const TextStyle(color: AppTheme.warning, fontSize: 8))],
                           const SizedBox(width: 6),
                           Text('${p.unitsPerBox}瓶/套', style: const TextStyle(color: AppTheme.slate, fontSize: 8)),
@@ -1060,6 +1065,13 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
                               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                               decoration: BoxDecoration(color: (hasProduction ? AppTheme.warning : AppTheme.danger).withValues(alpha: 0.2), borderRadius: BorderRadius.circular(3)),
                               child: Text(hasProduction ? '有排产' : '无排产', style: TextStyle(color: hasProduction ? AppTheme.warning : AppTheme.danger, fontSize: 7, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                          if (isOverStock) ...[const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(color: AppTheme.danger.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(3)),
+                              child: Text('缺${qty - available}', style: const TextStyle(color: AppTheme.danger, fontSize: 7, fontWeight: FontWeight.bold)),
                             ),
                           ],
                         ]),
@@ -1124,8 +1136,51 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
                 Text(Formatters.currency(total), style: const TextStyle(color: AppTheme.gold, fontSize: 18, fontWeight: FontWeight.bold)),
               ]),
               const SizedBox(height: 8),
+              // 库存预警汇总条
+              Builder(builder: (_) {
+                final warnings = <String>[];
+                for (final e in selectedProducts.entries) {
+                  final p = products.firstWhere((p) => p.id == e.key);
+                  final stock = crm.getProductStock(p.id);
+                  final reserved = crm.getReservedStock(p.id);
+                  final available = stock - reserved;
+                  if (e.value > available) {
+                    warnings.add('${p.name}: 需${e.value}, 可用$available');
+                  }
+                }
+                if (warnings.isEmpty) return const SizedBox.shrink();
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 6),
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.danger.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.danger.withValues(alpha: 0.4)),
+                  ),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Icon(Icons.warning_amber, color: AppTheme.danger, size: 16),
+                    const SizedBox(width: 6),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const Text('库存不足预警', style: TextStyle(color: AppTheme.danger, fontSize: 11, fontWeight: FontWeight.bold)),
+                      ...warnings.map((w) => Text(w, style: const TextStyle(color: AppTheme.danger, fontSize: 10))),
+                    ])),
+                  ]),
+                );
+              }),
               SizedBox(width: double.infinity, child: ElevatedButton(
                 onPressed: (selectedContactId == null || selectedProducts.isEmpty) ? null : () async {
+                  // 下单前二次确认：如果有库存不足，先弹确认框
+                  final stockIssues = <Map<String, dynamic>>[];
+                  for (final e in selectedProducts.entries) {
+                    final p = products.firstWhere((p) => p.id == e.key);
+                    final stock = crm.getProductStock(p.id);
+                    final reserved = crm.getReservedStock(p.id);
+                    final available = stock - reserved;
+                    if (e.value > available) {
+                      stockIssues.add({'name': p.name, 'need': e.value, 'available': available});
+                    }
+                  }
+
                   final items = selectedProducts.entries.map((e) {
                     final p = products.firstWhere((p) => p.id == e.key);
                     double up;
@@ -1148,9 +1203,11 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
                   }
                   Navigator.pop(ctx);
                   setState(() {});
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text('订单已创建: $selectedContactName | ${Formatters.currency(total)}'),
-                    backgroundColor: AppTheme.success));
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('订单已创建: $selectedContactName | ${Formatters.currency(total)}'),
+                      backgroundColor: AppTheme.success));
+                  }
                 },
                 child: const Text('创建订单'),
               )),
