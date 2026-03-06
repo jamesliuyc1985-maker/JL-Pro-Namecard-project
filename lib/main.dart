@@ -134,6 +134,7 @@ class _DealNavigatorAppState extends State<DealNavigatorApp> {
           debugShowCheckedModeBanner: false,
           theme: AppTheme.darkTheme,
           home: _fbReady ? const _AuthGate() : _LocalModeWithRetryBanner(
+            dataService: widget.dataService,
             onFirebaseReady: () {
               if (mounted) setState(() => _fbReady = true);
             },
@@ -176,17 +177,15 @@ class _AuthGate extends StatelessWidget {
           );
         }
 
-        // 已登录 → 设置 userId + 强制从云端拉取公共数据
+        // 已登录 → 设置 userId + 智能同步（自动判断方向）
         if (snapshot.hasData && snapshot.data != null) {
           final user = snapshot.data!;
           final crm = context.read<CrmProvider>();
           crm.setUserId(user.uid);
-          // 登录后: 先清理本地Hive旧数据，再从云端拉取最新公共数据
+          // 登录后: 智能同步 — 云端有数据则拉取，云端空则推送本地数据上去
           Future.microtask(() async {
             try {
-              final sync = context.read<SyncService>();
-              await sync.clearLocal(); // 清空本地缓存确保干净
-              await crm.syncFromCloud().timeout(const Duration(seconds: 20));
+              await crm.smartSync().timeout(const Duration(seconds: 30));
             } catch (_) {}
           });
 
@@ -213,7 +212,8 @@ class _AuthGate extends StatelessWidget {
 /// 本地模式 + 顶部重连横幅
 class _LocalModeWithRetryBanner extends StatefulWidget {
   final VoidCallback onFirebaseReady;
-  const _LocalModeWithRetryBanner({required this.onFirebaseReady});
+  final DataService dataService;
+  const _LocalModeWithRetryBanner({required this.onFirebaseReady, required this.dataService});
   @override
   State<_LocalModeWithRetryBanner> createState() => _LocalModeWithRetryBannerState();
 }
@@ -233,6 +233,11 @@ class _LocalModeWithRetryBannerState extends State<_LocalModeWithRetryBanner> {
         // 启用 Firestore
         final sync = context.read<SyncService>();
         sync.enableFirestore();
+        // 同时启用 DataService
+        widget.dataService.enableFirestore();
+        // 触发智能同步
+        final crm = context.read<CrmProvider>();
+        crm.smartSync();
         widget.onFirebaseReady();
       }
     } catch (e) {

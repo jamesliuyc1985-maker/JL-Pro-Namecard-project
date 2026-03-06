@@ -10,7 +10,7 @@ import '../utils/theme.dart';
 import '../utils/formatters.dart';
 import '../utils/download_helper.dart';
 
-const String appVersion = 'v25.6';
+const String appVersion = 'v25.7';
 
 /// 角色工具类
 class AppRole {
@@ -262,31 +262,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 2),
               Text(statusText, style: TextStyle(color: statusColor.withValues(alpha: 0.7), fontSize: 11)),
             ])),
-            if (isFirebase && status != SyncStatus.syncing) ...[
-              GestureDetector(
-                onTap: () async {
-                  setState(() => _syncStatus = '正在同步...');
-                  try {
-                    await crm.syncFromCloud().timeout(const Duration(seconds: 20));
-                    if (mounted) setState(() => _syncStatus = crm.syncStatus ?? '同步成功');
-                  } catch (e) {
-                    if (mounted) setState(() => _syncStatus = '同步超时');
-                  }
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.sync, color: statusColor, size: 14),
-                    const SizedBox(width: 4),
-                    Text('同步', style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.bold)),
-                  ]),
-                ),
-              ),
-            ],
           ]),
           if (lastSync != null) ...[
             const SizedBox(height: 8),
@@ -294,6 +269,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Icon(Icons.access_time, color: statusColor.withValues(alpha: 0.5), size: 12),
               const SizedBox(width: 4),
               Text('最近同步: ${Formatters.timeAgo(lastSync)}', style: TextStyle(color: statusColor.withValues(alpha: 0.5), fontSize: 10)),
+            ]),
+          ],
+          if (isFirebase && status != SyncStatus.syncing) ...[
+            const SizedBox(height: 12),
+            // 三按钮行: 智能同步 / 拉取云端 / 推送本地
+            Row(children: [
+              Expanded(child: _syncButton(
+                icon: Icons.auto_fix_high,
+                label: '智能同步',
+                color: AppTheme.primaryPurple,
+                onTap: () async {
+                  setState(() => _syncStatus = '智能检测中...');
+                  try {
+                    final result = await crm.smartSync().timeout(const Duration(seconds: 30));
+                    if (mounted) {
+                      setState(() => _syncStatus = crm.syncStatus);
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(result), backgroundColor: AppTheme.success,
+                        duration: const Duration(seconds: 4),
+                      ));
+                    }
+                  } catch (e) {
+                    if (mounted) setState(() => _syncStatus = '同步超时');
+                  }
+                },
+              )),
+              const SizedBox(width: 8),
+              Expanded(child: _syncButton(
+                icon: Icons.cloud_download,
+                label: '拉取云端',
+                color: AppTheme.primaryBlue,
+                onTap: () async {
+                  setState(() => _syncStatus = '正在从云端拉取...');
+                  try {
+                    await crm.syncFromCloud().timeout(const Duration(seconds: 20));
+                    if (mounted) setState(() => _syncStatus = crm.syncStatus ?? '拉取成功');
+                  } catch (e) {
+                    if (mounted) setState(() => _syncStatus = '拉取超时');
+                  }
+                },
+              )),
+              const SizedBox(width: 8),
+              Expanded(child: _syncButton(
+                icon: Icons.cloud_upload,
+                label: '推送云端',
+                color: AppTheme.accentGold,
+                onTap: () => _confirmPushToCloud(context, crm),
+              )),
             ]),
           ],
           if (pending > 0 && isFirebase) ...[
@@ -319,6 +342,73 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ]),
       );
     });
+  }
+
+  Widget _syncButton({required IconData icon, required String label, required Color color, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Column(children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 4),
+          Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600)),
+        ]),
+      ),
+    );
+  }
+
+  void _confirmPushToCloud(BuildContext context, CrmProvider crm) async {
+    final stats = crm.stats;
+    final confirm = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      backgroundColor: AppTheme.cardBg,
+      title: const Row(children: [
+        Icon(Icons.cloud_upload, color: AppTheme.accentGold, size: 22),
+        SizedBox(width: 8),
+        Text('推送本地数据到云端', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16)),
+      ]),
+      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('将全量推送本地数据到 Firestore 云端，覆盖云端同名文档。\n', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+        Text('当前本地数据:', style: TextStyle(color: AppTheme.textPrimary.withValues(alpha: 0.8), fontSize: 12, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        Text('  人脉: ${stats['totalContacts']}  交易: ${stats['activeDeals']}+${stats['closedDeals']}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+        Text('  订单: ${stats['totalOrders']}  产品: ${stats['totalProducts']}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+        Text('  库存: ${stats['totalInventoryRecords']}  生产: ${stats['totalProductionOrders']}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+      ]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.cloud_upload, size: 16),
+          label: const Text('确认推送'),
+          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentGold),
+          onPressed: () => Navigator.pop(ctx, true),
+        ),
+      ],
+    ));
+    if (confirm != true || !mounted) return;
+
+    setState(() => _syncStatus = '正在推送到云端...');
+    try {
+      await crm.pushToCloud().timeout(const Duration(seconds: 30));
+      if (mounted) {
+        setState(() => _syncStatus = crm.syncStatus ?? '推送成功');
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('✅ 本地数据已全量推送到云端'), backgroundColor: AppTheme.success,
+          duration: Duration(seconds: 3),
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _syncStatus = '推送失败: $e');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('推送失败: $e'), backgroundColor: AppTheme.danger));
+      }
+    }
   }
 
   Widget _buildMyWorkCard(BuildContext context, AppUser user) {
@@ -736,14 +826,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ]),
         const SizedBox(height: 8),
         if (isFirebase) ...[
-          _actionTile(Icons.sync, '立即同步最新数据', () async {
-            setState(() => _syncStatus = '正在同步...');
+          _actionTile(Icons.auto_fix_high, '智能同步 (自动判断方向)', () async {
+            setState(() => _syncStatus = '智能检测中...');
             try {
               final crm = context.read<CrmProvider>();
-              await crm.syncFromCloud().timeout(const Duration(seconds: 15));
+              final result = await crm.smartSync().timeout(const Duration(seconds: 30));
               if (mounted) {
-                setState(() => _syncStatus = crm.syncStatus ?? '同步成功');
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已拉取最新公共数据'), backgroundColor: AppTheme.success));
+                setState(() => _syncStatus = crm.syncStatus);
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(result), backgroundColor: AppTheme.success,
+                  duration: const Duration(seconds: 4),
+                ));
               }
             } catch (e) {
               if (mounted) setState(() => _syncStatus = '同步超时，请重试');

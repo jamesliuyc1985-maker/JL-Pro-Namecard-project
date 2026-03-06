@@ -132,6 +132,62 @@ class CrmProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 智能同步: 自动判断方向
+  /// - 云端有数据 → 拉取到本地
+  /// - 云端为空 + 本地有数据 → 推送到云端
+  /// - 都有数据 → 双向合并 (拉取为主)
+  /// - 都为空 → 不操作
+  Future<String> smartSync() async {
+    _isLoading = true;
+    _syncStatus = '正在检测同步方向...';
+    notifyListeners();
+
+    try {
+      final hasCloud = await _dataService.hasCloudData();
+      final hasLocal = _dataService.hasLocalData();
+
+      if (kDebugMode) {
+        debugPrint('[CrmProvider] smartSync: cloud=$hasCloud, local=$hasLocal');
+      }
+
+      if (hasCloud) {
+        // 云端有数据 → 拉取
+        _syncStatus = '正在从云端拉取数据...';
+        notifyListeners();
+        await _syncService.syncFromCloud();
+        await _dataService.syncFromCloud();
+        _refreshAll();
+        final msg = '云端同步完成 (${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, "0")})';
+        _syncStatus = msg;
+        _isLoading = false;
+        notifyListeners();
+        return '✅ 已从云端拉取数据 — 联系人${_contacts.length} 交易${_deals.length} 订单${_orders.length}';
+      } else if (hasLocal) {
+        // 云端为空，本地有数据 → 推送上去
+        _syncStatus = '云端为空，正在推送本地数据...';
+        notifyListeners();
+        await _persistAllToHive();
+        await _syncService.pushToCloud();
+        _refreshAll();
+        final msg = '已推送到云端 (${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, "0")})';
+        _syncStatus = msg;
+        _isLoading = false;
+        notifyListeners();
+        return '✅ 本地数据已推送到云端 — 联系人${_contacts.length} 交易${_deals.length} 订单${_orders.length}';
+      } else {
+        _syncStatus = '云端和本地均无业务数据';
+        _isLoading = false;
+        notifyListeners();
+        return '⚠️ 云端和本地均无业务数据，请添加数据后同步';
+      }
+    } catch (e) {
+      _syncStatus = '智能同步失败: $e';
+      _isLoading = false;
+      notifyListeners();
+      return '❌ 同步失败: $e';
+    }
+  }
+
   Future<void> pushToCloud() async {
     _isLoading = true;
     _syncStatus = '正在上传...';

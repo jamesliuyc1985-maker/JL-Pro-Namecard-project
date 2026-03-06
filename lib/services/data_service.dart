@@ -560,6 +560,29 @@ class DataService {
     });
   }
 
+  /// 检查云端是否有业务数据（用于智能同步判断方向）
+  Future<bool> hasCloudData() async {
+    if (!_firestoreEnabled || _db == null) return false;
+    try {
+      // 检查 contacts 和 deals 两个核心集合
+      final contactSnap = await _db!.collection('contacts').limit(1).get().timeout(const Duration(seconds: 6));
+      if (contactSnap.docs.isNotEmpty) return true;
+      final dealSnap = await _db!.collection('deals').limit(1).get().timeout(const Duration(seconds: 6));
+      if (dealSnap.docs.isNotEmpty) return true;
+      final orderSnap = await _db!.collection('sales_orders').limit(1).get().timeout(const Duration(seconds: 6));
+      if (orderSnap.docs.isNotEmpty) return true;
+      return false;
+    } catch (e) {
+      if (kDebugMode) debugPrint('[DataService] hasCloudData check error: $e');
+      return false;
+    }
+  }
+
+  /// 检查本地是否有业务数据
+  bool hasLocalData() {
+    return _contactsCache.isNotEmpty || _dealsCache.isNotEmpty || _ordersCache.isNotEmpty;
+  }
+
   /// 从 Firestore 拉取数据到本地缓存
   Future<void> syncFromCloud() async {
     if (!_firestoreEnabled || _db == null) return;
@@ -580,17 +603,32 @@ class DataService {
     }
 
     try {
-      // 云端数据直接替换本地（包括空数据 = 清空本地）
-      _contactsCache = await pullCol<Contact>('contacts', Contact.fromJson);
-      _dealsCache = await pullCol<Deal>('deals', Deal.fromJson);
-      _relationsCache = await pullCol<ContactRelation>('relations', ContactRelation.fromJson);
-      _ordersCache = await pullCol<SalesOrder>('sales_orders', SalesOrder.fromJson);
-      _inventoryCache = await pullCol<InventoryRecord>('inventory', InventoryRecord.fromJson);
-      _interactionsCache = await pullCol<Interaction>('interactions', Interaction.fromJson);
-      _assignmentCache = await pullCol<ContactAssignment>('assignments', ContactAssignment.fromJson);
-      _productionCache = await pullCol<ProductionOrder>('production', ProductionOrder.fromJson);
+      // 业务数据: 云端有则替换本地, 云端为空则保留本地（不清空）
+      var contacts = await pullCol<Contact>('contacts', Contact.fromJson);
+      if (contacts.isNotEmpty) _contactsCache = contacts;
 
-      // 产品/工厂/团队：云端有则替换，无则保留内置配置
+      var deals = await pullCol<Deal>('deals', Deal.fromJson);
+      if (deals.isNotEmpty) _dealsCache = deals;
+
+      var relations = await pullCol<ContactRelation>('relations', ContactRelation.fromJson);
+      if (relations.isNotEmpty) _relationsCache = relations;
+
+      var orders = await pullCol<SalesOrder>('sales_orders', SalesOrder.fromJson);
+      if (orders.isNotEmpty) _ordersCache = orders;
+
+      var inv = await pullCol<InventoryRecord>('inventory', InventoryRecord.fromJson);
+      if (inv.isNotEmpty) _inventoryCache = inv;
+
+      var ints = await pullCol<Interaction>('interactions', Interaction.fromJson);
+      if (ints.isNotEmpty) _interactionsCache = ints;
+
+      var assigns = await pullCol<ContactAssignment>('assignments', ContactAssignment.fromJson);
+      if (assigns.isNotEmpty) _assignmentCache = assigns;
+
+      var prods2 = await pullCol<ProductionOrder>('production', ProductionOrder.fromJson);
+      if (prods2.isNotEmpty) _productionCache = prods2;
+
+      // 系统配置: 云端有则替换，无则保留内置配置
       var prods = await pullCol<Product>('products', Product.fromJson);
       if (prods.isNotEmpty) _productsCache = prods;
 
