@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:csv/csv.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:google_generative_ai/google_generative_ai.dart';
 import '../providers/crm_provider.dart';
 import '../models/contact.dart';
 import '../utils/theme.dart';
@@ -18,7 +17,6 @@ class ExcelImportScreen extends StatefulWidget {
 }
 
 class _ExcelImportScreenState extends State<ExcelImportScreen> with SingleTickerProviderStateMixin {
-  static const _apiKey = 'AIzaSyBMTKwBDxjH2JakRFMhFRWxltXXjE-hk4A';
   late TabController _tabCtrl;
   List<List<dynamic>> _csvData = [];
   List<Map<String, String>> _parsedContacts = [];
@@ -312,7 +310,7 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> with SingleTicker
     );
   }
 
-  /// 选择图片 + Gemini Vision AI批量识别
+  /// 选择图片 → 显示图片预览 + 手动录入
   Future<void> _pickAndRecognizeImage(ImageSource source) async {
     try {
       final xfile = await _picker.pickImage(source: source, maxWidth: 1920, maxHeight: 1080, imageQuality: 85);
@@ -321,83 +319,24 @@ class _ExcelImportScreenState extends State<ExcelImportScreen> with SingleTicker
       final bytes = await xfile.readAsBytes();
       setState(() {
         _imageBytes = bytes;
-        _isRecognizing = true;
-        _recognizedContacts = [];
-        _recognitionLog = '正在调用 Gemini Vision API...';
-      });
-
-      // Gemini Vision 批量识别
-      final model = GenerativeModel(
-        model: 'gemini-2.0-flash',
-        apiKey: _apiKey,
-      );
-
-      final prompt = '''请识别这张图片中所有的联系人信息。图片可能是名片、通讯录截图、Excel表格截图或名单列表。
-严格返回JSON数组格式（不要markdown代码块）:
-[
-  {"name": "姓名", "company": "公司名", "position": "职位", "phone": "电话", "email": "邮箱"},
-  ...
-]
-规则:
-- 尽可能提取所有可见联系人
-- 如果某项无法识别返回空字符串
-- 支持中文/日文/英文/韩文
-- 如果图片不含联系人信息，返回空数组 []''';
-
-      final content = Content.multi([
-        TextPart(prompt),
-        DataPart(xfile.mimeType ?? 'image/jpeg', bytes),
-      ]);
-
-      final response = await model.generateContent([content]);
-      final text = response.text ?? '[]';
-
-      // 解析JSON
-      String jsonStr = text.trim();
-      if (jsonStr.startsWith('```json')) jsonStr = jsonStr.substring(7);
-      if (jsonStr.startsWith('```')) jsonStr = jsonStr.substring(3);
-      if (jsonStr.endsWith('```')) jsonStr = jsonStr.substring(0, jsonStr.length - 3);
-      jsonStr = jsonStr.trim();
-
-      final decoded = jsonDecode(jsonStr);
-      List<Map<String, String>> contacts = [];
-
-      if (decoded is List) {
-        for (final item in decoded) {
-          if (item is Map) {
-            final name = (item['name'] ?? '').toString().trim();
-            if (name.isNotEmpty) {
-              contacts.add({
-                'name': name,
-                'company': (item['company'] ?? '').toString().trim(),
-                'position': (item['position'] ?? '').toString().trim(),
-                'phone': (item['phone'] ?? '').toString().trim(),
-                'email': (item['email'] ?? '').toString().trim(),
-              });
-            }
-          }
-        }
-      }
-
-      setState(() {
         _isRecognizing = false;
-        _recognizedContacts = contacts;
-        _recognitionLog = contacts.isEmpty ? 'AI未识别到联系人信息' : '成功识别 ${contacts.length} 条联系人!';
+        _recognizedContacts = [];
+        _recognitionLog = '图片已加载。请对照图片手动添加联系人，或使用名片扫描功能逐个录入。';
       });
 
-      if (mounted && contacts.isNotEmpty) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('AI识别成功! 发现 ${contacts.length} 条联系人'), backgroundColor: AppTheme.success));
+          const SnackBar(content: Text('图片已加载，请手动录入联系人信息'), backgroundColor: AppTheme.info));
       }
 
     } catch (e) {
       setState(() {
         _isRecognizing = false;
-        _recognitionLog = '识别失败: $e';
+        _recognitionLog = '图片加载失败: $e';
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('AI识别失败: $e'), backgroundColor: AppTheme.danger));
+          SnackBar(content: Text('图片加载失败: $e'), backgroundColor: AppTheme.danger));
       }
     }
   }

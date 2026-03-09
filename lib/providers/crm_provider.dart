@@ -8,6 +8,7 @@ import '../models/team.dart';
 import '../models/task.dart';
 import '../models/contact_assignment.dart';
 import '../models/factory.dart';
+import '../models/qc_record.dart';
 import '../services/data_service.dart';
 import '../services/notification_service.dart';
 import '../services/sync_service.dart';
@@ -30,6 +31,7 @@ class CrmProvider extends ChangeNotifier {
   List<ContactAssignment> _assignments = [];
   List<ProductionFactory> _factories = [];
   List<ProductionOrder> _productionOrders = [];
+  List<QcRecord> _qcRecords = [];
   Industry? _selectedIndustry;
   String _searchQuery = '';
   bool _isLoading = false;
@@ -75,6 +77,7 @@ class CrmProvider extends ChangeNotifier {
   List<ContactAssignment> get assignments => _assignments;
   List<ProductionFactory> get factories => _factories;
   List<ProductionOrder> get productionOrders => _productionOrders;
+  List<QcRecord> get qcRecords => _qcRecords;
   Industry? get selectedIndustry => _selectedIndustry;
   String get searchQuery => _searchQuery;
   bool get isLoading => _isLoading;
@@ -100,6 +103,7 @@ class CrmProvider extends ChangeNotifier {
     _assignments = _dataService.getAllAssignments();
     _factories = _dataService.getAllFactories();
     _productionOrders = _dataService.getAllProductionOrders();
+    _qcRecords = _dataService.getAllQcRecords();
     notifyListeners();
   }
 
@@ -219,6 +223,7 @@ class CrmProvider extends ChangeNotifier {
     for (final a in _assignments) { await _syncService.put('assignments', a.id, {...a.toJson(), 'updatedAt': DateTime.now().toIso8601String()}); }
     for (final f in _factories) { await _syncService.put('factories', f.id, {...f.toJson(), 'updatedAt': DateTime.now().toIso8601String()}); }
     for (final p in _productionOrders) { await _syncService.put('production', p.id, {...p.toJson(), 'updatedAt': DateTime.now().toIso8601String()}); }
+    for (final q in _qcRecords) { await _syncService.put('qc_records', q.id, {...q.toJson(), 'updatedAt': DateTime.now().toIso8601String()}); }
   }
 
   // ========== 管理员备份/恢复功能 ==========
@@ -790,5 +795,89 @@ class CrmProvider extends ChangeNotifier {
     return _orders.where((o) =>
       !o.isFullyPaid && o.status != 'cancelled' && o.status != 'draft'
     ).toList()..sort((a, b) => b.unpaidAmount.compareTo(a.unpaidAmount));
+  }
+
+  // ========== QC 检测 CRUD ==========
+  List<QcRecord> getQcByProduct(String productId) => _qcRecords.where((q) => q.productId == productId).toList();
+  List<QcRecord> get activeQcRecords => _qcRecords.where((q) => QcStatus.activeStatuses.contains(q.status)).toList();
+  QcRecord? getQcRecord(String id) => _dataService.getQcRecord(id);
+
+  /// 获取产品的送检中数量（占用库存）
+  int getQcPendingQuantity(String productId) => _dataService.getQcPendingQuantity(productId);
+
+  /// 创建送检记录 + 自动出库
+  Future<String?> createQcRecord(QcRecord record) async {
+    // 校验库存
+    final stock = getProductStock(record.productId);
+    final reserved = getReservedStock(record.productId);
+    final qcPending = getQcPendingQuantity(record.productId);
+    final available = stock - reserved - qcPending;
+    if (available < record.quantity) {
+      return '库存不足: 可用${available}(库存$stock - 预留$reserved - 送检中$qcPending), 需要${record.quantity}';
+    }
+
+    // 自动出库(送检出库)
+    final invId = generateId();
+    final invRecord = InventoryRecord(
+      id: invId,
+      productId: record.productId,
+      productName: record.productName,
+      productCode: record.productCode,
+      type: 'out',
+      quantity: record.quantity,
+      reason: '送检出库 - ${QcRecord.testTypeLabel(record.testType)}',
+      notes: '批次: ${record.batchNumber}, 机构: ${record.testLab}',
+    );
+    // 直接写DataService避免CrmProvider的负库存校验(送检出库是合法的)
+    await _dataService.addInventoryRecord(invRecord);
+
+    record.status = QcStatus.submitted;
+    record.submittedAt = DateTime.now();
+    record.linkedInventoryOutId = invId;
+    await _dataService.addQcRecord(record);
+
+    _notify('送检登记', '${record.productName} x${record.quantity} 已送检 (${record.testLab})',
+      NotificationType.info, relatedId: record.id);
+    _refreshAll();
+    return null; // 成功
+  }
+
+  /// 更新检测状态
+  Future<void> updateQcStatus(String qcId, String newStatus, {String? result}) async {
+    final record = _qcRecords.firstWhere((q) => q.id == qcId);
+    record.status = newStatus;
+    if (result != null) record.result = result;
+
+    if (newStatus == QcStatus.passed) {
+      record.completedAt = DateTime.now();
+      // 合格 → 自动回库
+      final invId = generateId();
+      final invRecord = InventoryRecord(
+        id: invId,
+        productId: record.productId,
+        productName: record.productName,
+        productCode: record.productCode,
+        type: 'in',
+        quantity: record.quantity,
+        reason: '检测合格回库',
+        notes: '检测结果: ${result ?? "合格"}, 批次: ${record.batchNumber}',
+      );
+      await _dataService.addInventoryRecord(invRecord);
+      record.linkedInventoryInId = invId;
+      _notify('检测合格', '${record.productName} x${record.quantity} 检测合格，已回库',
+        NotificationType.info, relatedId: record.id);
+    } else if (newStatus == QcStatus.failed) {
+      record.completedAt = DateTime.now();
+      _notify('检测不合格', '${record.productName} x${record.quantity} 检测不合格 (${result ?? "详情见备注"})',
+        NotificationType.urgent, relatedId: record.id);
+    }
+
+    await _dataService.updateQcRecord(record);
+    _refreshAll();
+  }
+
+  Future<void> deleteQcRecord(String id) async {
+    await _dataService.deleteQcRecord(id);
+    _refreshAll();
   }
 }

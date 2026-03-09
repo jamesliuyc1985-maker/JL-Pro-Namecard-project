@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 /// 通知类型
-enum NotificationType { pipelineChange, orderCreated, orderShipped, productionComplete, taskAssigned, system }
+enum NotificationType { pipelineChange, orderCreated, orderShipped, productionComplete, taskAssigned, info, urgent, system }
 
 /// 单条通知
 class CrmNotification {
@@ -30,6 +30,8 @@ class CrmNotification {
       case NotificationType.orderShipped: return Icons.local_shipping;
       case NotificationType.productionComplete: return Icons.precision_manufacturing;
       case NotificationType.taskAssigned: return Icons.task;
+      case NotificationType.info: return Icons.info_outline;
+      case NotificationType.urgent: return Icons.error_outline;
       case NotificationType.system: return Icons.notifications;
     }
   }
@@ -41,6 +43,8 @@ class CrmNotification {
       case NotificationType.orderShipped: return const Color(0xFF74B9FF);
       case NotificationType.productionComplete: return const Color(0xFF00CEC9);
       case NotificationType.taskAssigned: return const Color(0xFFFDAA5B);
+      case NotificationType.info: return const Color(0xFF0984E3);
+      case NotificationType.urgent: return const Color(0xFFFF6348);
       case NotificationType.system: return const Color(0xFFDFE6E9);
     }
   }

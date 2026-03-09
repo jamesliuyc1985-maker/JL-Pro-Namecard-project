@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/crm_provider.dart';
 import '../models/product.dart';
 import '../models/inventory.dart';
+import '../models/qc_record.dart';
 import '../models/deal.dart';
 import '../models/contact.dart';
 import '../models/factory.dart';
@@ -21,7 +22,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> with Si
   String _selectedCategory = 'all';
 
   @override
-  void initState() { super.initState(); _tabCtrl = TabController(length: 3, vsync: this); }
+  void initState() { super.initState(); _tabCtrl = TabController(length: 4, vsync: this); }
   @override
   void dispose() { _tabCtrl.dispose(); super.dispose(); }
 
@@ -35,6 +36,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> with Si
         Expanded(child: TabBarView(controller: _tabCtrl, children: [
           _catalogTab(crm),
           _stockTab(crm),
+          _qcTab(crm),
           _recordsTab(crm),
         ])),
       ]));
@@ -50,6 +52,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> with Si
           Text('产品 & 库存', style: TextStyle(color: AppTheme.offWhite, fontSize: 20, fontWeight: FontWeight.w600)),
           Text('Product & Inventory', style: TextStyle(color: AppTheme.slate, fontSize: 11)),
         ])),
+        _actionBtn(Icons.science_outlined, '送检', () => _showCreateQcSheet(context, crm)),
         _actionBtn(Icons.shopping_cart, '快捷下单', () => _showQuickOrderSheet(context, crm)),
         _actionBtn(Icons.add, '入库/出库', () => _showAddRecordSheet(context, crm)),
       ]),
@@ -78,6 +81,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> with Si
     final lowStock = stocks.where((s) => s.currentStock > 0 && s.currentStock < 5).length;
     final outOfStock = stocks.where((s) => s.currentStock <= 0).length;
     final activeProd = crm.activeProductions.length;
+    final activeQc = crm.activeQcRecords.length;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -97,6 +101,8 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> with Si
         _metric('$outOfStock', '缺货', AppTheme.danger, () => _drillOut(crm, stocks)),
         _divider(),
         _metric('$activeProd', '生产中', AppTheme.success, () => _drillProd(crm)),
+        _divider(),
+        _metric('$activeQc', '送检', AppTheme.info, () => _drillQc(crm)),
       ]),
     );
   }
@@ -157,6 +163,8 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> with Si
     _drill('缺货 (${items.length})', Icons.error_outline, items.map((s) => _dItem(s.productName, '急需补货', trail: '0', trailColor: AppTheme.danger)).toList()); }
   void _drillProd(CrmProvider crm) => _drill('生产中 (${crm.activeProductions.length})', Icons.precision_manufacturing_outlined,
     crm.activeProductions.map((o) => _dItem(o.productName, '${o.factoryName} | x${o.quantity}')).toList());
+  void _drillQc(CrmProvider crm) => _drill('送检中 (${crm.activeQcRecords.length})', Icons.science_outlined,
+    crm.activeQcRecords.map((q) => _dItem(q.productName, '${QcRecord.testTypeLabel(q.testType)} | ${q.testLab}', trail: 'x${q.quantity}', trailColor: AppTheme.info)).toList());
 
   Color _stockColor(int qty) => qty <= 0 ? AppTheme.danger : qty < 5 ? AppTheme.warning : AppTheme.success;
 
@@ -172,7 +180,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> with Si
         unselectedLabelColor: AppTheme.slate,
         labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
         dividerColor: AppTheme.steel.withValues(alpha: 0.2),
-        tabs: const [Tab(text: '产品目录'), Tab(text: '库存总览'), Tab(text: '出入库记录')],
+        tabs: const [Tab(text: '产品目录'), Tab(text: '库存总览'), Tab(text: '检测/QC'), Tab(text: '出入库')],
       ),
     );
   }
@@ -288,6 +296,7 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> with Si
       itemBuilder: (ctx, i) {
         final s = stocks[i];
         final c = _stockColor(s.currentStock);
+        final qcPending = crm.getQcPendingQuantity(s.productId);
         final label = s.currentStock <= 0 ? '缺货' : s.currentStock < 5 ? '低库存' : '正常';
         return Container(
           margin: const EdgeInsets.only(bottom: 6),
@@ -305,7 +314,17 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> with Si
             const SizedBox(width: 12),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(s.productName, style: const TextStyle(color: AppTheme.offWhite, fontWeight: FontWeight.w600, fontSize: 13)),
-              Text(s.productCode, style: const TextStyle(color: AppTheme.slate, fontSize: 11)),
+              Row(children: [
+                Text(s.productCode, style: const TextStyle(color: AppTheme.slate, fontSize: 11)),
+                if (qcPending > 0) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(color: AppTheme.info.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                    child: Text('送检中:$qcPending', style: const TextStyle(color: AppTheme.info, fontSize: 9, fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ]),
             ])),
             GestureDetector(
               onTap: () => _showQuickAdjustDialog(context, crm, s),
@@ -323,7 +342,245 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> with Si
     );
   }
 
-  // === Tab 3: Records ===
+  // === Tab 3: QC/检测 ===
+  Widget _qcTab(CrmProvider crm) {
+    final records = crm.qcRecords;
+    if (records.isEmpty) return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+      const Icon(Icons.science_outlined, color: AppTheme.slate, size: 48),
+      const SizedBox(height: 12),
+      const Text('暂无检测记录', style: TextStyle(color: AppTheme.slate)),
+      const SizedBox(height: 8),
+      TextButton.icon(
+        onPressed: () => _showCreateQcSheet(context, crm),
+        icon: const Icon(Icons.add, size: 16),
+        label: const Text('创建送检'),
+      ),
+    ]));
+
+    final sorted = List<QcRecord>.from(records)..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      itemCount: sorted.length,
+      itemBuilder: (ctx, i) {
+        final q = sorted[i];
+        final isActive = QcStatus.activeStatuses.contains(q.status);
+        Color statusColor;
+        switch (q.status) {
+          case QcStatus.passed: statusColor = AppTheme.success; break;
+          case QcStatus.failed: statusColor = AppTheme.danger; break;
+          case QcStatus.submitted: case QcStatus.inProgress: statusColor = AppTheme.info; break;
+          case QcStatus.cancelled: statusColor = AppTheme.slate; break;
+          default: statusColor = AppTheme.warning; break;
+        }
+        return GestureDetector(
+          onTap: () => _showQcDetailSheet(ctx, crm, q),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppTheme.navyLight, borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: isActive ? statusColor.withValues(alpha: 0.4) : AppTheme.steel.withValues(alpha: 0.2)),
+            ),
+            child: Row(children: [
+              Container(
+                width: 42, height: 42,
+                decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+                child: Icon(Icons.science, color: statusColor, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(q.productName, style: const TextStyle(color: AppTheme.offWhite, fontWeight: FontWeight.w600, fontSize: 13)),
+                Row(children: [
+                  Text(QcRecord.testTypeLabel(q.testType), style: const TextStyle(color: AppTheme.slate, fontSize: 10)),
+                  if (q.testLab.isNotEmpty) ...[const SizedBox(width: 6), Text(q.testLab, style: const TextStyle(color: AppTheme.slate, fontSize: 10))],
+                  if (q.batchNumber.isNotEmpty) ...[const SizedBox(width: 6), Text('#${q.batchNumber}', style: const TextStyle(color: AppTheme.slate, fontSize: 9))],
+                ]),
+              ])),
+              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Text('x${q.quantity}', style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 14)),
+                const SizedBox(height: 2),
+                _tag(QcStatus.label(q.status), statusColor),
+              ]),
+            ]),
+          ),
+        );
+      },
+    );
+  }
+
+  // === QC Detail Sheet ===
+  void _showQcDetailSheet(BuildContext context, CrmProvider crm, QcRecord q) {
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: AppTheme.navyLight,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(12))),
+      builder: (ctx) => StatefulBuilder(builder: (ctx, set) {
+        return Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              const Icon(Icons.science, color: AppTheme.info, size: 20),
+              const SizedBox(width: 8),
+              Expanded(child: Text('检测详情: ${q.productName}', style: const TextStyle(color: AppTheme.offWhite, fontSize: 16, fontWeight: FontWeight.w600))),
+              IconButton(icon: const Icon(Icons.close, color: AppTheme.slate), onPressed: () => Navigator.pop(ctx)),
+            ]),
+            const SizedBox(height: 12),
+            _qcInfoRow('状态', QcStatus.label(q.status)),
+            _qcInfoRow('数量', 'x${q.quantity}'),
+            _qcInfoRow('类型', QcRecord.testTypeLabel(q.testType)),
+            if (q.testLab.isNotEmpty) _qcInfoRow('机构', q.testLab),
+            if (q.batchNumber.isNotEmpty) _qcInfoRow('批次', q.batchNumber),
+            if (q.result.isNotEmpty) _qcInfoRow('结果', q.result),
+            if (q.notes.isNotEmpty) _qcInfoRow('备注', q.notes),
+            const SizedBox(height: 16),
+            if (QcStatus.activeStatuses.contains(q.status)) ...[
+              const Text('更新状态:', style: TextStyle(color: AppTheme.slate, fontSize: 11)),
+              const SizedBox(height: 8),
+              Row(children: [
+                if (q.status == QcStatus.pending) Expanded(child: _qcActionBtn('送检', AppTheme.info, () async {
+                  await crm.updateQcStatus(q.id, QcStatus.submitted);
+                  if (ctx.mounted) { Navigator.pop(ctx); set(() {}); }
+                })),
+                if (q.status == QcStatus.submitted) Expanded(child: _qcActionBtn('检测中', AppTheme.warning, () async {
+                  await crm.updateQcStatus(q.id, QcStatus.inProgress);
+                  if (ctx.mounted) { Navigator.pop(ctx); set(() {}); }
+                })),
+                if (q.status == QcStatus.submitted || q.status == QcStatus.inProgress) ...[
+                  const SizedBox(width: 8),
+                  Expanded(child: _qcActionBtn('合格', AppTheme.success, () async {
+                    await crm.updateQcStatus(q.id, QcStatus.passed, result: '全部指标合格');
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  })),
+                  const SizedBox(width: 8),
+                  Expanded(child: _qcActionBtn('不合格', AppTheme.danger, () async {
+                    await crm.updateQcStatus(q.id, QcStatus.failed, result: '部分指标不合格');
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  })),
+                ],
+              ]),
+            ],
+            const SizedBox(height: 12),
+          ]),
+        );
+      }),
+    );
+  }
+
+  Widget _qcInfoRow(String label, String value) {
+    return Padding(padding: const EdgeInsets.only(bottom: 6), child: Row(children: [
+      SizedBox(width: 60, child: Text(label, style: const TextStyle(color: AppTheme.slate, fontSize: 11))),
+      Expanded(child: Text(value, style: const TextStyle(color: AppTheme.offWhite, fontSize: 12))),
+    ]));
+  }
+
+  Widget _qcActionBtn(String label, Color c, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(color: c.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8), border: Border.all(color: c.withValues(alpha: 0.4))),
+        child: Center(child: Text(label, style: TextStyle(color: c, fontWeight: FontWeight.bold, fontSize: 12))),
+      ),
+    );
+  }
+
+  // === Create QC Sheet ===
+  void _showCreateQcSheet(BuildContext context, CrmProvider crm) {
+    Product? selectedProduct;
+    final qtyCtrl = TextEditingController(text: '1');
+    final labCtrl = TextEditingController();
+    final batchCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+    String testType = 'comprehensive';
+
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: AppTheme.navyLight,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(12))),
+      builder: (ctx) => StatefulBuilder(builder: (ctx, set) {
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 20, right: 20, top: 20),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              const Icon(Icons.science, color: AppTheme.info, size: 18),
+              const SizedBox(width: 8),
+              const Text('创建送检', style: TextStyle(color: AppTheme.offWhite, fontSize: 16, fontWeight: FontWeight.w600)),
+              const Spacer(),
+              IconButton(icon: const Icon(Icons.close, color: AppTheme.slate), onPressed: () => Navigator.pop(ctx)),
+            ]),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<Product>(
+              value: selectedProduct,
+              decoration: const InputDecoration(labelText: '选择产品'),
+              dropdownColor: AppTheme.navyMid, style: const TextStyle(color: AppTheme.offWhite),
+              items: crm.products.map((p) {
+                final stock = crm.getProductStock(p.id);
+                return DropdownMenuItem(value: p, child: Text('${p.name} (库存:$stock)', style: const TextStyle(fontSize: 12)));
+              }).toList(),
+              onChanged: (v) => set(() => selectedProduct = v),
+            ),
+            const SizedBox(height: 8),
+            const Text('检测类型', style: TextStyle(color: AppTheme.slate, fontSize: 11)),
+            const SizedBox(height: 4),
+            Wrap(spacing: 6, runSpacing: 6, children: ['comprehensive', 'stability', 'purity', 'sterility', 'appearance', 'potency'].map((t) {
+              final sel = testType == t;
+              return ChoiceChip(
+                label: Text(QcRecord.testTypeLabel(t), style: TextStyle(fontSize: 10, color: sel ? AppTheme.navy : AppTheme.offWhite)),
+                selected: sel, onSelected: (_) => set(() => testType = t),
+                selectedColor: AppTheme.info, backgroundColor: AppTheme.navyMid,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact,
+              );
+            }).toList()),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(child: TextField(controller: qtyCtrl, keyboardType: TextInputType.number,
+                style: const TextStyle(color: AppTheme.offWhite),
+                decoration: const InputDecoration(labelText: '送检数量'))),
+              const SizedBox(width: 12),
+              Expanded(child: TextField(controller: batchCtrl, style: const TextStyle(color: AppTheme.offWhite),
+                decoration: const InputDecoration(labelText: '批次号'))),
+            ]),
+            const SizedBox(height: 8),
+            TextField(controller: labCtrl, style: const TextStyle(color: AppTheme.offWhite),
+              decoration: const InputDecoration(labelText: '检测机构')),
+            const SizedBox(height: 8),
+            TextField(controller: notesCtrl, style: const TextStyle(color: AppTheme.offWhite),
+              decoration: const InputDecoration(labelText: '备注')),
+            const SizedBox(height: 16),
+            SizedBox(width: double.infinity, child: ElevatedButton(
+              onPressed: selectedProduct == null ? null : () async {
+                final qty = int.tryParse(qtyCtrl.text) ?? 0;
+                if (qty <= 0) return;
+                final err = await crm.createQcRecord(QcRecord(
+                  id: crm.generateId(),
+                  productId: selectedProduct!.id,
+                  productName: selectedProduct!.name,
+                  productCode: selectedProduct!.code,
+                  quantity: qty,
+                  testType: testType,
+                  testLab: labCtrl.text,
+                  batchNumber: batchCtrl.text,
+                  notes: notesCtrl.text,
+                ));
+                if (err != null) {
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err), backgroundColor: AppTheme.danger));
+                  }
+                  return;
+                }
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('送检记录已创建'), backgroundColor: AppTheme.success));
+                }
+              },
+              child: const Text('确认送检'),
+            )),
+            const SizedBox(height: 16),
+          ]),
+        );
+      }),
+    );
+  }
+
+  // === Tab 4: Records ===
   Widget _recordsTab(CrmProvider crm) {
     final records = crm.inventoryRecords;
     if (records.isEmpty) return const Center(child: Text('暂无出入库记录', style: TextStyle(color: AppTheme.slate)));

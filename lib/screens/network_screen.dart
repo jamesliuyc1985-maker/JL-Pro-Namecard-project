@@ -346,8 +346,8 @@ class _NetworkScreenState extends State<NetworkScreen> {
     if (rels.isEmpty) return const SizedBox.shrink();
 
     return Container(
-      height: 140,
-      padding: const EdgeInsets.only(top: 8, bottom: 8),
+      height: 200,
+      padding: const EdgeInsets.only(top: 8, bottom: 4),
       margin: const EdgeInsets.only(bottom: 4),
       decoration: const BoxDecoration(
         color: AppTheme.cardBg,
@@ -356,60 +356,99 @@ class _NetworkScreenState extends State<NetworkScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: Text(_selectedContactId != null ? '相关关系' : '全部关系 (${rels.length})',
-              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13, fontWeight: FontWeight.bold)),
+          child: Row(children: [
+            const Icon(Icons.link, color: AppTheme.primaryPurple, size: 16),
+            const SizedBox(width: 6),
+            Text(_selectedContactId != null ? '相关关系' : '全部关系 (${rels.length})',
+                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13, fontWeight: FontWeight.bold)),
+          ]),
         ),
         Expanded(
           child: ListView.builder(
-            scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             itemCount: rels.length,
             itemBuilder: (context, index) {
               final r = rels[index];
               return GestureDetector(
-                onLongPress: () => _showEditRelationDialog(context, crm, r),
+                onTap: () => _showEditRelationDialog(context, crm, r),
                 child: Container(
-                  width: 200, margin: const EdgeInsets.only(right: 8), padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: AppTheme.cardBgLight, borderRadius: BorderRadius.circular(10)),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-                    Row(children: [
-                      Flexible(child: Text(r.fromName.length >= 2 ? r.fromName.substring(r.fromName.length - 2) : r.fromName,
-                          style: const TextStyle(color: AppTheme.primaryPurple, fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
-                      const Padding(padding: EdgeInsets.symmetric(horizontal: 4), child: Icon(Icons.sync_alt, color: AppTheme.textSecondary, size: 12)),
-                      Flexible(child: Text(r.toName.length >= 2 ? r.toName.substring(r.toName.length - 2) : r.toName,
-                          style: const TextStyle(color: AppTheme.primaryBlue, fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
-                    ]),
-                    const SizedBox(height: 4),
+                  margin: const EdgeInsets.only(bottom: 5),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.cardBgLight,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: (r.tags.isNotEmpty ? ContactRelation.tagColor(r.tags.first) : AppTheme.primaryPurple).withValues(alpha: 0.2)),
+                  ),
+                  child: Row(children: [
+                    // 人物A头像
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                      decoration: BoxDecoration(color: AppTheme.primaryPurple.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
-                      child: Text(r.relationType, style: const TextStyle(color: AppTheme.primaryPurple, fontSize: 10)),
-                    ),
-                    const SizedBox(height: 3),
-                    Row(mainAxisSize: MainAxisSize.min, children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                        decoration: BoxDecoration(color: r.strength.color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
-                        child: Text(r.strength.label, style: TextStyle(color: r.strength.color, fontSize: 9, fontWeight: FontWeight.w600)),
+                      width: 32, height: 32,
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryPurple.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      const SizedBox(width: 4),
-                      Icon(r.isBidirectional ? Icons.sync_alt : Icons.arrow_forward, color: AppTheme.textSecondary, size: 10),
+                      child: Center(child: Text(
+                        r.fromName.length >= 2 ? r.fromName.substring(r.fromName.length - 2) : r.fromName,
+                        style: const TextStyle(color: AppTheme.primaryPurple, fontSize: 11, fontWeight: FontWeight.bold),
+                      )),
+                    ),
+                    const SizedBox(width: 8),
+                    // 关系类型+箭头
+                    Column(mainAxisSize: MainAxisSize.min, children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryPurple.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(r.relationType, style: const TextStyle(color: AppTheme.primaryPurple, fontSize: 9, fontWeight: FontWeight.w600)),
+                      ),
+                      Icon(r.isBidirectional ? Icons.sync_alt : Icons.arrow_forward, color: AppTheme.textSecondary, size: 12),
                     ]),
-                    if (r.tags.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Wrap(spacing: 3, runSpacing: 2, children: r.tags.take(3).map((tag) {
-                        final c = ContactRelation.tagColor(tag);
-                        return Container(
+                    const SizedBox(width: 8),
+                    // 人物B头像
+                    Container(
+                      width: 32, height: 32,
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryBlue.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Center(child: Text(
+                        r.toName.length >= 2 ? r.toName.substring(r.toName.length - 2) : r.toName,
+                        style: const TextStyle(color: AppTheme.primaryBlue, fontSize: 11, fontWeight: FontWeight.bold),
+                      )),
+                    ),
+                    const SizedBox(width: 10),
+                    // 右侧: 强度+标签
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                      Row(children: [
+                        Container(
                           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                          decoration: BoxDecoration(color: c.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
-                          child: Text(tag, style: TextStyle(color: c, fontSize: 8, fontWeight: FontWeight.w600)),
-                        );
-                      }).toList()),
-                    ],
-                    if (r.description.isNotEmpty) ...[
-                      const SizedBox(height: 3),
-                      Text(r.description, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    ],
+                          decoration: BoxDecoration(color: r.strength.color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                          child: Text(r.strength.label, style: TextStyle(color: r.strength.color, fontSize: 9, fontWeight: FontWeight.w600)),
+                        ),
+                        if (r.tags.isNotEmpty) ...[
+                          const SizedBox(width: 4),
+                          ...r.tags.take(2).map((tag) {
+                            final c = ContactRelation.tagColor(tag);
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 3),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(color: c.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                                child: Text(tag, style: TextStyle(color: c, fontSize: 8, fontWeight: FontWeight.w600)),
+                              ),
+                            );
+                          }),
+                        ],
+                      ]),
+                      if (r.description.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(r.description, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ],
+                    ])),
+                    // 编辑标识
+                    const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 16),
                   ]),
                 ),
               );

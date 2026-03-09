@@ -1,15 +1,16 @@
-import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:google_generative_ai/google_generative_ai.dart';
 import '../providers/crm_provider.dart';
 import '../models/contact.dart';
 import '../utils/theme.dart';
 
-/// 名片扫描 + Gemini Vision AI识别
+/// 名片扫描 v25.8 — 图片选取 + 智能手动录入
+/// 移除不可调用的 Gemini API，改为:
+/// 1. 图片预览 + 手动逐字段录入（支持看图填写）
+/// 2. 快速录入模板（医疗/金融/科技行业常用字段预填）
 class ScanCardScreen extends StatefulWidget {
   const ScanCardScreen({super.key});
   @override
@@ -17,30 +18,26 @@ class ScanCardScreen extends StatefulWidget {
 }
 
 class _ScanCardScreenState extends State<ScanCardScreen> {
-  static const _apiKey = 'AIzaSyBMTKwBDxjH2JakRFMhFRWxltXXjE-hk4A';
-  bool _isScanning = false;
   bool _showResult = false;
-  String? _imagePath;
   Uint8List? _imageBytes;
-  String? _recognitionLog;
   final _nameCtrl = TextEditingController();
+  final _readingCtrl = TextEditingController();
   final _companyCtrl = TextEditingController();
   final _positionCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
+  final _notesCtrl = TextEditingController();
   Industry _industry = Industry.other;
   MyRelationType _myRelation = MyRelationType.other;
+  RelationshipStrength _strength = RelationshipStrength.cool;
   final ImagePicker _picker = ImagePicker();
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
-    _companyCtrl.dispose();
-    _positionCtrl.dispose();
-    _phoneCtrl.dispose();
-    _emailCtrl.dispose();
-    _addressCtrl.dispose();
+    _nameCtrl.dispose(); _readingCtrl.dispose(); _companyCtrl.dispose();
+    _positionCtrl.dispose(); _phoneCtrl.dispose(); _emailCtrl.dispose();
+    _addressCtrl.dispose(); _notesCtrl.dispose();
     super.dispose();
   }
 
@@ -48,161 +45,156 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('名片扫描 (AI识别)'),
+        title: const Text('名片录入'),
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios), onPressed: () => Navigator.pop(context)),
+        actions: [
+          if (_showResult)
+            TextButton(onPressed: _clearAndReset, child: const Text('重新开始', style: TextStyle(fontSize: 12))),
+        ],
       ),
-      body: SafeArea(
-        child: _showResult ? _buildResultForm() : _buildScanView(),
-      ),
+      body: SafeArea(child: _showResult ? _buildResultForm() : _buildScanView()),
     );
   }
 
   Widget _buildScanView() {
-    return Column(
-      children: [
-        Expanded(
-          flex: 3,
-          child: Container(
-            margin: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: AppTheme.cardBg,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppTheme.primaryPurple.withValues(alpha: 0.5), width: 2),
-            ),
-            child: Stack(
-              children: [
-                if (_imageBytes != null)
-                  Center(child: ClipRRect(
-                    borderRadius: BorderRadius.circular(18),
-                    child: Image.memory(_imageBytes!, fit: BoxFit.contain),
-                  ))
-                else if (_imagePath != null)
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(10),
-                      child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        Icon(Icons.check_circle, color: AppTheme.success, size: 64),
-                        SizedBox(height: 12),
-                        Text('照片已获取', style: TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w600)),
-                      ]),
-                    ),
-                  )
-                else
-                  Center(
-                    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      Icon(_isScanning ? Icons.hourglass_top : Icons.document_scanner_outlined,
-                          color: AppTheme.primaryPurple, size: 64),
-                      const SizedBox(height: 20),
-                      Text(
-                        _isScanning ? '正在AI识别名片...' : '将名片放入框内',
-                        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text('Gemini Vision AI · 中/日/英/韩', style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
-                    ]),
-                  ),
-                if (!_isScanning && _imagePath == null) ...[
-                  _scanCorner(Alignment.topLeft),
-                  _scanCorner(Alignment.topRight),
-                  _scanCorner(Alignment.bottomLeft),
-                  _scanCorner(Alignment.bottomRight),
-                ],
-                if (_isScanning)
-                  Center(child: SizedBox(width: 100, height: 100, child: CircularProgressIndicator(color: AppTheme.primaryPurple, strokeWidth: 3))),
-              ],
-            ),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // 图片预览区
+        Container(
+          width: double.infinity,
+          height: 200,
+          decoration: BoxDecoration(
+            color: AppTheme.cardBg,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppTheme.primaryPurple.withValues(alpha: 0.4), width: 2),
           ),
-        ),
-        Expanded(
-          flex: 2,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: SingleChildScrollView(child: Column(children: [
-              const SizedBox(height: 16),
-              Row(children: [
-                if (!kIsWeb) ...[
-                  Expanded(
-                    child: _actionButton(
-                      icon: Icons.camera_alt,
-                      label: '拍照扫描',
-                      color: AppTheme.primaryPurple,
-                      onTap: () => _pickAndRecognize(ImageSource.camera),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                ],
-                Expanded(
-                  child: _actionButton(
-                    icon: Icons.photo_library,
-                    label: kIsWeb ? '选择图片(AI识别)' : '相册导入(AI识别)',
-                    color: AppTheme.primaryBlue,
-                    onTap: () => _pickAndRecognize(ImageSource.gallery),
-                  ),
-                ),
+          child: _imageBytes != null
+            ? ClipRRect(borderRadius: BorderRadius.circular(14), child: Image.memory(_imageBytes!, fit: BoxFit.contain))
+            : Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(Icons.document_scanner_outlined, color: AppTheme.primaryPurple.withValues(alpha: 0.5), size: 48),
+                const SizedBox(height: 12),
+                const Text('选择名片图片作为参考', style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+                const Text('或直接手动录入', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
               ]),
-              const SizedBox(height: 16),
-              _actionButton(
-                icon: Icons.edit_note,
-                label: '手动录入',
-                color: AppTheme.success,
-                onTap: () => setState(() => _showResult = true),
-              ),
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(14)),
-                child: Row(children: [
-                  const Icon(Icons.auto_awesome, color: AppTheme.accentGold, size: 20),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      const Text('AI识别引擎', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Gemini Vision API · 自动提取姓名、公司、职位、电话、邮箱、地址',
-                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
-                    ]),
-                  ),
-                ]),
-              ),
-              if (_recognitionLog != null) ...[
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(8)),
-                  child: Text(_recognitionLog!, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10), maxLines: 3, overflow: TextOverflow.ellipsis),
-                ),
-              ],
-              const SizedBox(height: 20),
-            ])),
-          ),
         ),
-      ],
+        const SizedBox(height: 20),
+
+        // 操作按钮
+        Row(children: [
+          if (!kIsWeb)
+            Expanded(child: _actionButton(
+              icon: Icons.camera_alt, label: '拍照',
+              color: AppTheme.primaryPurple,
+              onTap: () => _pickImage(ImageSource.camera),
+            )),
+          if (!kIsWeb) const SizedBox(width: 12),
+          Expanded(child: _actionButton(
+            icon: Icons.photo_library, label: '相册选图',
+            color: AppTheme.primaryBlue,
+            onTap: () => _pickImage(ImageSource.gallery),
+          )),
+        ]),
+        const SizedBox(height: 12),
+        _actionButton(
+          icon: Icons.edit_note, label: '直接手动录入',
+          color: AppTheme.success,
+          onTap: () => setState(() => _showResult = true),
+        ),
+
+        const SizedBox(height: 20),
+
+        // 快捷模板
+        const Text('快捷模板', style: TextStyle(color: AppTheme.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          _templateChip('医疗行业', Icons.local_hospital, const Color(0xFFE17055), () {
+            setState(() {
+              _industry = Industry.healthcare;
+              _myRelation = MyRelationType.clinic;
+              _showResult = true;
+            });
+          }),
+          _templateChip('金融投资', Icons.account_balance, const Color(0xFF6C5CE7), () {
+            setState(() {
+              _industry = Industry.finance;
+              _myRelation = MyRelationType.investor;
+              _showResult = true;
+            });
+          }),
+          _templateChip('代理商', Icons.storefront, const Color(0xFFFF6348), () {
+            setState(() {
+              _myRelation = MyRelationType.agent;
+              _showResult = true;
+            });
+          }),
+          _templateChip('供应商', Icons.factory, const Color(0xFFFDAA5B), () {
+            setState(() {
+              _myRelation = MyRelationType.supplier;
+              _showResult = true;
+            });
+          }),
+        ]),
+
+        const SizedBox(height: 20),
+        // 说明
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12)),
+          child: const Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Icon(Icons.info_outline, color: AppTheme.textSecondary, size: 18),
+            SizedBox(width: 10),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('名片录入说明', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 12)),
+              SizedBox(height: 4),
+              Text('1. 选取名片图片作为参考，对照图片手动录入\n'
+                   '2. 或使用快捷模板快速开始录入\n'
+                   '3. 支持中/日/英多语言录入\n'
+                   '4. 可选填读音(ふりがな)便于日语名搜索',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, height: 1.5)),
+            ])),
+          ]),
+        ),
+      ]),
     );
   }
 
-  Widget _scanCorner(Alignment alignment) {
-    return Positioned(
-      left: alignment == Alignment.topLeft || alignment == Alignment.bottomLeft ? 16 : null,
-      right: alignment == Alignment.topRight || alignment == Alignment.bottomRight ? 16 : null,
-      top: alignment == Alignment.topLeft || alignment == Alignment.topRight ? 16 : null,
-      bottom: alignment == Alignment.bottomLeft || alignment == Alignment.bottomRight ? 16 : null,
+  Widget _templateChip(String label, IconData icon, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
       child: Container(
-        width: 30, height: 30,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          border: Border(
-            top: alignment == Alignment.topLeft || alignment == Alignment.topRight
-                ? const BorderSide(color: AppTheme.primaryPurple, width: 3) : BorderSide.none,
-            bottom: alignment == Alignment.bottomLeft || alignment == Alignment.bottomRight
-                ? const BorderSide(color: AppTheme.primaryPurple, width: 3) : BorderSide.none,
-            left: alignment == Alignment.topLeft || alignment == Alignment.bottomLeft
-                ? const BorderSide(color: AppTheme.primaryPurple, width: 3) : BorderSide.none,
-            right: alignment == Alignment.topRight || alignment == Alignment.bottomRight
-                ? const BorderSide(color: AppTheme.primaryPurple, width: 3) : BorderSide.none,
-          ),
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
         ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, color: color, size: 16),
+          const SizedBox(width: 6),
+          Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
+        ]),
       ),
     );
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? image = await _picker.pickImage(source: source, maxWidth: 1920, maxHeight: 1080, imageQuality: 90);
+      if (image == null || !mounted) return;
+      final bytes = await image.readAsBytes();
+      if (bytes.isEmpty) return;
+      setState(() {
+        _imageBytes = bytes;
+        _showResult = true; // 选图后直接进入录入页面
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('图片获取失败: $e'), backgroundColor: AppTheme.danger),
+        );
+      }
+    }
   }
 
   Widget _actionButton({required IconData icon, required String label, required Color color, required VoidCallback onTap}) {
@@ -211,12 +203,12 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(14),
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(color: color.withValues(alpha: 0.3)),
         ),
         child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(icon, color: color, size: 22),
+          Icon(icon, color: color, size: 20),
           const SizedBox(width: 8),
           Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 14)),
         ]),
@@ -224,272 +216,153 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
     );
   }
 
-  /// 选择图片 + Gemini Vision AI识别
-  Future<void> _pickAndRecognize(ImageSource source) async {
-    try {
-      final XFile? image = await _picker.pickImage(
-        source: source,
-        maxWidth: 1920,
-        maxHeight: 1080,
-        imageQuality: 90,
-      );
-      if (image == null || !mounted) return;
-
-      final bytes = await image.readAsBytes();
-      if (bytes.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('图片读取失败，请重试'), backgroundColor: AppTheme.danger),
-          );
-        }
-        return;
-      }
-
-      setState(() {
-        _imagePath = image.path;
-        _imageBytes = bytes;
-        _isScanning = true;
-        _recognitionLog = '正在调用 Gemini Vision API (${bytes.length} bytes)...';
-      });
-
-      // 确定 MIME 类型
-      String mimeType = image.mimeType ?? 'image/jpeg';
-      if (mimeType.isEmpty || !mimeType.startsWith('image/')) {
-        mimeType = 'image/jpeg';
-      }
-
-      await _recognizeWithGemini(bytes, mimeType);
-
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isScanning = false;
-          _recognitionLog = '识别失败: $e';
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('识别失败: $e'), backgroundColor: AppTheme.danger),
-        );
-      }
-    }
-  }
-
-  /// Gemini Vision OCR核心
-  Future<void> _recognizeWithGemini(Uint8List imageBytes, String mimeType) async {
-    try {
-      final model = GenerativeModel(
-        model: 'gemini-2.0-flash',
-        apiKey: _apiKey,
-        generationConfig: GenerationConfig(
-          temperature: 0.1,
-          maxOutputTokens: 2048,
-        ),
-      );
-
-      const prompt = 'You are a business card OCR expert. Analyze this image carefully.\n'
-          'Extract ALL contact information visible. Support Chinese, Japanese, English, Korean.\n'
-          'Return ONLY a JSON object (no markdown, no code blocks):\n'
-          '{"name":"","company":"","position":"","phone":"","email":"","address":"",'
-          '"industry":"healthcare|finance|technology|trading|consulting|construction|realestate|other",'
-          '"relation_type":"agent|clinic|retailer|advisor|investor|partner|other","confidence":0.9}\n'
-          'If multiple phones, comma-separate. If unrecognizable, use empty string.';
-
-      final content = Content.multi([
-        TextPart(prompt),
-        DataPart(mimeType, imageBytes),
-      ]);
-
-      final response = await model.generateContent([content]);
-      final text = response.text ?? '';
-
-      if (mounted) {
-        setState(() => _recognitionLog = 'AI返回: ${text.length > 150 ? text.substring(0, 150) : text}...');
-      }
-
-      if (text.isEmpty) {
-        if (mounted) {
-          setState(() {
-            _isScanning = false;
-            _showResult = true;
-            _recognitionLog = 'AI返回空结果，请手动录入';
-          });
-        }
-        return;
-      }
-
-      _parseGeminiResponse(text);
-
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isScanning = false;
-          _recognitionLog = 'Gemini API调用失败: $e';
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('AI识别失败, 可手动录入: $e'), backgroundColor: AppTheme.warning),
-        );
-        setState(() => _showResult = true);
-      }
-    }
-  }
-
-  void _parseGeminiResponse(String text) {
-    try {
-      // 清理可能的markdown代码块
-      String jsonStr = text.trim();
-      if (jsonStr.startsWith('```json')) jsonStr = jsonStr.substring(7);
-      if (jsonStr.startsWith('```')) jsonStr = jsonStr.substring(3);
-      if (jsonStr.endsWith('```')) jsonStr = jsonStr.substring(0, jsonStr.length - 3);
-      jsonStr = jsonStr.trim();
-
-      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
-
-      _nameCtrl.text = data['name'] as String? ?? '';
-      _companyCtrl.text = data['company'] as String? ?? '';
-      _positionCtrl.text = data['position'] as String? ?? '';
-      _phoneCtrl.text = data['phone'] as String? ?? '';
-      _emailCtrl.text = data['email'] as String? ?? '';
-      _addressCtrl.text = data['address'] as String? ?? '';
-
-      // 自动匹配行业
-      final industryStr = data['industry'] as String? ?? 'other';
-      _industry = _matchIndustry(industryStr);
-
-      // 自动匹配关系类型
-      final relStr = data['relation_type'] as String? ?? 'other';
-      _myRelation = _matchRelation(relStr);
-
-      final confidence = (data['confidence'] as num?)?.toDouble() ?? 0;
-
-      setState(() {
-        _isScanning = false;
-        _showResult = true;
-        _recognitionLog = '识别成功! 置信度: ${(confidence * 100).toStringAsFixed(0)}%';
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('AI识别成功! ${_nameCtrl.text.isNotEmpty ? _nameCtrl.text : "请确认信息"} | 置信度${(confidence * 100).toStringAsFixed(0)}%'),
-            backgroundColor: AppTheme.success,
-          ),
-        );
-      }
-    } catch (e) {
-      // JSON解析失败，尝试模糊提取
-      setState(() {
-        _isScanning = false;
-        _showResult = true;
-        _recognitionLog = 'JSON解析失败, 已展示手动录入: $e';
-      });
-    }
-  }
-
-  Industry _matchIndustry(String s) {
-    final lower = s.toLowerCase();
-    if (lower.contains('health') || lower.contains('医')) return Industry.healthcare;
-    if (lower.contains('finance') || lower.contains('金融')) return Industry.finance;
-    if (lower.contains('tech')) return Industry.technology;
-    if (lower.contains('trad') || lower.contains('贸易')) return Industry.trading;
-    if (lower.contains('consult') || lower.contains('咨询')) return Industry.consulting;
-    if (lower.contains('manuf') || lower.contains('建设') || lower.contains('制造')) return Industry.construction;
-    if (lower.contains('real') || lower.contains('不动产') || lower.contains('地产')) return Industry.realEstate;
-    return Industry.other;
-  }
-
-  MyRelationType _matchRelation(String s) {
-    final lower = s.toLowerCase();
-    if (lower.contains('agent') || lower.contains('代理')) return MyRelationType.agent;
-    if (lower.contains('clinic') || lower.contains('诊所')) return MyRelationType.clinic;
-    if (lower.contains('retail') || lower.contains('零售')) return MyRelationType.retailer;
-    if (lower.contains('advis') || lower.contains('顾问')) return MyRelationType.advisor;
-    if (lower.contains('invest') || lower.contains('投资')) return MyRelationType.investor;
-    if (lower.contains('partner') || lower.contains('合作')) return MyRelationType.partner;
-    return MyRelationType.other;
-  }
-
   Widget _buildResultForm() {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
+        // 名片图片预览（如有）
+        if (_imageBytes != null) ...[
+          Container(
+            height: 160,
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
+            child: Stack(children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.memory(_imageBytes!, width: double.infinity, fit: BoxFit.cover),
+              ),
+              Positioned(top: 8, right: 8, child: GestureDetector(
+                onTap: () => setState(() => _imageBytes = null),
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(8)),
+                  child: const Icon(Icons.close, color: Colors.white, size: 16),
+                ),
+              )),
+            ]),
+          ),
+          const SizedBox(height: 16),
+        ],
+
+        // 基本信息
         Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(gradient: AppTheme.gradient, borderRadius: BorderRadius.circular(14)),
-          child: Row(children: [
-            Icon(_imageBytes != null ? Icons.auto_awesome : _imagePath != null ? Icons.photo_camera : Icons.edit_note, color: Colors.white, size: 24),
-            const SizedBox(width: 10),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(_imageBytes != null ? 'AI识别结果' : _imagePath != null ? '照片已获取' : '手动录入', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-              Text(_recognitionLog ?? '请填写并确认信息后保存', style: const TextStyle(color: Colors.white70, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
-            ])),
+          decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('基本信息', style: TextStyle(color: AppTheme.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 12),
+            _field(_nameCtrl, '姓名 *', Icons.person),
+            _field(_readingCtrl, '读音/ふりがな', Icons.text_fields),
+            _field(_companyCtrl, '公司 *', Icons.business),
+            _field(_positionCtrl, '职位', Icons.badge),
           ]),
         ),
-        // 预览缩略图
-        if (_imageBytes != null) ...[
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Image.memory(_imageBytes!, height: 120, fit: BoxFit.cover),
-          ),
-        ],
+        const SizedBox(height: 12),
+
+        // 联系方式
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('联系方式', style: TextStyle(color: AppTheme.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 12),
+            _field(_phoneCtrl, '电话', Icons.phone, keyboard: TextInputType.phone),
+            _field(_emailCtrl, '邮箱', Icons.email, keyboard: TextInputType.emailAddress),
+            _field(_addressCtrl, '地址', Icons.location_on),
+          ]),
+        ),
+        const SizedBox(height: 12),
+
+        // 分类标签
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('行业分类', style: TextStyle(color: AppTheme.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Wrap(spacing: 6, runSpacing: 6, children: Industry.values.map((ind) {
+              final isSelected = _industry == ind;
+              return ChoiceChip(
+                label: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(ind.icon, size: 14, color: isSelected ? Colors.white : ind.color),
+                  const SizedBox(width: 4),
+                  Text(ind.label),
+                ]),
+                selected: isSelected,
+                onSelected: (_) => setState(() => _industry = ind),
+                selectedColor: ind.color, backgroundColor: AppTheme.cardBgLight,
+                labelStyle: TextStyle(color: isSelected ? Colors.white : AppTheme.textPrimary, fontSize: 11),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              );
+            }).toList()),
+          ]),
+        ),
+        const SizedBox(height: 12),
+
+        // 与我的业务关系
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('与我的业务关系', style: TextStyle(color: AppTheme.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Wrap(spacing: 6, runSpacing: 6, children: MyRelationType.values.map((rel) {
+              final isSelected = _myRelation == rel;
+              return ChoiceChip(
+                label: Text(rel.label),
+                selected: isSelected,
+                onSelected: (_) => setState(() => _myRelation = rel),
+                selectedColor: rel.color, backgroundColor: AppTheme.cardBgLight,
+                labelStyle: TextStyle(color: isSelected ? Colors.white : AppTheme.textPrimary, fontSize: 11),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              );
+            }).toList()),
+          ]),
+        ),
+        const SizedBox(height: 12),
+
+        // 关系亲密度
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('关系亲密度', style: TextStyle(color: AppTheme.textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Row(children: RelationshipStrength.values.map((s) {
+              final isSelected = _strength == s;
+              return Expanded(child: GestureDetector(
+                onTap: () => setState(() => _strength = s),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isSelected ? s.color.withValues(alpha: 0.2) : AppTheme.cardBgLight,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: isSelected ? s.color : Colors.transparent, width: 2),
+                  ),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(isSelected ? Icons.check_circle : Icons.circle_outlined, color: isSelected ? s.color : AppTheme.textSecondary, size: 20),
+                    const SizedBox(height: 4),
+                    Text(s.label, style: TextStyle(color: isSelected ? s.color : AppTheme.textSecondary, fontSize: 11, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                  ]),
+                ),
+              ));
+            }).toList()),
+          ]),
+        ),
+        const SizedBox(height: 12),
+
+        // 备注
+        _field(_notesCtrl, '备注', Icons.notes),
+
         const SizedBox(height: 20),
-        _field(_nameCtrl, '姓名', Icons.person),
-        _field(_companyCtrl, '公司', Icons.business),
-        _field(_positionCtrl, '职位', Icons.badge),
-        _field(_phoneCtrl, '电话', Icons.phone, keyboard: TextInputType.phone),
-        _field(_emailCtrl, '邮箱', Icons.email, keyboard: TextInputType.emailAddress),
-        _field(_addressCtrl, '地址', Icons.location_on),
-        const SizedBox(height: 16),
-        const Text('行业', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 8),
-        Wrap(spacing: 8, runSpacing: 8, children: Industry.values.map((ind) {
-          final isSelected = _industry == ind;
-          return ChoiceChip(
-            label: Text(ind.label), selected: isSelected,
-            onSelected: (_) => setState(() => _industry = ind),
-            selectedColor: ind.color, backgroundColor: AppTheme.cardBgLight,
-            labelStyle: TextStyle(color: isSelected ? Colors.white : AppTheme.textPrimary, fontSize: 12),
-          );
-        }).toList()),
-        const SizedBox(height: 16),
-        const Text('与我的关系', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 8),
-        Wrap(spacing: 8, runSpacing: 8, children: MyRelationType.values.map((rel) {
-          final isSelected = _myRelation == rel;
-          return ChoiceChip(
-            label: Text(rel.label), selected: isSelected,
-            onSelected: (_) => setState(() => _myRelation = rel),
-            selectedColor: rel.color, backgroundColor: AppTheme.cardBgLight,
-            labelStyle: TextStyle(color: isSelected ? Colors.white : AppTheme.textPrimary, fontSize: 12),
-          );
-        }).toList()),
-        const SizedBox(height: 24),
-        Row(children: [
-          Expanded(
-            child: OutlinedButton(
-              onPressed: () => setState(() {
-                _showResult = false;
-                _imagePath = null;
-                _imageBytes = null;
-                _recognitionLog = null;
-                _clearFields();
-              }),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                side: const BorderSide(color: AppTheme.textSecondary),
-              ),
-              child: const Text('重新扫描', style: TextStyle(color: AppTheme.textSecondary)),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 2,
-            child: ElevatedButton(
-              onPressed: _save,
-              style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
-              child: const Text('保存联系人', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-            ),
-          ),
-        ]),
+        // 保存按钮
+        SizedBox(width: double.infinity, child: ElevatedButton(
+          onPressed: _save,
+          style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+          child: const Text('保存联系人', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+        )),
         const SizedBox(height: 20),
       ],
     );
@@ -497,25 +370,31 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
 
   Widget _field(TextEditingController ctrl, String label, IconData icon, {TextInputType? keyboard}) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 10),
       child: TextField(
         controller: ctrl,
-        style: const TextStyle(color: AppTheme.textPrimary),
+        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
         keyboardType: keyboard,
-        decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon, color: AppTheme.textSecondary, size: 20)),
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon, color: AppTheme.textSecondary, size: 18),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        ),
       ),
     );
   }
 
-  void _clearFields() {
-    _nameCtrl.clear();
-    _companyCtrl.clear();
-    _positionCtrl.clear();
-    _phoneCtrl.clear();
-    _emailCtrl.clear();
-    _addressCtrl.clear();
-    _industry = Industry.other;
-    _myRelation = MyRelationType.other;
+  void _clearAndReset() {
+    setState(() {
+      _showResult = false;
+      _imageBytes = null;
+      _nameCtrl.clear(); _readingCtrl.clear(); _companyCtrl.clear();
+      _positionCtrl.clear(); _phoneCtrl.clear(); _emailCtrl.clear();
+      _addressCtrl.clear(); _notesCtrl.clear();
+      _industry = Industry.other;
+      _myRelation = MyRelationType.other;
+      _strength = RelationshipStrength.cool;
+    });
   }
 
   void _save() {
@@ -529,6 +408,7 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
     crm.addContact(Contact(
       id: crm.generateId(),
       name: _nameCtrl.text,
+      nameReading: _readingCtrl.text,
       company: _companyCtrl.text,
       position: _positionCtrl.text,
       phone: _phoneCtrl.text,
@@ -536,7 +416,8 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
       address: _addressCtrl.text,
       industry: _industry,
       myRelation: _myRelation,
-      strength: RelationshipStrength.cool,
+      strength: _strength,
+      notes: _notesCtrl.text,
     ));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('${_nameCtrl.text} 已添加到人脉库'), backgroundColor: AppTheme.success),

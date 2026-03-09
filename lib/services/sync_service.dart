@@ -28,6 +28,7 @@ class SyncService extends ChangeNotifier {
   static const _boxAssignments    = 'assignments';
   static const _boxFactories      = 'factories';
   static const _boxProduction     = 'production';
+  static const _boxQcRecords      = 'qc_records';
   static const _boxPendingWrites  = 'pending_writes';
   static const _boxMeta           = 'sync_meta';
 
@@ -43,6 +44,7 @@ class SyncService extends ChangeNotifier {
   late Box<String> _assignments;
   late Box<String> _factories;
   late Box<String> _production;
+  late Box<String> _qcRecords;
   late Box<String> _pendingWrites;
   late Box<String> _meta;
 
@@ -74,6 +76,7 @@ class SyncService extends ChangeNotifier {
     _assignments  = await Hive.openBox<String>(_boxAssignments);
     _factories    = await Hive.openBox<String>(_boxFactories);
     _production   = await Hive.openBox<String>(_boxProduction);
+    _qcRecords    = await Hive.openBox<String>(_boxQcRecords);
     _pendingWrites= await Hive.openBox<String>(_boxPendingWrites);
     _meta         = await Hive.openBox<String>(_boxMeta);
 
@@ -110,6 +113,7 @@ class SyncService extends ChangeNotifier {
       case 'assignments':   return _assignments;
       case 'factories':     return _factories;
       case 'production':    return _production;
+      case 'qc_records':    return _qcRecords;
       default: throw ArgumentError('Unknown collection: $collection');
     }
   }
@@ -213,7 +217,7 @@ class SyncService extends ChangeNotifier {
       await _flushPendingWrites();
 
       // Pull each collection
-      const collections = ['contacts', 'deals', 'interactions', 'relations', 'products', 'sales_orders', 'inventory', 'team', 'tasks', 'assignments', 'factories', 'production'];
+      const collections = ['contacts', 'deals', 'interactions', 'relations', 'products', 'sales_orders', 'inventory', 'team', 'tasks', 'assignments', 'factories', 'production', 'qc_records'];
       for (final col in collections) {
         await _pullCollection(col);
       }
@@ -278,7 +282,7 @@ class SyncService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      const collections = ['contacts', 'deals', 'interactions', 'relations', 'products', 'sales_orders', 'inventory', 'team', 'tasks', 'assignments', 'factories', 'production'];
+      const collections = ['contacts', 'deals', 'interactions', 'relations', 'products', 'sales_orders', 'inventory', 'team', 'tasks', 'assignments', 'factories', 'production', 'qc_records'];
       for (final col in collections) {
         final box = _boxFor(col);
         for (final key in box.keys) {
@@ -316,6 +320,7 @@ class SyncService extends ChangeNotifier {
     await _assignments.clear();
     await _factories.clear();
     await _production.clear();
+    await _qcRecords.clear();
     await _pendingWrites.clear();
     notifyListeners();
   }

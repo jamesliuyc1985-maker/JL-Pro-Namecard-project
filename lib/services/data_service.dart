@@ -6,14 +6,15 @@ import '../models/deal.dart';
 import '../models/interaction.dart';
 import '../models/product.dart';
 import '../models/inventory.dart';
+import '../models/qc_record.dart';
 import '../models/team.dart';
 import '../models/task.dart';
 import '../models/contact_assignment.dart';
 import '../models/factory.dart';
 import '../services/sync_service.dart';
 
-/// DataService v22: 全量CRUD → Hive持久化 + Firestore云同步
-/// 核心修改: 每个CRUD操作自动写入Hive，防止更新后数据消失
+/// DataService v25.8: 全量CRUD → Hive持久化 + Firestore云同步
+/// v25.8修复: 产品价格保护、版本更新数据保护、新增检测QC功能
 class DataService {
   static const _uuid = Uuid();
 
@@ -198,26 +199,18 @@ class DataService {
     return stats;
   }
 
-  // ========== Init: 只加载系统配置（产品/工厂/团队），业务数据从云端拉取 ==========
+  // ========== Init: 加载系统配置 + 保护已有业务数据 ==========
   Future<void> init() async {
-    // 系统配置：产品目录、工厂、团队（这些是固定配置不是业务数据）
+    // 系统配置：产品目录、工厂、团队
     _productsCache = _builtInProducts();
-    _factoryCache.addAll(_builtInFactories());
-    _teamCache.addAll(_builtInTeam());
-    // 业务数据（联系人/交易/关系/订单等）初始化为空
-    // 登录后从 Firestore 拉取，确保所有用户看到同一份实时数据
-    _contactsCache = [];
-    _dealsCache = [];
-    _relationsCache = [];
-    _ordersCache = [];
-    _inventoryCache = [];
-    _interactionsCache = [];
-    _taskCache = [];
-    _assignmentCache = [];
-    _productionCache = [];
+    _factoryCache = List.from(_builtInFactories());
+    _teamCache = List.from(_builtInTeam());
+    // 注意: 业务数据不在这里清空！
+    // loadFromHive() 会在之后被调用，恢复 Hive 中的持久化数据
+    // 只有首次运行时才是空列表（Hive里也没数据）
 
     if (kDebugMode) {
-      debugPrint('[DataService] Init: ${_productsCache.length} products, ${_factoryCache.length} factories, ${_teamCache.length} team (business data empty, awaiting cloud sync)');
+      debugPrint('[DataService] Init: ${_productsCache.length} products, ${_factoryCache.length} factories, ${_teamCache.length} team');
     }
   }
 
@@ -236,10 +229,14 @@ class DataService {
     _taskCache = _loadCollection<Task>(sync, 'tasks', Task.fromJson) ?? [];
     _assignmentCache = _loadCollection<ContactAssignment>(sync, 'assignments', ContactAssignment.fromJson) ?? [];
     _productionCache = _loadCollection<ProductionOrder>(sync, 'production', ProductionOrder.fromJson) ?? [];
+    _qcCache = _loadCollection<QcRecord>(sync, 'qc_records', QcRecord.fromJson) ?? [];
 
     // 系统配置: Hive有数据则用Hive版本，无则保留内置
+    // 产品价格保护: Hive数据如果价格为0，用内置数据补充
     final hiveProducts = _loadCollection<Product>(sync, 'products', Product.fromJson);
-    if (hiveProducts != null && hiveProducts.isNotEmpty) _productsCache = hiveProducts;
+    if (hiveProducts != null && hiveProducts.isNotEmpty) {
+      _productsCache = _mergeProductsWithPriceProtection(hiveProducts);
+    }
     final hiveTeam = _loadCollection<TeamMember>(sync, 'team', TeamMember.fromJson);
     if (hiveTeam != null && hiveTeam.isNotEmpty) {
       _teamCache.clear();
@@ -628,9 +625,12 @@ class DataService {
       var prods2 = await pullCol<ProductionOrder>('production', ProductionOrder.fromJson);
       if (prods2.isNotEmpty) _productionCache = prods2;
 
-      // 系统配置: 云端有则替换，无则保留内置配置
+      // 系统配置: 云端有则合并（保护价格），无则保留内置配置
       var prods = await pullCol<Product>('products', Product.fromJson);
-      if (prods.isNotEmpty) _productsCache = prods;
+      if (prods.isNotEmpty) {
+        // 价格保护: 如果云端产品价格全为0, 用内置价格填充
+        _productsCache = _mergeProductsWithPriceProtection(prods);
+      }
 
       var team = await pullCol<TeamMember>('team', TeamMember.fromJson);
       if (team.isNotEmpty) _teamCache = team;
@@ -640,6 +640,9 @@ class DataService {
 
       var facs = await pullCol<ProductionFactory>('factories', ProductionFactory.fromJson);
       if (facs.isNotEmpty) _factoryCache = facs;
+
+      var qcRecs = await pullCol<QcRecord>('qc_records', QcRecord.fromJson);
+      if (qcRecs.isNotEmpty) _qcCache = qcRecs;
 
       if (kDebugMode) {
         debugPrint('[DataService] Cloud sync complete: ${_contactsCache.length} contacts, ${_dealsCache.length} deals, ${_ordersCache.length} orders');
@@ -717,6 +720,61 @@ class DataService {
     TeamMember(id: 'member-002', name: '田中太郎', role: 'manager', email: 'tanaka@dealnavigator.com'),
     TeamMember(id: 'member-003', name: '王小明', role: 'member', email: 'xiaoming@dealnavigator.com'),
   ];
+
+  /// 价格保护合并: 云端产品如果价格为0, 从内置产品列表填充价格
+  List<Product> _mergeProductsWithPriceProtection(List<Product> cloudProducts) {
+    final builtInMap = <String, Product>{};
+    for (final p in _builtInProducts()) {
+      builtInMap[p.id] = p;
+    }
+
+    return cloudProducts.map((cp) {
+      final builtIn = builtInMap[cp.id];
+      if (builtIn != null && cp.retailPrice == 0 && builtIn.retailPrice > 0) {
+        // 云端价格为0但内置有价格 → 用内置价格
+        cp.agentPrice = builtIn.agentPrice;
+        cp.clinicPrice = builtIn.clinicPrice;
+        cp.retailPrice = builtIn.retailPrice;
+        cp.agentTotalPrice = builtIn.agentTotalPrice;
+        cp.clinicTotalPrice = builtIn.clinicTotalPrice;
+        cp.retailTotalPrice = builtIn.retailTotalPrice;
+        if (kDebugMode) debugPrint('[DataService] 价格保护: ${cp.name} 从内置数据恢复价格');
+      }
+      return cp;
+    }).toList();
+  }
+
+  // ========== 检测/QC 记录 CRUD ==========
+  List<QcRecord> _qcCache = [];
+
+  List<QcRecord> getAllQcRecords() => List.from(_qcCache);
+  List<QcRecord> getQcByProduct(String productId) => _qcCache.where((q) => q.productId == productId).toList();
+  List<QcRecord> getQcByStatus(String status) => _qcCache.where((q) => q.status == status).toList();
+  QcRecord? getQcRecord(String id) {
+    try { return _qcCache.firstWhere((q) => q.id == id); } catch (_) { return null; }
+  }
+
+  Future<void> addQcRecord(QcRecord record) async {
+    _qcCache.add(record);
+    await _persistToHive('qc_records', record.id, record.toJson());
+    _firestoreWrite('qc_records', record.id, record.toJson());
+  }
+  Future<void> updateQcRecord(QcRecord record) async {
+    final idx = _qcCache.indexWhere((q) => q.id == record.id);
+    if (idx >= 0) _qcCache[idx] = record;
+    await _persistToHive('qc_records', record.id, record.toJson());
+    _firestoreWrite('qc_records', record.id, record.toJson());
+  }
+  Future<void> deleteQcRecord(String id) async {
+    _qcCache.removeWhere((q) => q.id == id);
+    await _deleteFromHive('qc_records', id);
+    _firestoreDelete('qc_records', id);
+  }
+
+  /// 获取产品的送检中数量（已送检+待结果的库存占用）
+  int getQcPendingQuantity(String productId) {
+    return _qcCache.where((q) => q.productId == productId && q.isOccupyingStock).fold(0, (sum, q) => sum + q.quantity);
+  }
 
   // 种子业务数据已移除 - 所有业务数据（联系人/交易/关系）从Firestore云端获取
   // 确保多用户协作时数据一致性
