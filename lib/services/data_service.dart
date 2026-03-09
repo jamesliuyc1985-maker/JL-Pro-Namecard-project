@@ -693,9 +693,9 @@ class DataService {
       description: 'NMN口服胶囊 (NMNサプリメント15000)。每盒含高纯度NMN。',
       specification: 'カプセル/盒', unitsPerBox: 1,
       agentPrice: 9000, clinicPrice: 12000, retailPrice: 30000,
-      agentTotalPrice: 9000, clinicTotalPrice: 12000, retailTotalPrice: 20000,
+      agentTotalPrice: 9000, clinicTotalPrice: 12000, retailTotalPrice: 30000,
       storageMethod: '常温保存', shelfLife: '2年', usage: '每日1-2粒，口服',
-      notes: 'NMNサプリメント15000 | 销售总价¥20,000(PDF定价)'),
+      notes: 'NMNサプリメント15000 | カプセル1箱'),
   ];
 
   List<ProductionFactory> _builtInFactories() => [

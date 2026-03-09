@@ -3,7 +3,17 @@ import 'package:intl/intl.dart';
 class Formatters {
   static String currency(double amount, {String symbol = '¥'}) {
     if (amount >= 100000000) {
-      return '$symbol${(amount / 100000000).toStringAsFixed(1)}亿';
+      return '$symbol${(amount / 100000000).toStringAsFixed(1)}億';
+    } else if (amount >= 10000000) {
+      return '$symbol${NumberFormat('#,###').format(amount.toInt())}';
+    }
+    return '$symbol${NumberFormat('#,###').format(amount.toInt())}';
+  }
+
+  /// 简短货币显示(用于空间有限的地方)
+  static String currencyShort(double amount, {String symbol = '¥'}) {
+    if (amount >= 100000000) {
+      return '$symbol${(amount / 100000000).toStringAsFixed(1)}億';
     } else if (amount >= 10000) {
       return '$symbol${(amount / 10000).toStringAsFixed(0)}万';
     }

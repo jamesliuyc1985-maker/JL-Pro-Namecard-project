@@ -95,38 +95,55 @@ class ProductDetailScreen extends StatelessWidget {
           Row(children: [
             Icon(Icons.price_change, color: color, size: 20),
             const SizedBox(width: 8),
-            const Text('价格体系', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+            const Text('価格体系 (税別)', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
           ]),
           const SizedBox(height: 12),
-          _priceRow('代理价 (单瓶)', Formatters.currency(product.agentPrice), '折扣30%', const Color(0xFF00B894)),
-          _priceRow('诊所价 (单瓶)', Formatters.currency(product.clinicPrice), '折扣40%', const Color(0xFF0984E3)),
-          _priceRow('零售价 (单瓶)', Formatters.currency(product.retailPrice), '建议零售', AppTheme.accentGold),
-          const Divider(color: AppTheme.cardBgLight, height: 20),
-          Text('整箱价 (${product.unitsPerBox}瓶/箱)', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-          const SizedBox(height: 8),
-          _priceRow('代理整箱', Formatters.currency(product.agentTotalPrice), '', const Color(0xFF00B894)),
-          _priceRow('诊所整箱', Formatters.currency(product.clinicTotalPrice), '', const Color(0xFF0984E3)),
-          _priceRow('零售整箱', Formatters.currency(product.retailTotalPrice), '', AppTheme.accentGold),
+          // 表头
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+            decoration: BoxDecoration(color: AppTheme.cardBgLight, borderRadius: BorderRadius.circular(6)),
+            child: const Row(children: [
+              Expanded(flex: 3, child: Text('価格区分', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w600))),
+              Expanded(flex: 2, child: Text('単体価格', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w600), textAlign: TextAlign.right)),
+              Expanded(flex: 2, child: Text('箱価格', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w600), textAlign: TextAlign.right)),
+            ]),
+          ),
+          const SizedBox(height: 4),
+          _priceRow2('代理店価格', Formatters.currency(product.agentPrice), Formatters.currency(product.agentTotalPrice), const Color(0xFF00B894)),
+          _priceRow2('医療機関価格', Formatters.currency(product.clinicPrice), Formatters.currency(product.clinicTotalPrice), const Color(0xFF0984E3)),
+          _priceRow2('通常販売価格', Formatters.currency(product.retailPrice), Formatters.currency(product.retailTotalPrice), AppTheme.accentGold),
+          const Divider(color: AppTheme.cardBgLight, height: 16),
+          Row(children: [
+            const Icon(Icons.inventory_2_outlined, color: AppTheme.textSecondary, size: 14),
+            const SizedBox(width: 6),
+            Text('規格: ${product.unitsPerBox}${product.unitsPerBox > 1 ? "本/箱" : "箱"}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+            const SizedBox(width: 12),
+            const Icon(Icons.qr_code, color: AppTheme.textSecondary, size: 14),
+            const SizedBox(width: 6),
+            Text('品番: ${product.code}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+          ]),
         ]),
       ),
     );
   }
 
-  Widget _priceRow(String label, String price, String note, Color color) {
+  Widget _priceRow2(String label, String unitPrice, String boxPrice, Color color) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(children: [
-        Expanded(flex: 3, child: Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13))),
-        Expanded(flex: 2, child: Text(price, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 14), textAlign: TextAlign.right)),
-        if (note.isNotEmpty) ...[
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(children: [
+          Container(width: 4, height: 24, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
           const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
-            child: Text(note, style: TextStyle(color: color, fontSize: 9)),
-          ),
-        ],
-      ]),
+          Expanded(flex: 3, child: Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600))),
+          Expanded(flex: 2, child: Text(unitPrice, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.right)),
+          Expanded(flex: 2, child: Text(boxPrice, style: TextStyle(color: color.withValues(alpha: 0.7), fontSize: 11), textAlign: TextAlign.right)),
+        ]),
+      ),
     );
   }
 
