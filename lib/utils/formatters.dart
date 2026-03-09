@@ -1,22 +1,13 @@
 import 'package:intl/intl.dart';
 
 class Formatters {
+  /// 全精确阿拉伯数字显示，千分位分隔，不做任何缩写
   static String currency(double amount, {String symbol = '¥'}) {
-    if (amount >= 100000000) {
-      return '$symbol${(amount / 100000000).toStringAsFixed(1)}億';
-    } else if (amount >= 10000000) {
-      return '$symbol${NumberFormat('#,###').format(amount.toInt())}';
-    }
     return '$symbol${NumberFormat('#,###').format(amount.toInt())}';
   }
 
-  /// 简短货币显示(用于空间有限的地方)
+  /// 与 currency() 一致，全精确数字，不缩写
   static String currencyShort(double amount, {String symbol = '¥'}) {
-    if (amount >= 100000000) {
-      return '$symbol${(amount / 100000000).toStringAsFixed(1)}億';
-    } else if (amount >= 10000) {
-      return '$symbol${(amount / 10000).toStringAsFixed(0)}万';
-    }
     return '$symbol${NumberFormat('#,###').format(amount.toInt())}';
   }
 
