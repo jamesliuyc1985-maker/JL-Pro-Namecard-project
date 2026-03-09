@@ -151,11 +151,6 @@ class _NetworkScreenState extends State<NetworkScreen> {
   Widget _buildSelectedInfo(BuildContext context, CrmProvider crm, Contact contact, Set<String> salesIds) {
     final relatedRelations = crm.getRelationsForContact(contact.id);
     final hasSales = salesIds.contains(contact.id);
-    // Count tags across all relations for this contact
-    final allTags = <String>{};
-    for (final r in relatedRelations) {
-      allTags.addAll(r.tags);
-    }
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -164,50 +159,32 @@ class _NetworkScreenState extends State<NetworkScreen> {
         color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12),
         border: Border.all(color: hasSales ? AppTheme.accentGold : contact.myRelation.color.withValues(alpha: 0.5), width: hasSales ? 2 : 1),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Container(
-            width: 40, height: 40,
-            decoration: BoxDecoration(color: contact.myRelation.color.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
-            child: Center(child: Text(contact.name[0], style: TextStyle(color: contact.myRelation.color, fontWeight: FontWeight.bold, fontSize: 18))),
-          ),
-          const SizedBox(width: 10),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Text(contact.name, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold, fontSize: 14)),
-              if (hasSales) ...[
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                  decoration: BoxDecoration(color: AppTheme.accentGold.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(6)),
-                  child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.local_fire_department, color: AppTheme.accentGold, size: 10),
-                    SizedBox(width: 2),
-                    Text('销售线索', style: TextStyle(color: AppTheme.accentGold, fontSize: 9, fontWeight: FontWeight.w600)),
-                  ]),
-                ),
-              ],
-            ]),
-            Text('${contact.myRelation.label} | ${contact.company} | 关联${relatedRelations.length}人',
-                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
-          ])),
-          IconButton(
-            icon: const Icon(Icons.open_in_new, color: AppTheme.primaryPurple, size: 18),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ContactDetailScreen(contactId: contact.id))),
-          ),
-        ]),
-        // Show aggregated tags
-        if (allTags.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Wrap(spacing: 4, runSpacing: 4, children: allTags.map((tag) {
-            final c = ContactRelation.tagColor(tag);
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(color: c.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6), border: Border.all(color: c.withValues(alpha: 0.3))),
-              child: Text(tag, style: TextStyle(color: c, fontSize: 9, fontWeight: FontWeight.w600)),
-            );
-          }).toList()),
-        ],
+      child: Row(children: [
+        Container(
+          width: 40, height: 40,
+          decoration: BoxDecoration(color: contact.myRelation.color.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
+          child: Center(child: Text(contact.name[0], style: TextStyle(color: contact.myRelation.color, fontWeight: FontWeight.bold, fontSize: 18))),
+        ),
+        const SizedBox(width: 10),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Text(contact.name, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold, fontSize: 14)),
+            if (hasSales) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(color: AppTheme.accentGold.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(6)),
+                child: const Text('销售', style: TextStyle(color: AppTheme.accentGold, fontSize: 9, fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ]),
+          Text('${contact.myRelation.label} | ${contact.company} | 关联${relatedRelations.length}人',
+              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+        ])),
+        IconButton(
+          icon: const Icon(Icons.open_in_new, color: AppTheme.primaryPurple, size: 18),
+          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ContactDetailScreen(contactId: contact.id))),
+        ),
       ]),
     );
   }
@@ -369,87 +346,88 @@ class _NetworkScreenState extends State<NetworkScreen> {
             itemCount: rels.length,
             itemBuilder: (context, index) {
               final r = rels[index];
-              return GestureDetector(
-                onTap: () => _showEditRelationDialog(context, crm, r),
-                child: Container(
+              return Dismissible(
+                key: Key(r.id),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20),
                   margin: const EdgeInsets.only(bottom: 5),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
-                    color: AppTheme.cardBgLight,
+                    color: AppTheme.danger.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: (r.tags.isNotEmpty ? ContactRelation.tagColor(r.tags.first) : AppTheme.primaryPurple).withValues(alpha: 0.2)),
                   ),
-                  child: Row(children: [
-                    // 人物A头像
-                    Container(
-                      width: 32, height: 32,
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryPurple.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Center(child: Text(
-                        r.fromName.length >= 2 ? r.fromName.substring(r.fromName.length - 2) : r.fromName,
-                        style: const TextStyle(color: AppTheme.primaryPurple, fontSize: 11, fontWeight: FontWeight.bold),
-                      )),
+                  child: const Icon(Icons.delete_outline, color: AppTheme.danger, size: 20),
+                ),
+                confirmDismiss: (direction) async {
+                  return await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      backgroundColor: AppTheme.cardBg,
+                      title: const Text('删除关系', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16)),
+                      content: Text('确认删除 ${r.fromName} - ${r.toName} 的关系?', style: const TextStyle(color: AppTheme.textSecondary)),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+                        TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('删除', style: TextStyle(color: AppTheme.danger))),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    // 关系类型+箭头
-                    Column(mainAxisSize: MainAxisSize.min, children: [
+                  ) ?? false;
+                },
+                onDismissed: (_) {
+                  crm.deleteRelation(r.id);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('关系已删除'), backgroundColor: AppTheme.danger),
+                  );
+                },
+                child: GestureDetector(
+                  onTap: () => _showEditRelationDialog(context, crm, r),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 5),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.cardBgLight,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(children: [
+                      // A
+                      Container(
+                        width: 32, height: 32,
+                        decoration: BoxDecoration(color: AppTheme.primaryPurple.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+                        child: Center(child: Text(
+                          r.fromName.length >= 2 ? r.fromName.substring(r.fromName.length - 2) : r.fromName,
+                          style: const TextStyle(color: AppTheme.primaryPurple, fontSize: 11, fontWeight: FontWeight.bold),
+                        )),
+                      ),
+                      const SizedBox(width: 6),
+                      // 关系类型
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primaryPurple.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(r.relationType, style: const TextStyle(color: AppTheme.primaryPurple, fontSize: 9, fontWeight: FontWeight.w600)),
+                        decoration: BoxDecoration(color: AppTheme.primaryPurple.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(r.isBidirectional ? Icons.sync_alt : Icons.arrow_forward, color: AppTheme.primaryPurple, size: 10),
+                          const SizedBox(width: 3),
+                          Text(r.relationType, style: const TextStyle(color: AppTheme.primaryPurple, fontSize: 10, fontWeight: FontWeight.w600)),
+                        ]),
                       ),
-                      Icon(r.isBidirectional ? Icons.sync_alt : Icons.arrow_forward, color: AppTheme.textSecondary, size: 12),
-                    ]),
-                    const SizedBox(width: 8),
-                    // 人物B头像
-                    Container(
-                      width: 32, height: 32,
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryBlue.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
+                      const SizedBox(width: 6),
+                      // B
+                      Container(
+                        width: 32, height: 32,
+                        decoration: BoxDecoration(color: AppTheme.primaryBlue.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+                        child: Center(child: Text(
+                          r.toName.length >= 2 ? r.toName.substring(r.toName.length - 2) : r.toName,
+                          style: const TextStyle(color: AppTheme.primaryBlue, fontSize: 11, fontWeight: FontWeight.bold),
+                        )),
                       ),
-                      child: Center(child: Text(
-                        r.toName.length >= 2 ? r.toName.substring(r.toName.length - 2) : r.toName,
-                        style: const TextStyle(color: AppTheme.primaryBlue, fontSize: 11, fontWeight: FontWeight.bold),
+                      const SizedBox(width: 8),
+                      // 强度
+                      Expanded(child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(color: r.strength.color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                        child: Text(r.strength.label, style: TextStyle(color: r.strength.color, fontSize: 9, fontWeight: FontWeight.w600)),
                       )),
-                    ),
-                    const SizedBox(width: 10),
-                    // 右侧: 强度+标签
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                      Row(children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                          decoration: BoxDecoration(color: r.strength.color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
-                          child: Text(r.strength.label, style: TextStyle(color: r.strength.color, fontSize: 9, fontWeight: FontWeight.w600)),
-                        ),
-                        if (r.tags.isNotEmpty) ...[
-                          const SizedBox(width: 4),
-                          ...r.tags.take(2).map((tag) {
-                            final c = ContactRelation.tagColor(tag);
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 3),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                decoration: BoxDecoration(color: c.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
-                                child: Text(tag, style: TextStyle(color: c, fontSize: 8, fontWeight: FontWeight.w600)),
-                              ),
-                            );
-                          }),
-                        ],
-                      ]),
-                      if (r.description.isNotEmpty) ...[
-                        const SizedBox(height: 3),
-                        Text(r.description, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
-                      ],
-                    ])),
-                    // 编辑标识
-                    const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 16),
-                  ]),
+                    ]),
+                  ),
                 ),
               );
             },
@@ -466,7 +444,6 @@ class _NetworkScreenState extends State<NetworkScreen> {
     final typeCtrl = TextEditingController();
     final descCtrl = TextEditingController();
     final allContacts = crm.allContacts;
-    final selectedTags = <String>{};
     RelationStrength relationStrength = RelationStrength.normal;
     bool isBidirectional = true;
 
@@ -485,9 +462,7 @@ class _NetworkScreenState extends State<NetworkScreen> {
                 const Spacer(),
                 IconButton(icon: const Icon(Icons.close, color: AppTheme.textSecondary), onPressed: () => Navigator.pop(ctx)),
               ]),
-              const SizedBox(height: 4),
-              const Text('支持任意两个联系人之间建立关系和标签', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               DropdownButtonFormField<Contact>(
                 initialValue: from,
                 decoration: const InputDecoration(labelText: '联系人A', prefixIcon: Icon(Icons.person, color: AppTheme.primaryPurple, size: 20)),
@@ -504,7 +479,7 @@ class _NetworkScreenState extends State<NetworkScreen> {
                 onChanged: (v) => setModalState(() => to = v),
               ),
               const SizedBox(height: 8),
-              // 关系类型下拉选择
+              // 关系类型
               DropdownButtonFormField<String>(
                 initialValue: typeCtrl.text.isNotEmpty ? typeCtrl.text : null,
                 decoration: const InputDecoration(labelText: '关系类型', prefixIcon: Icon(Icons.category, color: AppTheme.textSecondary, size: 20)),
@@ -514,8 +489,8 @@ class _NetworkScreenState extends State<NetworkScreen> {
                   DropdownMenuItem(value: t, child: Text(t))).toList(),
                 onChanged: (v) => setModalState(() => typeCtrl.text = v ?? ''),
               ),
-              const SizedBox(height: 8),
-              // 关系强度选择
+              const SizedBox(height: 10),
+              // 关系强度
               const Text('关系强度', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
               const SizedBox(height: 6),
               Row(children: RelationStrength.values.map((s) {
@@ -530,57 +505,24 @@ class _NetworkScreenState extends State<NetworkScreen> {
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: isSelected ? s.color : AppTheme.textSecondary.withValues(alpha: 0.2), width: isSelected ? 2 : 1),
                     ),
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(isSelected ? Icons.check_circle : Icons.circle_outlined, color: isSelected ? s.color : AppTheme.textSecondary, size: 18),
-                      const SizedBox(height: 2),
-                      Text(s.label, style: TextStyle(color: isSelected ? s.color : AppTheme.textSecondary, fontSize: 11, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                    ]),
+                    child: Center(child: Text(s.label, style: TextStyle(color: isSelected ? s.color : AppTheme.textSecondary, fontSize: 11, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal))),
                   ),
                 ));
               }).toList()),
-              const SizedBox(height: 8),
-              // 双向/单向开关
+              const SizedBox(height: 10),
+              // 双向/单向
               SwitchListTile(
-                title: Text(isBidirectional ? '双向关系 ↔' : '单向关系 →', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
-                subtitle: Text(isBidirectional ? 'A和B互为该关系' : '仅A对B为该关系', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                title: Text(isBidirectional ? '双向关系' : '单向关系', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
+                subtitle: Text(isBidirectional ? 'A和B互为该关系' : '仅A对B', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
                 value: isBidirectional,
                 onChanged: (v) => setModalState(() => isBidirectional = v),
                 activeColor: AppTheme.primaryPurple,
                 dense: true,
                 contentPadding: EdgeInsets.zero,
               ),
-              const SizedBox(height: 4),
-              // Tags selection
-              const Text('关系标签 (可多选)', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
-              const SizedBox(height: 8),
-              Wrap(spacing: 6, runSpacing: 6, children: ContactRelation.presetTags.map((tag) {
-                final isSelected = selectedTags.contains(tag);
-                final c = ContactRelation.tagColor(tag);
-                return GestureDetector(
-                  onTap: () => setModalState(() {
-                    if (isSelected) { selectedTags.remove(tag); } else { selectedTags.add(tag); }
-                  }),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: isSelected ? c.withValues(alpha: 0.25) : AppTheme.cardBgLight,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: isSelected ? c : AppTheme.textSecondary.withValues(alpha: 0.2), width: isSelected ? 1.5 : 1),
-                    ),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      if (isSelected) ...[
-                        Icon(Icons.check_circle, color: c, size: 14),
-                        const SizedBox(width: 4),
-                      ],
-                      Text(tag, style: TextStyle(color: isSelected ? c : AppTheme.textSecondary, fontSize: 12, fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal)),
-                    ]),
-                  ),
-                );
-              }).toList()),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               TextField(controller: descCtrl, style: const TextStyle(color: AppTheme.textPrimary), maxLines: 2,
-                decoration: const InputDecoration(hintText: '关系描述（可选）', prefixIcon: Icon(Icons.notes, color: AppTheme.textSecondary, size: 20))),
+                decoration: const InputDecoration(hintText: '备注(可选)', prefixIcon: Icon(Icons.notes, color: AppTheme.textSecondary, size: 20))),
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
@@ -594,11 +536,11 @@ class _NetworkScreenState extends State<NetworkScreen> {
                         fromName: from!.name, toName: to!.name,
                         relationType: typeCtrl.text, description: descCtrl.text,
                         strength: relationStrength, isBidirectional: isBidirectional,
-                        tags: selectedTags.toList(),
+                        tags: [],
                       ));
                       Navigator.pop(ctx);
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('已建立 ${from!.name} ↔ ${to!.name} 的关系'), backgroundColor: AppTheme.success),
+                        SnackBar(content: Text('已建立 ${from!.name} - ${to!.name} 的关系'), backgroundColor: AppTheme.success),
                       );
                     }
                   },
@@ -616,7 +558,6 @@ class _NetworkScreenState extends State<NetworkScreen> {
   void _showEditRelationDialog(BuildContext context, CrmProvider crm, ContactRelation relation) {
     final typeCtrl = TextEditingController(text: relation.relationType);
     final descCtrl = TextEditingController(text: relation.description);
-    final selectedTags = <String>{...relation.tags};
     RelationStrength editStrength = relation.strength;
     bool editBidirectional = relation.isBidirectional;
 
@@ -646,7 +587,7 @@ class _NetworkScreenState extends State<NetworkScreen> {
                 IconButton(icon: const Icon(Icons.close, color: AppTheme.textSecondary), onPressed: () => Navigator.pop(ctx)),
               ]),
               const SizedBox(height: 8),
-              // Show participants
+              // 参与人显示
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(color: AppTheme.cardBgLight, borderRadius: BorderRadius.circular(10)),
@@ -669,7 +610,7 @@ class _NetworkScreenState extends State<NetworkScreen> {
                 ]),
               ),
               const SizedBox(height: 12),
-              // 关系类型下拉
+              // 关系类型
               DropdownButtonFormField<String>(
                 initialValue: typeCtrl.text.isNotEmpty ? typeCtrl.text : null,
                 decoration: const InputDecoration(labelText: '关系类型'),
@@ -679,7 +620,7 @@ class _NetworkScreenState extends State<NetworkScreen> {
                   DropdownMenuItem(value: t, child: Text(t))).toList(),
                 onChanged: (v) => setModalState(() => typeCtrl.text = v ?? ''),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               // 关系强度
               const Text('关系强度', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
               const SizedBox(height: 6),
@@ -695,57 +636,29 @@ class _NetworkScreenState extends State<NetworkScreen> {
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: isSelected ? s.color : AppTheme.textSecondary.withValues(alpha: 0.2), width: isSelected ? 2 : 1),
                     ),
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(isSelected ? Icons.check_circle : Icons.circle_outlined, color: isSelected ? s.color : AppTheme.textSecondary, size: 18),
-                      const SizedBox(height: 2),
-                      Text(s.label, style: TextStyle(color: isSelected ? s.color : AppTheme.textSecondary, fontSize: 11, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                    ]),
+                    child: Center(child: Text(s.label, style: TextStyle(color: isSelected ? s.color : AppTheme.textSecondary, fontSize: 11, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal))),
                   ),
                 ));
               }).toList()),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               // 双向/单向
               SwitchListTile(
-                title: Text(editBidirectional ? '双向关系 ↔' : '单向关系 →', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
+                title: Text(editBidirectional ? '双向关系' : '单向关系', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
                 value: editBidirectional,
                 onChanged: (v) => setModalState(() => editBidirectional = v),
                 activeColor: AppTheme.primaryPurple,
                 dense: true,
                 contentPadding: EdgeInsets.zero,
               ),
-              const SizedBox(height: 4),
-              const Text('关系标签', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
-              const SizedBox(height: 8),
-              Wrap(spacing: 6, runSpacing: 6, children: ContactRelation.presetTags.map((tag) {
-                final isSelected = selectedTags.contains(tag);
-                final c = ContactRelation.tagColor(tag);
-                return GestureDetector(
-                  onTap: () => setModalState(() {
-                    if (isSelected) { selectedTags.remove(tag); } else { selectedTags.add(tag); }
-                  }),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: isSelected ? c.withValues(alpha: 0.25) : AppTheme.cardBgLight,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: isSelected ? c : AppTheme.textSecondary.withValues(alpha: 0.2)),
-                    ),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      if (isSelected) ...[Icon(Icons.check_circle, color: c, size: 14), const SizedBox(width: 4)],
-                      Text(tag, style: TextStyle(color: isSelected ? c : AppTheme.textSecondary, fontSize: 12, fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal)),
-                    ]),
-                  ),
-                );
-              }).toList()),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
+              // 描述（可选）
               TextField(controller: descCtrl, style: const TextStyle(color: AppTheme.textPrimary), maxLines: 2,
-                decoration: const InputDecoration(labelText: '描述')),
+                decoration: const InputDecoration(labelText: '备注(可选)', hintText: '简要描述关系...')),
               const SizedBox(height: 16),
               SizedBox(width: double.infinity, child: ElevatedButton(
                 onPressed: () {
                   relation.relationType = typeCtrl.text;
                   relation.description = descCtrl.text;
-                  relation.tags = selectedTags.toList();
                   relation.strength = editStrength;
                   relation.isBidirectional = editBidirectional;
                   crm.updateRelation(relation);

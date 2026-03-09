@@ -233,6 +233,8 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> with Si
 
   Widget _productCard(BuildContext context, Product product, CrmProvider crm) {
     final stock = crm.getProductStock(product.id);
+    final qcPending = crm.getQcPendingQuantity(product.id);
+    final reserved = crm.getReservedStock(product.id);
 
     return GestureDetector(
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProductDetailScreen(productId: product.id))),
@@ -244,32 +246,56 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> with Si
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: AppTheme.steel.withValues(alpha: 0.2)),
         ),
-        child: Row(children: [
-          // Product icon (no images)
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: _fallbackThumb(product.category),
-          ),
-          const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(product.name, style: const TextStyle(color: AppTheme.offWhite, fontWeight: FontWeight.w600, fontSize: 13)),
-            const SizedBox(height: 2),
-            Text(product.specification, style: const TextStyle(color: AppTheme.slate, fontSize: 11)),
-            const SizedBox(height: 4),
-            Row(children: [
-              _tag(ProductCategory.label(product.category), AppTheme.info),
-              const SizedBox(width: 6),
-              _tag('库存:$stock', _stockColor(stock)),
-            ]),
-          ])),
-          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text(Formatters.currency(product.retailPrice), style: const TextStyle(color: AppTheme.gold, fontWeight: FontWeight.bold, fontSize: 14)),
-            const SizedBox(height: 2),
-            const Text('零售/瓶', style: TextStyle(color: AppTheme.slate, fontSize: 9)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: _fallbackThumb(product.category),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(product.name, style: const TextStyle(color: AppTheme.offWhite, fontWeight: FontWeight.w600, fontSize: 13)),
+              const SizedBox(height: 2),
+              Text('${product.specification} | ${product.code}', style: const TextStyle(color: AppTheme.slate, fontSize: 11)),
+              const SizedBox(height: 4),
+              Row(children: [
+                _tag(ProductCategory.label(product.category), AppTheme.info),
+                const SizedBox(width: 6),
+                _tag('库存:$stock', _stockColor(stock)),
+                if (reserved > 0) ...[const SizedBox(width: 4), _tag('预留:$reserved', AppTheme.warning)],
+                if (qcPending > 0) ...[const SizedBox(width: 4), _tag('送检:$qcPending', AppTheme.info)],
+              ]),
+            ])),
+            const Icon(Icons.chevron_right, color: AppTheme.steel, size: 18),
           ]),
+          const SizedBox(height: 8),
+          // === 三级价格体系 ===
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppTheme.navyMid,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(children: [
+              _priceTag('代理', Formatters.currency(product.agentPrice), const Color(0xFF00B894)),
+              Container(width: 1, height: 26, margin: const EdgeInsets.symmetric(horizontal: 8), color: AppTheme.steel.withValues(alpha: 0.2)),
+              _priceTag('诊所', Formatters.currency(product.clinicPrice), const Color(0xFF0984E3)),
+              Container(width: 1, height: 26, margin: const EdgeInsets.symmetric(horizontal: 8), color: AppTheme.steel.withValues(alpha: 0.2)),
+              _priceTag('零售', Formatters.currency(product.retailPrice), AppTheme.gold),
+              const Spacer(),
+              Text('${product.unitsPerBox}瓶/箱', style: const TextStyle(color: AppTheme.slate, fontSize: 9)),
+            ]),
+          ),
         ]),
       ),
     );
+  }
+
+  Widget _priceTag(String label, String price, Color c) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: TextStyle(color: c.withValues(alpha: 0.7), fontSize: 9, fontWeight: FontWeight.w600)),
+      Text(price, style: TextStyle(color: c, fontWeight: FontWeight.bold, fontSize: 12)),
+    ]);
   }
 
   Widget _fallbackThumb(String cat) {
@@ -297,7 +323,11 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> with Si
         final s = stocks[i];
         final c = _stockColor(s.currentStock);
         final qcPending = crm.getQcPendingQuantity(s.productId);
+        final reserved = crm.getReservedStock(s.productId);
+        final available = s.currentStock - reserved;
         final label = s.currentStock <= 0 ? '缺货' : s.currentStock < 5 ? '低库存' : '正常';
+        // 获取产品价格
+        final product = crm.getProduct(s.productId);
         return Container(
           margin: const EdgeInsets.only(bottom: 6),
           padding: const EdgeInsets.all(12),
@@ -305,37 +335,60 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> with Si
             color: AppTheme.navyLight, borderRadius: BorderRadius.circular(8),
             border: Border.all(color: AppTheme.steel.withValues(alpha: 0.2)),
           ),
-          child: Row(children: [
-            Container(
-              width: 42, height: 42,
-              decoration: BoxDecoration(color: c.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
-              child: Center(child: Text('${s.currentStock}', style: TextStyle(color: c, fontWeight: FontWeight.bold, fontSize: 16))),
-            ),
-            const SizedBox(width: 12),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(s.productName, style: const TextStyle(color: AppTheme.offWhite, fontWeight: FontWeight.w600, fontSize: 13)),
-              Row(children: [
-                Text(s.productCode, style: const TextStyle(color: AppTheme.slate, fontSize: 11)),
-                if (qcPending > 0) ...[
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                    decoration: BoxDecoration(color: AppTheme.info.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
-                    child: Text('送检中:$qcPending', style: const TextStyle(color: AppTheme.info, fontSize: 9, fontWeight: FontWeight.w600)),
-                  ),
-                ],
-              ]),
-            ])),
-            GestureDetector(
-              onTap: () => _showQuickAdjustDialog(context, crm, s),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(border: Border.all(color: AppTheme.gold.withValues(alpha: 0.4)), borderRadius: BorderRadius.circular(4)),
-                child: const Text('调整', style: TextStyle(color: AppTheme.gold, fontSize: 11)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Container(
+                width: 42, height: 42,
+                decoration: BoxDecoration(color: c.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
+                child: Center(child: Text('${s.currentStock}', style: TextStyle(color: c, fontWeight: FontWeight.bold, fontSize: 16))),
               ),
-            ),
-            const SizedBox(width: 8),
-            _tag(label, c),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(s.productName, style: const TextStyle(color: AppTheme.offWhite, fontWeight: FontWeight.w600, fontSize: 13)),
+                Row(children: [
+                  Text(s.productCode, style: const TextStyle(color: AppTheme.slate, fontSize: 11)),
+                  if (reserved > 0) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(color: AppTheme.warning.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                      child: Text('预留:$reserved', style: const TextStyle(color: AppTheme.warning, fontSize: 9, fontWeight: FontWeight.w600)),
+                    ),
+                  ],
+                  if (qcPending > 0) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(color: AppTheme.info.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                      child: Text('送检:$qcPending', style: const TextStyle(color: AppTheme.info, fontSize: 9, fontWeight: FontWeight.w600)),
+                    ),
+                  ],
+                ]),
+              ])),
+              GestureDetector(
+                onTap: () => _showQuickAdjustDialog(context, crm, s),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(border: Border.all(color: AppTheme.gold.withValues(alpha: 0.4)), borderRadius: BorderRadius.circular(4)),
+                  child: const Text('调整', style: TextStyle(color: AppTheme.gold, fontSize: 11)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _tag(label, c),
+            ]),
+            if (product != null) ...[
+              const SizedBox(height: 6),
+              Row(children: [
+                const SizedBox(width: 54), // 与上方库存数字对齐
+                Text('可用:$available', style: TextStyle(color: available <= 0 ? AppTheme.danger : AppTheme.slate, fontSize: 10, fontWeight: available <= 0 ? FontWeight.bold : FontWeight.normal)),
+                const Spacer(),
+                Text('代理${Formatters.currency(product.agentPrice)}', style: const TextStyle(color: Color(0xFF00B894), fontSize: 9)),
+                const SizedBox(width: 8),
+                Text('诊所${Formatters.currency(product.clinicPrice)}', style: const TextStyle(color: Color(0xFF0984E3), fontSize: 9)),
+                const SizedBox(width: 8),
+                Text('零售${Formatters.currency(product.retailPrice)}', style: const TextStyle(color: AppTheme.gold, fontSize: 9)),
+              ]),
+            ],
           ]),
         );
       },
@@ -421,6 +474,31 @@ class _ProductInventoryScreenState extends State<ProductInventoryScreen> with Si
               const Icon(Icons.science, color: AppTheme.info, size: 20),
               const SizedBox(width: 8),
               Expanded(child: Text('检测详情: ${q.productName}', style: const TextStyle(color: AppTheme.offWhite, fontSize: 16, fontWeight: FontWeight.w600))),
+              // 删除按钮
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: AppTheme.danger, size: 20),
+                onPressed: () async {
+                  final confirm = await showDialog<bool>(
+                    context: ctx,
+                    builder: (dCtx) => AlertDialog(
+                      backgroundColor: AppTheme.navyLight,
+                      title: const Text('删除检测记录', style: TextStyle(color: AppTheme.offWhite, fontSize: 15)),
+                      content: Text('确认删除 ${q.productName} 的检测记录?', style: const TextStyle(color: AppTheme.slate)),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(dCtx, false), child: const Text('取消')),
+                        TextButton(onPressed: () => Navigator.pop(dCtx, true), child: const Text('删除', style: TextStyle(color: AppTheme.danger))),
+                      ],
+                    ),
+                  );
+                  if (confirm == true) {
+                    await crm.deleteQcRecord(q.id);
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('检测记录已删除'), backgroundColor: AppTheme.danger));
+                    }
+                  }
+                },
+              ),
               IconButton(icon: const Icon(Icons.close, color: AppTheme.slate), onPressed: () => Navigator.pop(ctx)),
             ]),
             const SizedBox(height: 12),
