@@ -157,6 +157,7 @@ class Contact {
   List<String> decisionFactors; // 13. 采购决策重点(价格/效果/合规等)
   String industryResources;     // 14. 可对接的行业资源
   String otherNeeds;            // 15. 其他需求
+  String coverageMarkets;       // 覆盖市场(日本/中国/东南亚等)
 
   // ========== 新增: 逐产品兴趣 (覆盖需求10/11/15中的具体量) ==========
   List<ProductInterest> productInterests;
@@ -195,6 +196,7 @@ class Contact {
     List<String>? decisionFactors,
     this.industryResources = '',
     this.otherNeeds = '',
+    this.coverageMarkets = '',
     List<ProductInterest>? productInterests,
   })  : createdAt = createdAt ?? DateTime.now(),
         lastContactedAt = lastContactedAt ?? DateTime.now(),
@@ -249,6 +251,7 @@ class Contact {
         'decisionFactors': decisionFactors,
         'industryResources': industryResources,
         'otherNeeds': otherNeeds,
+        'coverageMarkets': coverageMarkets,
         'productInterests': productInterests.map((p) => p.toJson()).toList(),
       };
 
@@ -299,6 +302,7 @@ class Contact {
         decisionFactors: List<String>.from(json['decisionFactors'] ?? []),
         industryResources: json['industryResources'] as String? ?? '',
         otherNeeds: json['otherNeeds'] as String? ?? '',
+        coverageMarkets: json['coverageMarkets'] as String? ?? '',
         productInterests: (json['productInterests'] as List?)
             ?.map((p) => ProductInterest.fromJson(p as Map<String, dynamic>))
             .toList() ?? [],

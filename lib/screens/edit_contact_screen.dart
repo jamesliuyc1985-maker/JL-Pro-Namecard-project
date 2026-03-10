@@ -35,6 +35,7 @@ class _EditContactScreenState extends State<EditContactScreen> {
 
   // === 资源与备注 ===
   late TextEditingController _industryResourcesCtrl, _otherNeedsCtrl, _notesCtrl, _referredByCtrl;
+  late TextEditingController _coverageMarketsCtrl;
 
   // === 产品兴趣 ===
   late List<ProductInterest> _productInterests;
@@ -51,7 +52,7 @@ class _EditContactScreenState extends State<EditContactScreen> {
           _addressCtrl, _nationalityCtrl, _tagsCtrl, _regionCtrl, _contactPersonCtrl,
           _contactPersonPhoneCtrl, _currentBrandsCtrl, _currentMonthlyVolumeCtrl,
           _currentUnitPriceCtrl, _desiredEffectsCtrl, _coopModeCtrl,
-          _industryResourcesCtrl, _otherNeedsCtrl, _notesCtrl, _referredByCtrl]) {
+          _industryResourcesCtrl, _otherNeedsCtrl, _notesCtrl, _referredByCtrl, _coverageMarketsCtrl]) {
         c.dispose();
       }
     }
@@ -88,6 +89,7 @@ class _EditContactScreenState extends State<EditContactScreen> {
 
     _industryResourcesCtrl = TextEditingController(text: contact.industryResources);
     _otherNeedsCtrl = TextEditingController(text: contact.otherNeeds);
+    _coverageMarketsCtrl = TextEditingController(text: contact.coverageMarkets);
     _notesCtrl = TextEditingController(text: contact.notes);
     _referredByCtrl = TextEditingController(text: contact.referredBy);
 
@@ -184,6 +186,7 @@ class _EditContactScreenState extends State<EditContactScreen> {
         _field(_emailCtrl, '邮箱', Icons.email, keyboard: TextInputType.emailAddress),
         _field(_addressCtrl, '地址', Icons.location_on),
         _field(_nationalityCtrl, '国籍', Icons.flag),
+        _field(_coverageMarketsCtrl, '覆盖市场 (日本/中国/东南亚等)', Icons.public),
         const SizedBox(height: 8),
         _chipSection('与我的关系', MyRelationType.values.map((r) =>
           _choiceChip(r.label, _myRelation == r, r.color, () => setState(() => _myRelation = r))
@@ -450,6 +453,7 @@ class _EditContactScreenState extends State<EditContactScreen> {
       // 资源备注
       contact.industryResources = _industryResourcesCtrl.text;
       contact.otherNeeds = _otherNeedsCtrl.text;
+      contact.coverageMarkets = _coverageMarketsCtrl.text;
       contact.notes = _notesCtrl.text;
       contact.referredBy = _referredByCtrl.text;
 

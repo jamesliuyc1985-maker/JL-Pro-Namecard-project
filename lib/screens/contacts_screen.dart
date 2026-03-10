@@ -4,6 +4,8 @@ import '../providers/crm_provider.dart';
 import '../models/contact.dart';
 import '../utils/theme.dart';
 import '../utils/formatters.dart';
+import '../utils/pricing_utils.dart';
+import '../widgets/contact_tags_card.dart';
 import 'contact_detail_screen.dart';
 import 'add_contact_screen.dart';
 import 'scan_card_screen.dart';
@@ -206,6 +208,8 @@ class ContactsScreen extends StatelessWidget {
   }
 
   Widget _contactCard(BuildContext context, Contact contact) {
+    final priceType = PricingUtils.contactToPriceType(contact);
+    final priceColor = PricingUtils.priceTypeColor(priceType);
     return GestureDetector(
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ContactDetailScreen(contactId: contact.id))),
       child: Container(
@@ -219,26 +223,29 @@ class ContactsScreen extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // 行1: 姓名 + 强度点 + 价格档
             Row(children: [
               Expanded(child: Text(contact.name, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 15))),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(color: priceColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                child: Text(PricingUtils.priceTypeLabelCn(priceType), style: TextStyle(color: priceColor, fontSize: 9, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(width: 4),
               Container(width: 10, height: 10, decoration: BoxDecoration(color: contact.strength.color, shape: BoxShape.circle)),
             ]),
             const SizedBox(height: 2),
-            Text('${contact.company} | ${contact.position}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 2),
-            Wrap(spacing: 4, runSpacing: 3, children: [
-              _tag(contact.entityType.label, contact.entityType.color),
-              _tag(contact.myRelation.label, contact.myRelation.color),
-              if (contact.region.isNotEmpty) _tag(contact.region, AppTheme.primaryBlue),
-              if (contact.interestedProductCount > 0)
-                _tag('${contact.interestedProductCount}产品', const Color(0xFF00B894)),
-              if (contact.coopModeStr.isNotEmpty)
-                _tag(contact.coopModeStr.length > 6 ? '${contact.coopModeStr.substring(0, 6)}..' : contact.coopModeStr, const Color(0xFFE17055)),
-            ]),
-            const SizedBox(height: 2),
+            // 行2: 公司 | 职位 | 国籍
+            Text(
+              '${contact.company} | ${contact.position}${contact.nationality.isNotEmpty ? ' | ${contact.nationality}' : ''}',
+              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 4),
+            // 行3: 核心标签组 (15个字段的可视化) - 使用共享组件
+            ContactTagsCompact(contact: contact),
+            const SizedBox(height: 3),
+            // 行4: 时间
             Row(children: [
-              if (contact.totalMonthlyBudget > 0)
-                Text('月预算${Formatters.currency(contact.totalMonthlyBudget)}', style: const TextStyle(color: AppTheme.accentGold, fontSize: 10, fontWeight: FontWeight.w600)),
               const Spacer(),
               Text(Formatters.timeAgo(contact.lastContactedAt), style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.7), fontSize: 11)),
             ]),
@@ -248,11 +255,5 @@ class ContactsScreen extends StatelessWidget {
     );
   }
 
-  Widget _tag(String text, Color c) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-      decoration: BoxDecoration(color: c.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
-      child: Text(text, style: TextStyle(color: c, fontSize: 10, fontWeight: FontWeight.w600)),
-    );
-  }
+
 }

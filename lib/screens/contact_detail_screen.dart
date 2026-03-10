@@ -10,6 +10,8 @@ import '../models/contact_assignment.dart';
 import '../models/team.dart';
 import '../utils/theme.dart';
 import '../utils/formatters.dart';
+import '../utils/pricing_utils.dart';
+import '../widgets/contact_tags_card.dart';
 import 'edit_contact_screen.dart';
 
 class ContactDetailScreen extends StatelessWidget {
@@ -35,7 +37,9 @@ class ContactDetailScreen extends StatelessWidget {
               SliverToBoxAdapter(child: _buildRelationBadges(contact)),
               SliverToBoxAdapter(child: _buildInfoCards(context, contact)),
               SliverToBoxAdapter(child: _buildActionButtons(context, crm, contact)),
-              // === 业务画像 (新增) ===
+              // === 客户标15标签汇总 ===
+              SliverToBoxAdapter(child: ContactTagsFullCard(contact: contact)),
+              // === 业务画像 ===
               SliverToBoxAdapter(child: _buildBusinessProfile(contact)),
               // === 产品兴趣 (新增) ===
               SliverToBoxAdapter(child: _buildProductInterests(contact, crm)),
@@ -106,6 +110,7 @@ class ContactDetailScreen extends StatelessWidget {
   }
 
   Widget _buildRelationBadges(Contact contact) {
+    final priceType = PricingUtils.contactToPriceType(contact);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Wrap(spacing: 6, runSpacing: 6, alignment: WrapAlignment.center, children: [
@@ -113,8 +118,12 @@ class ContactDetailScreen extends StatelessWidget {
         _badge('与我：${contact.myRelation.label}', contact.myRelation.color, Icons.link),
         _badge(contact.strength.label, contact.strength.color, Icons.circle, iconSize: 8),
         _badge(contact.entityType.label, contact.entityType.color, contact.entityType.icon),
+        _badge(PricingUtils.priceTypeLabelCn(priceType), PricingUtils.priceTypeColor(priceType), Icons.price_check, iconSize: 12),
+        if (contact.nationality.isNotEmpty) _badge(contact.nationality, const Color(0xFF636E72), Icons.flag, iconSize: 12),
         if (contact.region.isNotEmpty) _badge(contact.region, AppTheme.primaryBlue, Icons.map, iconSize: 12),
+        if (contact.coverageMarkets.isNotEmpty) _badge('覆盖: ${contact.coverageMarkets}', const Color(0xFF00CEC9), Icons.public, iconSize: 12),
         if (contact.hasUsedExosome) _badge('已用过同类产品', const Color(0xFF00B894), Icons.check_circle, iconSize: 12),
+        if (contact.coopModeStr.isNotEmpty) _badge(contact.coopModeStr, const Color(0xFFE17055), Icons.handshake, iconSize: 12),
       ]),
     );
   }
@@ -137,7 +146,8 @@ class ContactDetailScreen extends StatelessWidget {
         if (contact.phone.isNotEmpty) _infoRowTappable(Icons.phone, contact.phone, AppTheme.primaryBlue, () => _makeCall(context, contact.phone)),
         if (contact.email.isNotEmpty) _infoRowTappable(Icons.email, contact.email, AppTheme.primaryPurple, () => _sendEmail(context, contact.email, contact.name)),
         if (contact.address.isNotEmpty) _infoRow(Icons.location_on, contact.address, AppTheme.success),
-        if (contact.nationality.isNotEmpty) _infoRow(Icons.flag, '国籍: ${contact.nationality}', AppTheme.info),
+        if (contact.nationality.isNotEmpty) _infoRow(Icons.flag, '国籍: ${contact.nationality}', const Color(0xFF636E72)),
+        if (contact.coverageMarkets.isNotEmpty) _infoRow(Icons.public, '覆盖市场: ${contact.coverageMarkets}', const Color(0xFF00CEC9)),
         if (contact.contactPerson.isNotEmpty) _infoRow(Icons.person_outline, '负责人: ${contact.contactPerson}${contact.contactPersonPhone.isNotEmpty ? ' (${contact.contactPersonPhone})' : ''}', const Color(0xFFE17055)),
         if (contact.referredBy.isNotEmpty) _infoRow(Icons.handshake, '引荐人: ${contact.referredBy}', AppTheme.warning),
       ]),

@@ -127,6 +127,14 @@ class PricingUtils {
     if (c.region.isNotEmpty) {
       tags.add(_TagInfo(c.region, const Color(0xFF74B9FF)));
     }
+    // 国籍
+    if (c.nationality.isNotEmpty) {
+      tags.add(_TagInfo(c.nationality, const Color(0xFF636E72)));
+    }
+    // 覆盖市场
+    if (c.coverageMarkets.isNotEmpty) {
+      tags.add(_TagInfo(c.coverageMarkets, const Color(0xFF00CEC9)));
+    }
     // 合作模式
     if (c.coopModeStr.isNotEmpty) {
       tags.add(_TagInfo(c.coopModeStr, const Color(0xFF6C5CE7)));
