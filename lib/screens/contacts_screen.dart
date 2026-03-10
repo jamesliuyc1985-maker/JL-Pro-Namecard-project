@@ -226,32 +226,33 @@ class ContactsScreen extends StatelessWidget {
             const SizedBox(height: 2),
             Text('${contact.company} | ${contact.position}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
             const SizedBox(height: 2),
+            Wrap(spacing: 4, runSpacing: 3, children: [
+              _tag(contact.entityType.label, contact.entityType.color),
+              _tag(contact.myRelation.label, contact.myRelation.color),
+              if (contact.region.isNotEmpty) _tag(contact.region, AppTheme.primaryBlue),
+              if (contact.interestedProductCount > 0)
+                _tag('${contact.interestedProductCount}产品', const Color(0xFF00B894)),
+              if (contact.coopModeStr.isNotEmpty)
+                _tag(contact.coopModeStr.length > 6 ? '${contact.coopModeStr.substring(0, 6)}..' : contact.coopModeStr, const Color(0xFFE17055)),
+            ]),
+            const SizedBox(height: 2),
             Row(children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(color: contact.industry.color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
-                child: Text(contact.industry.label, style: TextStyle(color: contact.industry.color, fontSize: 10, fontWeight: FontWeight.w600)),
-              ),
-              const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(color: contact.myRelation.color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
-                child: Text(contact.myRelation.label, style: TextStyle(color: contact.myRelation.color, fontSize: 10, fontWeight: FontWeight.w600)),
-              ),
-              if (contact.nationality.isNotEmpty) ...[
-                const SizedBox(width: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                  decoration: BoxDecoration(color: AppTheme.info.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
-                  child: Text(contact.nationality, style: const TextStyle(color: AppTheme.info, fontSize: 9, fontWeight: FontWeight.w600)),
-                ),
-              ],
+              if (contact.totalMonthlyBudget > 0)
+                Text('月预算${Formatters.currency(contact.totalMonthlyBudget)}', style: const TextStyle(color: AppTheme.accentGold, fontSize: 10, fontWeight: FontWeight.w600)),
               const Spacer(),
               Text(Formatters.timeAgo(contact.lastContactedAt), style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.7), fontSize: 11)),
             ]),
           ])),
         ]),
       ),
+    );
+  }
+
+  Widget _tag(String text, Color c) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(color: c.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
+      child: Text(text, style: TextStyle(color: c, fontSize: 10, fontWeight: FontWeight.w600)),
     );
   }
 }

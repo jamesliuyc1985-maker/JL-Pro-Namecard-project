@@ -53,6 +53,75 @@ enum MyRelationType {
   bool get isMedChannel => this == agent || this == clinic || this == retailer;
 }
 
+// ========== 主体类型 ==========
+enum EntityType {
+  medAesthetic('医美机构', Icons.spa, Color(0xFFE17055)),
+  clinic('诊所', Icons.local_hospital, Color(0xFF1ABC9C)),
+  daigou('代购', Icons.shopping_bag, Color(0xFF6C5CE7)),
+  distributor('经销商', Icons.store, Color(0xFF0984E3)),
+  personal('个人', Icons.person, Color(0xFF74B9FF)),
+  other('其他', Icons.business, Color(0xFFDFE6E9));
+
+  final String label;
+  final IconData icon;
+  final Color color;
+  const EntityType(this.label, this.icon, this.color);
+}
+
+// ========== 意向合作模式 ==========
+enum CoopMode {
+  wholesale('批发', Color(0xFFE17055)),
+  daigou('代购', Color(0xFF6C5CE7)),
+  agency('代理', Color(0xFF0984E3)),
+  retail('零售', Color(0xFF00B894)),
+  other('其他', Color(0xFFDFE6E9));
+
+  final String label;
+  final Color color;
+  const CoopMode(this.label, this.color);
+}
+
+// ========== 单产品兴趣 ==========
+class ProductInterest {
+  String productId;    // 关联产品ID (prod-exo-001等)
+  String productName;  // 产品名称 (冗余存储方便展示)
+  bool interested;     // 是否感兴趣
+  int monthlyQty;      // 月潜在采购量(瓶)
+  double budgetUnit;   // 目标单价预算(日元)
+  double budgetMonthly;// 月度预算(日元)
+  String notes;        // 单产品备注
+
+  ProductInterest({
+    required this.productId,
+    required this.productName,
+    this.interested = false,
+    this.monthlyQty = 0,
+    this.budgetUnit = 0,
+    this.budgetMonthly = 0,
+    this.notes = '',
+  });
+
+  Map<String, dynamic> toJson() => {
+    'productId': productId,
+    'productName': productName,
+    'interested': interested,
+    'monthlyQty': monthlyQty,
+    'budgetUnit': budgetUnit,
+    'budgetMonthly': budgetMonthly,
+    'notes': notes,
+  };
+
+  factory ProductInterest.fromJson(Map<String, dynamic> json) => ProductInterest(
+    productId: json['productId'] as String? ?? '',
+    productName: json['productName'] as String? ?? '',
+    interested: json['interested'] as bool? ?? false,
+    monthlyQty: (json['monthlyQty'] as num?)?.toInt() ?? 0,
+    budgetUnit: (json['budgetUnit'] as num?)?.toDouble() ?? 0,
+    budgetMonthly: (json['budgetMonthly'] as num?)?.toDouble() ?? 0,
+    notes: json['notes'] as String? ?? '',
+  );
+}
+
 class Contact {
   final String id;
   String name;
@@ -74,6 +143,24 @@ class Contact {
   String? businessCategory; // agent, clinic, retail
   String nationality; // 国籍
 
+  // ========== 新增: 业务画像字段 ==========
+  String region;                // 2. 所在地区
+  EntityType entityType;        // 3. 主体类型
+  String contactPerson;         // 4. 负责人(如果与name不同)
+  String contactPersonPhone;    // 4. 负责人联系方式
+  bool hasUsedExosome;          // 5. 是否使用过外泌体/NAD+等同类产品
+  String currentBrands;         // 6. 目前在用产品品牌
+  String currentMonthlyVolume;  // 7. 现有月均采购/使用量
+  double currentUnitPrice;      // 8. 现有采购单价(日元)
+  String desiredEffects;        // 9. 期望外泌体主要功效
+  String coopModeStr;           // 12. 意向合作模式(存字符串允许多选)
+  List<String> decisionFactors; // 13. 采购决策重点(价格/效果/合规等)
+  String industryResources;     // 14. 可对接的行业资源
+  String otherNeeds;            // 15. 其他需求
+
+  // ========== 新增: 逐产品兴趣 (覆盖需求10/11/15中的具体量) ==========
+  List<ProductInterest> productInterests;
+
   Contact({
     required this.id,
     required this.name,
@@ -94,9 +181,39 @@ class Contact {
     this.avatarUrl,
     this.businessCategory,
     this.nationality = '',
+    // 新增字段默认值
+    this.region = '',
+    this.entityType = EntityType.other,
+    this.contactPerson = '',
+    this.contactPersonPhone = '',
+    this.hasUsedExosome = false,
+    this.currentBrands = '',
+    this.currentMonthlyVolume = '',
+    this.currentUnitPrice = 0,
+    this.desiredEffects = '',
+    this.coopModeStr = '',
+    List<String>? decisionFactors,
+    this.industryResources = '',
+    this.otherNeeds = '',
+    List<ProductInterest>? productInterests,
   })  : createdAt = createdAt ?? DateTime.now(),
         lastContactedAt = lastContactedAt ?? DateTime.now(),
-        tags = tags ?? [];
+        tags = tags ?? [],
+        decisionFactors = decisionFactors ?? [],
+        productInterests = productInterests ?? [];
+
+  // === 便利 getter ===
+  /// 月潜在采购总量(所有感兴趣产品)
+  int get totalMonthlyPotential =>
+      productInterests.where((p) => p.interested).fold(0, (s, p) => s + p.monthlyQty);
+
+  /// 月度总预算
+  double get totalMonthlyBudget =>
+      productInterests.where((p) => p.interested).fold(0.0, (s, p) => s + p.budgetMonthly);
+
+  /// 感兴趣的产品数量
+  int get interestedProductCount =>
+      productInterests.where((p) => p.interested).length;
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -118,6 +235,21 @@ class Contact {
         'avatarUrl': avatarUrl,
         'businessCategory': businessCategory,
         'nationality': nationality,
+        // 新增字段
+        'region': region,
+        'entityType': entityType.name,
+        'contactPerson': contactPerson,
+        'contactPersonPhone': contactPersonPhone,
+        'hasUsedExosome': hasUsedExosome,
+        'currentBrands': currentBrands,
+        'currentMonthlyVolume': currentMonthlyVolume,
+        'currentUnitPrice': currentUnitPrice,
+        'desiredEffects': desiredEffects,
+        'coopModeStr': coopModeStr,
+        'decisionFactors': decisionFactors,
+        'industryResources': industryResources,
+        'otherNeeds': otherNeeds,
+        'productInterests': productInterests.map((p) => p.toJson()).toList(),
       };
 
   factory Contact.fromJson(Map<String, dynamic> json) => Contact(
@@ -150,6 +282,26 @@ class Contact {
         avatarUrl: json['avatarUrl'] as String?,
         businessCategory: json['businessCategory'] as String?,
         nationality: json['nationality'] as String? ?? '',
+        // 新增字段
+        region: json['region'] as String? ?? '',
+        entityType: EntityType.values.firstWhere(
+          (e) => e.name == json['entityType'],
+          orElse: () => EntityType.other,
+        ),
+        contactPerson: json['contactPerson'] as String? ?? '',
+        contactPersonPhone: json['contactPersonPhone'] as String? ?? '',
+        hasUsedExosome: json['hasUsedExosome'] as bool? ?? false,
+        currentBrands: json['currentBrands'] as String? ?? '',
+        currentMonthlyVolume: json['currentMonthlyVolume'] as String? ?? '',
+        currentUnitPrice: (json['currentUnitPrice'] as num?)?.toDouble() ?? 0,
+        desiredEffects: json['desiredEffects'] as String? ?? '',
+        coopModeStr: json['coopModeStr'] as String? ?? '',
+        decisionFactors: List<String>.from(json['decisionFactors'] ?? []),
+        industryResources: json['industryResources'] as String? ?? '',
+        otherNeeds: json['otherNeeds'] as String? ?? '',
+        productInterests: (json['productInterests'] as List?)
+            ?.map((p) => ProductInterest.fromJson(p as Map<String, dynamic>))
+            .toList() ?? [],
       );
 }
 
@@ -172,11 +324,11 @@ class ContactRelation {
   String toContactId;
   String fromName;
   String toName;
-  String relationType; // 同事、合伙人、客户-供应商、朋友、校友等
-  RelationStrength strength; // 关系强度
-  bool isBidirectional; // 是否双向关系
+  String relationType;
+  RelationStrength strength;
+  bool isBidirectional;
   String description;
-  List<String> tags; // 关系标签（商业、私人、合作、竞争、上下游等）
+  List<String> tags;
   DateTime createdAt;
 
   ContactRelation({
@@ -225,20 +377,17 @@ class ContactRelation {
         createdAt: DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
       );
 
-  /// 预设关系类型
   static const List<String> presetRelationTypes = [
     '合伙人', '客户-供应商', '同行/同业', '上下级', '校友',
     '朋友', '家族/亲属', '投资人-创业者', '介绍人-被介绍人', '导师-学生',
     '渠道伙伴', '竞争对手', '行业协会',
   ];
 
-  /// 预定义关系标签
   static const List<String> presetTags = [
     '商业伙伴', '私人关系', '上下游', '竞争对手', '投资关系',
     '引荐人', '校友', '同事', '家族', '行业联盟',
   ];
 
-  /// 标签对应颜色
   static Color tagColor(String tag) {
     switch (tag) {
       case '商业伙伴': return const Color(0xFF0984E3);

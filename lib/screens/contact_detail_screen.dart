@@ -35,9 +35,12 @@ class ContactDetailScreen extends StatelessWidget {
               SliverToBoxAdapter(child: _buildRelationBadges(contact)),
               SliverToBoxAdapter(child: _buildInfoCards(context, contact)),
               SliverToBoxAdapter(child: _buildActionButtons(context, crm, contact)),
-              // === 销售统计板块 (新增) ===
+              // === 业务画像 (新增) ===
+              SliverToBoxAdapter(child: _buildBusinessProfile(contact)),
+              // === 产品兴趣 (新增) ===
+              SliverToBoxAdapter(child: _buildProductInterests(contact, crm)),
+              // === 销售统计 ===
               SliverToBoxAdapter(child: _buildSalesStatsSection(salesStats)),
-              // === 合作历史/订单板块 (新增) ===
               SliverToBoxAdapter(child: _buildOrderHistorySection(crm, salesStats)),
               SliverToBoxAdapter(child: _buildAssignmentSection(context, crm, contact, assignments)),
               if (relations.isNotEmpty) SliverToBoxAdapter(child: _buildRelationsSection(relations)),
@@ -52,6 +55,7 @@ class ContactDetailScreen extends StatelessWidget {
     );
   }
 
+  // ========== Header ==========
   Widget _buildHeader(BuildContext context, CrmProvider crm, Contact contact) {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -62,14 +66,10 @@ class ContactDetailScreen extends StatelessWidget {
         Row(children: [
           IconButton(icon: const Icon(Icons.arrow_back_ios, color: AppTheme.textPrimary), onPressed: () => Navigator.pop(context)),
           const Spacer(),
-          IconButton(
-            icon: const Icon(Icons.edit, color: AppTheme.primaryPurple, size: 22),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => EditContactScreen(contactId: contact.id))),
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline, color: AppTheme.danger, size: 22),
-            onPressed: () => _confirmDelete(context, crm, contact),
-          ),
+          IconButton(icon: const Icon(Icons.edit, color: AppTheme.primaryPurple, size: 22),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => EditContactScreen(contactId: contact.id)))),
+          IconButton(icon: const Icon(Icons.delete_outline, color: AppTheme.danger, size: 22),
+            onPressed: () => _confirmDelete(context, crm, contact)),
         ]),
         const SizedBox(height: 8),
         Container(
@@ -79,10 +79,7 @@ class ContactDetailScreen extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Text(contact.name, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
-        if (contact.nameReading.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Text(contact.nameReading, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
-        ],
+        if (contact.nameReading.isNotEmpty) ...[const SizedBox(height: 4), Text(contact.nameReading, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13))],
         const SizedBox(height: 6),
         Text('${contact.company} | ${contact.position}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
       ]),
@@ -99,14 +96,8 @@ class ContactDetailScreen extends StatelessWidget {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
           TextButton(
-            onPressed: () {
-              crm.deleteContact(contact.id);
-              Navigator.pop(ctx);
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('${contact.name} 已删除'), backgroundColor: AppTheme.danger),
-              );
-            },
+            onPressed: () { crm.deleteContact(contact.id); Navigator.pop(ctx); Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${contact.name} 已删除'), backgroundColor: AppTheme.danger)); },
             child: const Text('删除', style: TextStyle(color: AppTheme.danger)),
           ),
         ],
@@ -117,12 +108,13 @@ class ContactDetailScreen extends StatelessWidget {
   Widget _buildRelationBadges(Contact contact) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+      child: Wrap(spacing: 6, runSpacing: 6, alignment: WrapAlignment.center, children: [
         _badge(contact.industry.label, contact.industry.color, contact.industry.icon),
-        const SizedBox(width: 8),
         _badge('与我：${contact.myRelation.label}', contact.myRelation.color, Icons.link),
-        const SizedBox(width: 8),
         _badge(contact.strength.label, contact.strength.color, Icons.circle, iconSize: 8),
+        _badge(contact.entityType.label, contact.entityType.color, contact.entityType.icon),
+        if (contact.region.isNotEmpty) _badge(contact.region, AppTheme.primaryBlue, Icons.map, iconSize: 12),
+        if (contact.hasUsedExosome) _badge('已用过同类产品', const Color(0xFF00B894), Icons.check_circle, iconSize: 12),
       ]),
     );
   }
@@ -132,8 +124,7 @@ class ContactDetailScreen extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(color: color.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, color: color, size: iconSize),
-        const SizedBox(width: 4),
+        Icon(icon, color: color, size: iconSize), const SizedBox(width: 4),
         Text(text, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
       ]),
     );
@@ -147,6 +138,7 @@ class ContactDetailScreen extends StatelessWidget {
         if (contact.email.isNotEmpty) _infoRowTappable(Icons.email, contact.email, AppTheme.primaryPurple, () => _sendEmail(context, contact.email, contact.name)),
         if (contact.address.isNotEmpty) _infoRow(Icons.location_on, contact.address, AppTheme.success),
         if (contact.nationality.isNotEmpty) _infoRow(Icons.flag, '国籍: ${contact.nationality}', AppTheme.info),
+        if (contact.contactPerson.isNotEmpty) _infoRow(Icons.person_outline, '负责人: ${contact.contactPerson}${contact.contactPersonPhone.isNotEmpty ? ' (${contact.contactPersonPhone})' : ''}', const Color(0xFFE17055)),
         if (contact.referredBy.isNotEmpty) _infoRow(Icons.handshake, '引荐人: ${contact.referredBy}', AppTheme.warning),
       ]),
     );
@@ -201,7 +193,135 @@ class ContactDetailScreen extends StatelessWidget {
     );
   }
 
-  // ========== 销售统计板块 (新增) ==========
+  // ========== 业务画像 (新增) ==========
+  Widget _buildBusinessProfile(Contact contact) {
+    final hasData = contact.currentBrands.isNotEmpty || contact.currentMonthlyVolume.isNotEmpty ||
+        contact.currentUnitPrice > 0 || contact.desiredEffects.isNotEmpty ||
+        contact.coopModeStr.isNotEmpty || contact.decisionFactors.isNotEmpty ||
+        contact.industryResources.isNotEmpty || contact.otherNeeds.isNotEmpty;
+
+    if (!hasData && !contact.hasUsedExosome) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Row(children: [
+          Icon(Icons.business_center, color: Color(0xFFE17055), size: 18),
+          SizedBox(width: 6),
+          Text('业务画像', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+        ]),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (contact.hasUsedExosome) _kvRow('同类产品经验', '已使用过', const Color(0xFF00B894)),
+            if (contact.currentBrands.isNotEmpty) _kvRow('在用品牌', contact.currentBrands, AppTheme.primaryBlue),
+            if (contact.currentMonthlyVolume.isNotEmpty) _kvRow('月均采购量', contact.currentMonthlyVolume, AppTheme.warning),
+            if (contact.currentUnitPrice > 0) _kvRow('现有采购单价', Formatters.currency(contact.currentUnitPrice), AppTheme.accentGold),
+            if (contact.desiredEffects.isNotEmpty) _kvRow('期望功效', contact.desiredEffects, AppTheme.primaryPurple),
+            if (contact.coopModeStr.isNotEmpty) _kvRow('意向合作模式', contact.coopModeStr, const Color(0xFFE17055)),
+            if (contact.decisionFactors.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              const Text('采购决策重点', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+              const SizedBox(height: 4),
+              Wrap(spacing: 6, runSpacing: 4, children: contact.decisionFactors.map((f) => Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(color: AppTheme.primaryPurple.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
+                child: Text(f, style: const TextStyle(color: AppTheme.primaryPurple, fontSize: 11, fontWeight: FontWeight.w600)),
+              )).toList()),
+            ],
+            if (contact.industryResources.isNotEmpty) _kvRow('行业资源', contact.industryResources, const Color(0xFF00CEC9)),
+            if (contact.otherNeeds.isNotEmpty) _kvRow('其他需求', contact.otherNeeds, AppTheme.textSecondary),
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  Widget _kvRow(String label, String value, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        SizedBox(width: 100, child: Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11))),
+        Expanded(child: Text(value, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600))),
+      ]),
+    );
+  }
+
+  // ========== 产品兴趣 (新增) ==========
+  Widget _buildProductInterests(Contact contact, CrmProvider crm) {
+    final interested = contact.productInterests.where((p) => p.interested).toList();
+    if (interested.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.science, color: Color(0xFF00B894), size: 18),
+          const SizedBox(width: 6),
+          Text('产品需求 (${interested.length})', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+          const Spacer(),
+          if (contact.totalMonthlyBudget > 0) Text('月预算 ${Formatters.currency(contact.totalMonthlyBudget)}',
+            style: const TextStyle(color: AppTheme.accentGold, fontSize: 11, fontWeight: FontWeight.w600)),
+        ]),
+        const SizedBox(height: 8),
+        ...interested.map((pi) {
+          final product = crm.products.where((p) => p.id == pi.productId).firstOrNull;
+          final catColor = _categoryColor(product?.category ?? '');
+          return Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: catColor.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: catColor.withValues(alpha: 0.3)),
+            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Container(
+                  width: 8, height: 8,
+                  decoration: BoxDecoration(color: catColor, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: Text(pi.productName, style: TextStyle(color: catColor, fontWeight: FontWeight.w600, fontSize: 13))),
+              ]),
+              const SizedBox(height: 6),
+              Row(children: [
+                if (pi.monthlyQty > 0) _piTag('月${pi.monthlyQty}瓶', catColor),
+                if (pi.budgetUnit > 0) _piTag('目标单价 ${Formatters.currency(pi.budgetUnit)}', AppTheme.accentGold),
+                if (pi.budgetMonthly > 0) _piTag('月预算 ${Formatters.currency(pi.budgetMonthly)}', AppTheme.warning),
+              ]),
+              if (pi.notes.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(pi.notes, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+              ],
+            ]),
+          );
+        }),
+      ]),
+    );
+  }
+
+  Widget _piTag(String text, Color color) {
+    return Container(
+      margin: const EdgeInsets.only(right: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
+      child: Text(text, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600)),
+    );
+  }
+
+  Color _categoryColor(String cat) {
+    switch (cat) {
+      case 'exosome': return const Color(0xFF00B894);
+      case 'nad': return const Color(0xFFE17055);
+      case 'nmn': return const Color(0xFF0984E3);
+      default: return AppTheme.primaryPurple;
+    }
+  }
+
+  // ========== 销售统计 ==========
   Widget _buildSalesStatsSection(Map<String, dynamic> stats) {
     final int totalOrders = stats['totalOrders'] ?? 0;
     final double totalAmount = (stats['totalAmount'] ?? 0).toDouble();
@@ -210,35 +330,16 @@ class ContactDetailScreen extends StatelessWidget {
     final int activeDeals = stats['activeDeals'] ?? 0;
     final double pipelineValue = (stats['pipelineValue'] ?? 0).toDouble();
 
-    if (totalOrders == 0 && activeDeals == 0) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            const Icon(Icons.analytics, color: AppTheme.accentGold, size: 18),
-            const SizedBox(width: 6),
-            const Text('销售统计', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
-          ]),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12)),
-            child: const Center(child: Text('暂无销售记录', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13))),
-          ),
-        ]),
-      );
-    }
+    if (totalOrders == 0 && activeDeals == 0) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          const Icon(Icons.analytics, color: AppTheme.accentGold, size: 18),
-          const SizedBox(width: 6),
-          const Text('销售统计', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
+        const Row(children: [
+          Icon(Icons.analytics, color: AppTheme.accentGold, size: 18), SizedBox(width: 6),
+          Text('销售统计', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
         ]),
         const SizedBox(height: 8),
-        // KPI row
         Row(children: [
           Expanded(child: _statCard('总订单', '$totalOrders', AppTheme.primaryPurple, Icons.receipt_long)),
           const SizedBox(width: 8),
@@ -263,17 +364,10 @@ class ContactDetailScreen extends StatelessWidget {
   Widget _statCard(String label, String value, Color color, IconData icon) {
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppTheme.cardBg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
+      decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withValues(alpha: 0.3))),
       child: Row(children: [
-        Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-          child: Icon(icon, color: color, size: 16),
-        ),
+        Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+          child: Icon(icon, color: color, size: 16)),
         const SizedBox(width: 8),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
@@ -283,54 +377,39 @@ class ContactDetailScreen extends StatelessWidget {
     );
   }
 
-  // ========== 合作历史/订单板块 (新增) ==========
+  // ========== 合作历史/订单 ==========
   Widget _buildOrderHistorySection(CrmProvider crm, Map<String, dynamic> stats) {
     final List<SalesOrder> contactOrders = (stats['orders'] as List<SalesOrder>?) ?? [];
     if (contactOrders.isEmpty) return const SizedBox.shrink();
-
-    // 按时间倒序
     final sorted = List<SalesOrder>.from(contactOrders)..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          const Icon(Icons.history, color: AppTheme.primaryBlue, size: 18),
-          const SizedBox(width: 6),
+          const Icon(Icons.history, color: AppTheme.primaryBlue, size: 18), const SizedBox(width: 6),
           Text('合作历史 (${sorted.length}单)', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
         ]),
         const SizedBox(height: 8),
         ...sorted.map((order) {
           final statusColor = _orderStatusColor(order.status);
           return Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppTheme.cardBg,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: statusColor.withValues(alpha: 0.3)),
-            ),
+            margin: const EdgeInsets.only(bottom: 8), padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: statusColor.withValues(alpha: 0.3))),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                Icon(Icons.receipt, color: statusColor, size: 14),
-                const SizedBox(width: 6),
-                Expanded(child: Text(
-                  '订单 ${order.id.length > 8 ? order.id.substring(0, 8) : order.id}',
-                  style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13),
-                )),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                Icon(Icons.receipt, color: statusColor, size: 14), const SizedBox(width: 6),
+                Expanded(child: Text('订单 ${order.id.length > 8 ? order.id.substring(0, 8) : order.id}',
+                  style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13))),
+                Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
-                  child: Text(SalesOrder.statusLabel(order.status), style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.w600)),
-                ),
+                  child: Text(SalesOrder.statusLabel(order.status), style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.w600))),
               ]),
               const SizedBox(height: 6),
-              // 产品明细
               ...order.items.map((item) => Padding(
                 padding: const EdgeInsets.only(left: 20, bottom: 2),
                 child: Row(children: [
-                  const Icon(Icons.circle, color: AppTheme.textSecondary, size: 4),
-                  const SizedBox(width: 6),
+                  const Icon(Icons.circle, color: AppTheme.textSecondary, size: 4), const SizedBox(width: 6),
                   Expanded(child: Text('${item.productName} x${item.quantity}', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11))),
                   Text(Formatters.currency(item.subtotal), style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
                 ]),
@@ -363,8 +442,7 @@ class ContactDetailScreen extends StatelessWidget {
   void _makeCall(BuildContext context, String phone) async {
     if (phone.isEmpty) { _showSnack(context, '无电话号码'); return; }
     final uri = Uri.parse('tel:$phone');
-    try {
-      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try { final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!ok && context.mounted) { _showSnack(context, '无法拨打 $phone（请在手机上试）'); }
     } catch (_) { if (context.mounted) { _showSnack(context, '无法拨打 $phone'); } }
   }
@@ -372,8 +450,7 @@ class ContactDetailScreen extends StatelessWidget {
   void _sendSms(BuildContext context, String phone) async {
     if (phone.isEmpty) { _showSnack(context, '无电话号码'); return; }
     final uri = Uri.parse('sms:$phone');
-    try {
-      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try { final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!ok && context.mounted) { _showSnack(context, '无法发送短信（请在手机上试）'); }
     } catch (_) { if (context.mounted) { _showSnack(context, '无法发送短信'); } }
   }
@@ -381,8 +458,7 @@ class ContactDetailScreen extends StatelessWidget {
   void _sendEmail(BuildContext context, String email, String name) async {
     if (email.isEmpty) { _showSnack(context, '无邮箱地址'); return; }
     final uri = Uri.parse('mailto:$email?subject=Re: $name&body=Dear $name,%0A%0A');
-    try {
-      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try { final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!ok && context.mounted) { _showSnack(context, '无法发送邮件（请在手机上试）'); }
     } catch (_) { if (context.mounted) { _showSnack(context, '无法发送邮件'); } }
   }
@@ -391,7 +467,7 @@ class ContactDetailScreen extends StatelessWidget {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: AppTheme.danger, duration: const Duration(seconds: 2)));
   }
 
-  // ========== Contact Assignment (Team-Contact Work Stage) ==========
+  // ========== Contact Assignment ==========
   Widget _buildAssignmentSection(BuildContext context, CrmProvider crm, Contact contact, List<ContactAssignment> assignments) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -422,44 +498,27 @@ class ContactDetailScreen extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 6), padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12)),
               child: Row(children: [
-                Container(
-                  width: 36, height: 36,
+                Container(width: 36, height: 36,
                   decoration: BoxDecoration(color: stageColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(10)),
-                  child: Center(child: Text(a.memberName.isNotEmpty ? a.memberName[0] : '?',
-                    style: TextStyle(color: stageColor, fontWeight: FontWeight.bold, fontSize: 16))),
-                ),
+                  child: Center(child: Text(a.memberName.isNotEmpty ? a.memberName[0] : '?', style: TextStyle(color: stageColor, fontWeight: FontWeight.bold, fontSize: 16)))),
                 const SizedBox(width: 10),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(a.memberName, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
                   if (a.notes.isNotEmpty) Text(a.notes, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
                 ])),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(color: stageColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
-                  child: Text(a.stage.label, style: TextStyle(color: stageColor, fontSize: 10, fontWeight: FontWeight.w600)),
-                ),
+                  child: Text(a.stage.label, style: TextStyle(color: stageColor, fontSize: 10, fontWeight: FontWeight.w600))),
                 PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert, color: AppTheme.textSecondary, size: 16),
-                  color: AppTheme.cardBgLight,
+                  icon: const Icon(Icons.more_vert, color: AppTheme.textSecondary, size: 16), color: AppTheme.cardBgLight,
                   onSelected: (action) {
-                    if (action == 'delete') {
-                      crm.deleteAssignment(a.id);
-                    } else {
-                      final newStage = ContactWorkStage.values.firstWhere((s) => s.name == action);
-                      a.stage = newStage;
-                      a.updatedAt = DateTime.now();
-                      crm.updateAssignment(a);
-                    }
+                    if (action == 'delete') { crm.deleteAssignment(a.id); }
+                    else { a.stage = ContactWorkStage.values.firstWhere((s) => s.name == action); a.updatedAt = DateTime.now(); crm.updateAssignment(a); }
                   },
                   itemBuilder: (_) => [
-                    ...ContactWorkStage.values.where((s) => s != a.stage).map((s) => PopupMenuItem(
-                      value: s.name,
-                      child: Row(children: [
-                        Container(width: 8, height: 8, decoration: BoxDecoration(color: _workStageColor(s), shape: BoxShape.circle)),
-                        const SizedBox(width: 8),
-                        Text(s.label, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12)),
-                      ]),
-                    )),
+                    ...ContactWorkStage.values.where((s) => s != a.stage).map((s) => PopupMenuItem(value: s.name,
+                      child: Row(children: [Container(width: 8, height: 8, decoration: BoxDecoration(color: _workStageColor(s), shape: BoxShape.circle)), const SizedBox(width: 8),
+                        Text(s.label, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12))]))),
                     const PopupMenuItem(value: 'delete', child: Text('删除', style: TextStyle(color: AppTheme.danger, fontSize: 12))),
                   ],
                 ),
@@ -482,17 +541,11 @@ class ContactDetailScreen extends StatelessWidget {
   }
 
   void _showAddAssignmentDialog(BuildContext context, CrmProvider crm, Contact contact) {
-    String? selectedMemberId;
-    String selectedMemberName = '';
+    String? selectedMemberId; String selectedMemberName = '';
     ContactWorkStage selectedStage = ContactWorkStage.lead;
     final notesCtrl = TextEditingController();
     final members = crm.teamMembers;
-
-    if (members.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先在团队板块中添加成员'), backgroundColor: AppTheme.warning));
-      return;
-    }
+    if (members.isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先在团队板块中添加成员'), backgroundColor: AppTheme.warning)); return; }
 
     showModalBottomSheet(
       context: context, isScrollControlled: true, backgroundColor: AppTheme.cardBg,
@@ -507,26 +560,20 @@ class ContactDetailScreen extends StatelessWidget {
               DropdownButtonFormField<String>(
                 initialValue: selectedMemberId,
                 decoration: const InputDecoration(labelText: '选择团队成员', prefixIcon: Icon(Icons.person, color: AppTheme.textSecondary, size: 20)),
-                dropdownColor: AppTheme.cardBgLight,
-                style: const TextStyle(color: AppTheme.textPrimary),
+                dropdownColor: AppTheme.cardBgLight, style: const TextStyle(color: AppTheme.textPrimary),
                 items: members.map((m) => DropdownMenuItem(value: m.id, child: Text('${m.name} (${TeamMember.roleLabel(m.role)})', style: const TextStyle(fontSize: 13)))).toList(),
-                onChanged: (v) => setModalState(() {
-                  selectedMemberId = v;
-                  selectedMemberName = members.firstWhere((m) => m.id == v).name;
-                }),
+                onChanged: (v) => setModalState(() { selectedMemberId = v; selectedMemberName = members.firstWhere((m) => m.id == v).name; }),
               ),
               const SizedBox(height: 12),
               const Text('工作阶段', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
               const SizedBox(height: 8),
               Wrap(spacing: 6, runSpacing: 6, children: ContactWorkStage.values.map((stage) {
                 final color = _workStageColor(stage);
-                return ChoiceChip(
-                  label: Text(stage.label), selected: selectedStage == stage,
+                return ChoiceChip(label: Text(stage.label), selected: selectedStage == stage,
                   onSelected: (_) => setModalState(() => selectedStage = stage),
                   selectedColor: color, backgroundColor: AppTheme.cardBgLight,
                   labelStyle: TextStyle(color: selectedStage == stage ? Colors.white : AppTheme.textPrimary, fontSize: 11),
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact,
-                );
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact);
               }).toList()),
               const SizedBox(height: 10),
               TextField(controller: notesCtrl, style: const TextStyle(color: AppTheme.textPrimary),
@@ -534,21 +581,11 @@ class ContactDetailScreen extends StatelessWidget {
               const SizedBox(height: 16),
               SizedBox(width: double.infinity, child: ElevatedButton(
                 onPressed: selectedMemberId == null ? null : () {
-                  crm.addAssignment(ContactAssignment(
-                    id: crm.generateId(),
-                    memberId: selectedMemberId!,
-                    memberName: selectedMemberName,
-                    contactId: contact.id,
-                    contactName: contact.name,
-                    stage: selectedStage,
-                    notes: notesCtrl.text,
-                  ));
+                  crm.addAssignment(ContactAssignment(id: crm.generateId(), memberId: selectedMemberId!, memberName: selectedMemberName,
+                    contactId: contact.id, contactName: contact.name, stage: selectedStage, notes: notesCtrl.text));
                   Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('$selectedMemberName 已被指派负责 ${contact.name}'), backgroundColor: AppTheme.success));
-                },
-                child: const Text('确认指派'),
-              )),
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$selectedMemberName 已被指派负责 ${contact.name}'), backgroundColor: AppTheme.success));
+                }, child: const Text('确认指派'))),
               const SizedBox(height: 16),
             ]),
           );
@@ -569,15 +606,10 @@ class ContactDetailScreen extends StatelessWidget {
           decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12)),
           child: Row(children: [
             const Icon(Icons.link, color: AppTheme.accentGold, size: 16), const SizedBox(width: 8),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('${r.fromName} ↔ ${r.toName}', style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
-              if (r.description.isNotEmpty) Text(r.description, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
-            ])),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            Expanded(child: Text('${r.fromName} ↔ ${r.toName}', style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13))),
+            Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(color: AppTheme.accentGold.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-              child: Text(r.relationType, style: const TextStyle(color: AppTheme.accentGold, fontSize: 10, fontWeight: FontWeight.w600)),
-            ),
+              child: Text(r.relationType, style: const TextStyle(color: AppTheme.accentGold, fontSize: 10, fontWeight: FontWeight.w600))),
           ]),
         )),
       ]),
@@ -624,21 +656,15 @@ class ContactDetailScreen extends StatelessWidget {
         ]),
         const SizedBox(height: 8),
         if (interactions.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12)),
-            child: const Center(child: Text('暂无记录', style: TextStyle(color: AppTheme.textSecondary))),
-          )
+          Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12)),
+            child: const Center(child: Text('暂无记录', style: TextStyle(color: AppTheme.textSecondary))))
         else
           ...interactions.map((i) => Container(
             margin: const EdgeInsets.only(bottom: 6), padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12)),
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: AppTheme.primaryPurple.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-                child: Icon(_typeIcon(i.type), color: AppTheme.primaryPurple, size: 16),
-              ),
+              Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: AppTheme.primaryPurple.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+                child: Icon(_typeIcon(i.type), color: AppTheme.primaryPurple, size: 16)),
               const SizedBox(width: 10),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(i.title, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13)),
@@ -657,11 +683,9 @@ class ContactDetailScreen extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('备注', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
-        Container(
-          width: double.infinity, padding: const EdgeInsets.all(14),
+        Container(width: double.infinity, padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12)),
-          child: Text(contact.notes, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
-        ),
+          child: Text(contact.notes, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13))),
       ]),
     );
   }
@@ -679,8 +703,7 @@ class ContactDetailScreen extends StatelessWidget {
 
   void _showAddInteractionDialog(BuildContext context, CrmProvider crm, Contact contact) {
     InteractionType selectedType = InteractionType.meeting;
-    final titleCtrl = TextEditingController();
-    final notesCtrl = TextEditingController();
+    final titleCtrl = TextEditingController(); final notesCtrl = TextEditingController();
 
     showModalBottomSheet(
       context: context, isScrollControlled: true, backgroundColor: AppTheme.cardBg,
