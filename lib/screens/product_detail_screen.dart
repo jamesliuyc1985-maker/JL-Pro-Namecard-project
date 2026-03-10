@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/crm_provider.dart';
 import '../models/product.dart';
+import '../models/contact.dart';
 import '../utils/theme.dart';
 import '../utils/formatters.dart';
+import '../utils/pricing_utils.dart';
 
 class ProductDetailScreen extends StatelessWidget {
   final String productId;
@@ -215,6 +217,7 @@ class ProductDetailScreen extends StatelessWidget {
     final contacts = crm.allContacts;
     String? selectedContactId;
     String selectedContactName = '';
+    Contact? selectedContact;
     final stock = crm.getProductStock(product.id);
 
     showModalBottomSheet(
@@ -222,12 +225,7 @@ class ProductDetailScreen extends StatelessWidget {
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) {
         return StatefulBuilder(builder: (ctx, setModalState) {
-          double unitPrice;
-          switch (priceType) {
-            case 'agent': unitPrice = product.agentPrice; break;
-            case 'clinic': unitPrice = product.clinicPrice; break;
-            default: unitPrice = product.retailPrice; break;
-          }
+          final unitPrice = PricingUtils.getUnitPrice(product, priceType);
           final total = unitPrice * quantity;
 
           return Padding(
@@ -238,56 +236,39 @@ class ProductDetailScreen extends StatelessWidget {
               Text('库存: $stock', style: TextStyle(color: stock <= 0 ? AppTheme.danger : AppTheme.success, fontSize: 12)),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                initialValue: selectedContactId,
-                decoration: const InputDecoration(labelText: '选择客户', prefixIcon: Icon(Icons.person, color: AppTheme.textSecondary)),
+                value: selectedContactId,
+                decoration: const InputDecoration(labelText: '选择客户 (自动匹配价格)', prefixIcon: Icon(Icons.person, color: AppTheme.textSecondary)),
                 dropdownColor: AppTheme.cardBgLight,
                 style: const TextStyle(color: AppTheme.textPrimary),
-                items: contacts.map((c) => DropdownMenuItem(value: c.id, child: Text('${c.name} - ${c.company}'))).toList(),
+                items: contacts.map((c) {
+                  return DropdownMenuItem(value: c.id, child: Text(PricingUtils.contactDropdownLabel(c), style: const TextStyle(fontSize: 12)));
+                }).toList(),
                 onChanged: (v) => setModalState(() {
                   selectedContactId = v;
                   final c = contacts.firstWhere((c) => c.id == v);
                   selectedContactName = c.name;
+                  selectedContact = c;
+                  priceType = PricingUtils.contactToPriceType(c);
                 }),
               ),
-              const SizedBox(height: 12),
-              Row(children: [
-                const Text('价格类型: ', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
-                ...['agent', 'clinic', 'retail'].map((pt) {
-                  final labels = {'agent': '代理', 'clinic': '诊所', 'retail': '零售'};
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: ChoiceChip(
-                      label: Text(labels[pt]!), selected: priceType == pt,
-                      onSelected: (_) => setModalState(() => priceType = pt),
-                      selectedColor: AppTheme.primaryPurple, backgroundColor: AppTheme.cardBgLight,
-                      labelStyle: TextStyle(color: priceType == pt ? Colors.white : AppTheme.textPrimary, fontSize: 12),
-                    ),
-                  );
-                }),
-              ]),
+              // 客户业务标签
+              if (selectedContact != null) PricingUtils.contactBusinessTags(selectedContact!),
+              const SizedBox(height: 10),
+              // 自动匹配的价格档提示
+              PricingUtils.priceTypeBanner(priceType, product),
               const SizedBox(height: 12),
               Row(children: [
                 const Text('数量: ', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
                 IconButton(icon: const Icon(Icons.remove_circle, color: AppTheme.textSecondary), onPressed: () {
-                  if (quantity > 1) {
-                    setModalState(() { quantity--; qtyCtrl.text = '$quantity'; });
-                  }
+                  if (quantity > 1) { setModalState(() { quantity--; qtyCtrl.text = '$quantity'; }); }
                 }),
-                SizedBox(
-                  width: 60,
-                  child: TextField(
-                    controller: qtyCtrl,
-                    keyboardType: TextInputType.number,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
-                    decoration: InputDecoration(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                      filled: true, fillColor: AppTheme.cardBg,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                    ),
-                    onChanged: (v) => setModalState(() { quantity = int.tryParse(v) ?? 1; if (quantity < 1) { quantity = 1; } }),
-                  ),
-                ),
+                SizedBox(width: 60, child: TextField(
+                  controller: qtyCtrl, keyboardType: TextInputType.number, textAlign: TextAlign.center,
+                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
+                  decoration: InputDecoration(contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8), filled: true, fillColor: AppTheme.cardBg,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none)),
+                  onChanged: (v) => setModalState(() { quantity = int.tryParse(v) ?? 1; if (quantity < 1) { quantity = 1; } }),
+                )),
                 IconButton(icon: const Icon(Icons.add_circle, color: AppTheme.primaryPurple), onPressed: () => setModalState(() { quantity++; qtyCtrl.text = '$quantity'; })),
                 const Spacer(),
                 Text(Formatters.currency(total), style: const TextStyle(color: AppTheme.accentGold, fontSize: 20, fontWeight: FontWeight.bold)),
@@ -296,24 +277,14 @@ class ProductDetailScreen extends StatelessWidget {
               SizedBox(width: double.infinity, child: ElevatedButton(
                 onPressed: selectedContactId == null ? null : () {
                   final order = SalesOrder(
-                    id: crm.generateId(),
-                    contactId: selectedContactId!,
-                    contactName: selectedContactName,
-                    status: 'draft',
-                    items: [OrderItem(
-                      productId: product.id,
-                      productName: product.name,
-                      productCode: product.code,
-                      quantity: quantity,
-                      unitPrice: unitPrice,
-                      subtotal: total,
-                    )],
+                    id: crm.generateId(), contactId: selectedContactId!, contactName: selectedContactName, status: 'draft', priceType: priceType,
+                    items: [OrderItem(productId: product.id, productName: product.name, productCode: product.code, quantity: quantity, unitPrice: unitPrice, subtotal: total)],
                     totalAmount: total,
                   );
                   crm.createOrderWithDeal(order);
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('订单已创建并同步管线: $selectedContactName - ${Formatters.currency(total)}'), backgroundColor: AppTheme.success),
+                    SnackBar(content: Text('订单已创建: $selectedContactName (${PricingUtils.priceTypeLabel(priceType)}) ${Formatters.currency(total)}'), backgroundColor: AppTheme.success),
                   );
                 },
                 child: const Text('确认下单 (同步管线+扣库存)'),

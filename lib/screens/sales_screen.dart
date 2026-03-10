@@ -6,8 +6,9 @@ import '../models/contact.dart';
 import '../models/inventory.dart';
 import '../utils/theme.dart';
 import '../utils/formatters.dart';
+import '../utils/pricing_utils.dart';
 
-/// 客户类型 → 对应价格体系
+/// 客户类型 → 对应价格体系 (现在统一使用PricingUtils)
 class CustomerType {
   static const agent = 'agent';
   static const clinic = 'clinic';
@@ -23,19 +24,12 @@ class CustomerType {
   }
 
   static Color color(String t) {
-    switch (t) {
-      case agent: return AppTheme.primaryPurple;
-      case clinic: return AppTheme.primaryBlue;
-      case retail: return AppTheme.accentGold;
-      default: return AppTheme.textSecondary;
-    }
+    return PricingUtils.priceTypeColor(t);
   }
 
-  /// 根据Contact的relationType自动推断客户类型
+  /// 根据Contact自动推断客户类型 (统一使用PricingUtils)
   static String fromContact(Contact c) {
-    if (c.myRelation == MyRelationType.agent) return agent;
-    if (c.myRelation == MyRelationType.client) return clinic;
-    return retail;
+    return PricingUtils.contactToPriceType(c);
   }
 }
 
@@ -652,11 +646,11 @@ class _NewOrderSheetState extends State<_NewOrderSheet> {
           // 选择客户
           DropdownButtonFormField<String>(
             value: _selectedContactId,
-            decoration: const InputDecoration(labelText: '选择客户', isDense: true),
+            decoration: const InputDecoration(labelText: '选择客户 (自动匹配价格)', isDense: true),
             dropdownColor: AppTheme.cardBgLight,
             style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
             items: contacts.map((c) => DropdownMenuItem(value: c.id,
-              child: Text('${c.name} - ${c.company}', overflow: TextOverflow.ellipsis))).toList(),
+              child: Text(PricingUtils.contactDropdownLabel(c), overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)))).toList(),
             onChanged: (v) => setState(() {
               _selectedContactId = v;
               final c = contacts.firstWhere((c) => c.id == v);
@@ -665,22 +659,11 @@ class _NewOrderSheetState extends State<_NewOrderSheet> {
               _addrCtrl.text = c.address;
             }),
           ),
-          const SizedBox(height: 8),
-
-          // 客户类型（影响定价）
-          Row(children: [
-            const Text('客户类型: ', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-            ...['agent', 'clinic', 'retail'].map((t) => Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: ChoiceChip(
-                label: Text(CustomerType.label(t), style: TextStyle(color: _customerType == t ? Colors.white : AppTheme.textSecondary, fontSize: 11)),
-                selected: _customerType == t,
-                selectedColor: CustomerType.color(t),
-                backgroundColor: AppTheme.cardBgLight,
-                onSelected: (_) => setState(() => _customerType = t),
-              ),
-            )),
-          ]),
+          // 客户业务标签
+          if (_selectedContactId != null) PricingUtils.contactBusinessTags(contacts.firstWhere((c) => c.id == _selectedContactId)),
+          const SizedBox(height: 4),
+          // 自动匹配价格档提示 (替代手动选择)
+          if (_selectedContactId != null) PricingUtils.priceTypeBanner(_customerType, null),
           const SizedBox(height: 8),
 
           // 产品列表（带库存校验）

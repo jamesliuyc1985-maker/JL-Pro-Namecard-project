@@ -10,6 +10,7 @@ import '../models/factory.dart';
 import '../models/team.dart';
 import '../utils/theme.dart';
 import '../utils/formatters.dart';
+import '../utils/pricing_utils.dart';
 
 import 'home_screen.dart';
 
@@ -987,11 +988,10 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
               Flexible(child: ListView(shrinkWrap: true, children: [
                 DropdownButtonFormField<String>(
                   value: selectedContactId,
-                  decoration: const InputDecoration(labelText: '选择客户', contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                  decoration: const InputDecoration(labelText: '选择客户 (自动匹配价格)', contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
                   dropdownColor: AppTheme.navyMid, style: const TextStyle(color: AppTheme.offWhite, fontSize: 12),
                   items: contacts.map((c) {
-                    final relLabel = c.myRelation.isMedChannel ? ' [${c.myRelation.label}]' : '';
-                    return DropdownMenuItem(value: c.id, child: Text('${c.name}$relLabel - ${c.company}', style: const TextStyle(fontSize: 11)));
+                    return DropdownMenuItem(value: c.id, child: Text(PricingUtils.contactDropdownLabel(c), style: const TextStyle(fontSize: 10)));
                   }).toList(),
                   onChanged: (v) {
                     set(() {
@@ -1000,24 +1000,26 @@ class _PipelineScreenState extends State<PipelineScreen> with SingleTickerProvid
                       selectedContactName = contact.name;
                       selectedContactCompany = contact.company;
                       selectedContactPhone = contact.phone;
-                      if (contact.myRelation == MyRelationType.agent) priceType = 'agent';
-                      else if (contact.myRelation == MyRelationType.clinic) priceType = 'clinic';
-                      else if (contact.myRelation == MyRelationType.retailer) priceType = 'retail';
+                      priceType = PricingUtils.contactToPriceType(contact);
                     });
                   },
                 ),
-                const SizedBox(height: 8),
-                const Text('价格类型', style: TextStyle(color: AppTheme.slate, fontSize: 11)),
+                // 客户业务标签
+                if (selectedContactId != null) PricingUtils.contactBusinessTags(contacts.firstWhere((c) => c.id == selectedContactId)),
                 const SizedBox(height: 4),
-                Row(children: ['agent', 'clinic', 'retail'].map((pt) {
-                  final labels = {'agent': '代理', 'clinic': '诊所', 'retail': '零售'};
-                  final sel = priceType == pt;
-                  return Padding(padding: const EdgeInsets.only(right: 6), child: ChoiceChip(
-                    label: Text(labels[pt]!, style: TextStyle(fontSize: 10, color: sel ? AppTheme.navy : AppTheme.offWhite)),
-                    selected: sel, onSelected: (_) => set(() => priceType = pt),
-                    selectedColor: AppTheme.gold, backgroundColor: AppTheme.navyMid,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact));
-                }).toList()),
+                // 自动匹配价格档提示
+                if (selectedContactId != null) Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(color: PricingUtils.priceTypeColor(priceType).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6), border: Border.all(color: PricingUtils.priceTypeColor(priceType).withValues(alpha: 0.3))),
+                    child: Row(children: [
+                      Icon(Icons.price_check, color: PricingUtils.priceTypeColor(priceType), size: 14),
+                      const SizedBox(width: 6),
+                      Text('${PricingUtils.priceTypeLabel(priceType)}', style: TextStyle(color: PricingUtils.priceTypeColor(priceType), fontSize: 11, fontWeight: FontWeight.w600)),
+                    ]),
+                  ),
+                ),
                 const SizedBox(height: 8),
                 const Text('交易阶段', style: TextStyle(color: AppTheme.slate, fontSize: 11)),
                 const SizedBox(height: 4),
