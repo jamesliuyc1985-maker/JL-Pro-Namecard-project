@@ -5,6 +5,7 @@ import '../models/contact.dart';
 import '../utils/theme.dart';
 import '../utils/formatters.dart';
 import '../utils/pricing_utils.dart';
+import '../utils/contact_excel_exporter.dart';
 import '../widgets/contact_tags_card.dart';
 import 'contact_detail_screen.dart';
 import 'add_contact_screen.dart';
@@ -40,6 +41,17 @@ class ContactsScreen extends StatelessWidget {
       child: Row(children: [
         const Text('人脉网络', style: TextStyle(color: AppTheme.textPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
         const Spacer(),
+        IconButton(
+          tooltip: 'Excel导出',
+          icon: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: AppTheme.cardBgLight, borderRadius: BorderRadius.circular(10)),
+            child: const Icon(Icons.download, color: AppTheme.accentGold, size: 20)),
+          onPressed: () {
+            ContactExcelExporter.export(crm);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('人脉数据Excel导出中...'), backgroundColor: AppTheme.success, duration: Duration(seconds: 2)),
+            );
+          },
+        ),
         IconButton(
           tooltip: 'Excel导入',
           icon: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: AppTheme.cardBgLight, borderRadius: BorderRadius.circular(10)),

@@ -65,10 +65,10 @@ class ContactTagsFullCard extends StatelessWidget {
             _tagRowWidget(3, '主体类型', contact.entityType.label, contact.entityType.color, contact.entityType.icon),
             _tagRow(4, '负责人/联系方式', _contactPersonStr(), const Color(0xFFE17055), Icons.person_outline),
             _tagRowBool(5, '使用过外泌体/NAD+', contact.hasUsedExosome),
-            _tagRow(6, '目前在用品牌', contact.currentBrands, const Color(0xFF636E72), Icons.branding_watermark),
-            _tagRow(7, '月均采购量', contact.currentMonthlyVolume, AppTheme.warning, Icons.data_usage),
-            _tagRow(8, '现有采购单价', contact.currentUnitPrice > 0 ? Formatters.currency(contact.currentUnitPrice) : '', AppTheme.accentGold, Icons.price_change),
-            _tagRow(9, '期望主要功效', contact.desiredEffects, AppTheme.primaryPurple, Icons.auto_awesome),
+            _tagRowAgg(6, '目前在用品牌', _aggBrands(), const Color(0xFF636E72), Icons.branding_watermark),
+            _tagRowAgg(7, '月均采购量', _aggVolume(), AppTheme.warning, Icons.data_usage),
+            _tagRowAgg(8, '现有采购单价', _aggUnitPrice(), AppTheme.accentGold, Icons.price_change),
+            _tagRowAgg(9, '期望主要功效', _aggEffects(), AppTheme.primaryPurple, Icons.auto_awesome),
             _tagRowPotential(10, contact),
             _tagRowBudget(11, contact),
             _tagRow(12, '意向合作模式', contact.coopModeStr, const Color(0xFFE17055), Icons.handshake),
@@ -89,6 +89,50 @@ class ContactTagsFullCard extends StatelessWidget {
     return contact.contactPerson;
   }
 
+  // === 从 ProductInterest 聚合字段 (#6~#9) ===
+  String _aggBrands() {
+    // 先从旧contact级别字段取, 再从productInterests聚合
+    final fromPI = contact.productInterests
+        .where((p) => p.interested && p.currentBrand.isNotEmpty)
+        .map((p) => p.currentBrand)
+        .toSet()
+        .join(', ');
+    if (fromPI.isNotEmpty) return fromPI;
+    return contact.currentBrands; // 向后兼容
+  }
+
+  String _aggVolume() {
+    final fromPI = contact.productInterests
+        .where((p) => p.interested && p.currentMonthlyVolume.isNotEmpty)
+        .map((p) => '${p.productName}:${p.currentMonthlyVolume}')
+        .join(', ');
+    if (fromPI.isNotEmpty) return fromPI;
+    return contact.currentMonthlyVolume;
+  }
+
+  String _aggUnitPrice() {
+    final fromPI = contact.productInterests
+        .where((p) => p.interested && p.currentUnitPrice > 0)
+        .map((p) => '${p.productName}:${Formatters.currency(p.currentUnitPrice)}')
+        .join(', ');
+    if (fromPI.isNotEmpty) return fromPI;
+    return contact.currentUnitPrice > 0 ? Formatters.currency(contact.currentUnitPrice) : '';
+  }
+
+  String _aggEffects() {
+    final fromPI = contact.productInterests
+        .where((p) => p.interested && p.desiredEffects.isNotEmpty)
+        .map((p) => p.desiredEffects)
+        .toSet()
+        .join(', ');
+    if (fromPI.isNotEmpty) return fromPI;
+    return contact.desiredEffects;
+  }
+
+  Widget _tagRowAgg(int num, String label, String value, Color color, IconData icon) {
+    return _tagRow(num, label, value, color, icon);
+  }
+
   Widget _completenessIndicator() {
     int filled = 0;
     if (contact.name.isNotEmpty) filled++;
@@ -96,10 +140,11 @@ class ContactTagsFullCard extends StatelessWidget {
     if (contact.entityType != EntityType.other) filled++;
     if (contact.contactPerson.isNotEmpty) filled++;
     if (contact.hasUsedExosome) filled++;
-    if (contact.currentBrands.isNotEmpty) filled++;
-    if (contact.currentMonthlyVolume.isNotEmpty) filled++;
-    if (contact.currentUnitPrice > 0) filled++;
-    if (contact.desiredEffects.isNotEmpty) filled++;
+    // #6-9 从产品兴趣聚合
+    if (_aggBrands().isNotEmpty) filled++;
+    if (_aggVolume().isNotEmpty) filled++;
+    if (_aggUnitPrice().isNotEmpty) filled++;
+    if (_aggEffects().isNotEmpty) filled++;
     if (contact.totalMonthlyPotential > 0) filled++;
     if (contact.totalMonthlyBudget > 0) filled++;
     if (contact.coopModeStr.isNotEmpty) filled++;
@@ -294,18 +339,8 @@ class ContactTagsCompact extends StatelessWidget {
       // #5 用过同类
       if (contact.hasUsedExosome)
         _tag('已用同类', const Color(0xFF00B894), icon: Icons.check_circle),
-      // #6 在用品牌
-      if (contact.currentBrands.isNotEmpty)
-        _tag(_truncate(contact.currentBrands, 6), const Color(0xFF636E72)),
-      // #7 月均量
-      if (contact.currentMonthlyVolume.isNotEmpty)
-        _tag('月${_truncate(contact.currentMonthlyVolume, 6)}', AppTheme.warning),
-      // #8 采购单价
-      if (contact.currentUnitPrice > 0)
-        _tag('现价${Formatters.currency(contact.currentUnitPrice)}', AppTheme.accentGold),
-      // #9 期望功效
-      if (contact.desiredEffects.isNotEmpty)
-        _tag(_truncate(contact.desiredEffects, 6), AppTheme.primaryPurple),
+      // #6 在用品牌 (从产品兴趣聚合)
+      ..._compactBrands(),
       // #10 月潜在量
       if (contact.totalMonthlyPotential > 0)
         _tag('潜在${contact.totalMonthlyPotential}瓶/月', AppTheme.primaryBlue),
@@ -328,6 +363,18 @@ class ContactTagsCompact extends StatelessWidget {
   }
 
   String _truncate(String s, int max) => s.length > max ? '${s.substring(0, max)}..' : s;
+
+  List<Widget> _compactBrands() {
+    final brands = contact.productInterests
+        .where((p) => p.interested && p.currentBrand.isNotEmpty)
+        .map((p) => p.currentBrand)
+        .toSet();
+    // 向后兼容: 旧数据在contact级别
+    if (brands.isEmpty && contact.currentBrands.isNotEmpty) {
+      return [_tag(_truncate(contact.currentBrands, 6), const Color(0xFF636E72))];
+    }
+    return brands.take(2).map((b) => _tag(_truncate(b, 6), const Color(0xFF636E72))).toList();
+  }
 
   Widget _tag(String text, Color c, {IconData? icon}) {
     return Container(

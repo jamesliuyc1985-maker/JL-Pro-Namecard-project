@@ -203,11 +203,9 @@ class ContactDetailScreen extends StatelessWidget {
     );
   }
 
-  // ========== 业务画像 (新增) ==========
+  // ========== 业务画像 ==========
   Widget _buildBusinessProfile(Contact contact) {
-    final hasData = contact.currentBrands.isNotEmpty || contact.currentMonthlyVolume.isNotEmpty ||
-        contact.currentUnitPrice > 0 || contact.desiredEffects.isNotEmpty ||
-        contact.coopModeStr.isNotEmpty || contact.decisionFactors.isNotEmpty ||
+    final hasData = contact.coopModeStr.isNotEmpty || contact.decisionFactors.isNotEmpty ||
         contact.industryResources.isNotEmpty || contact.otherNeeds.isNotEmpty;
 
     if (!hasData && !contact.hasUsedExosome) return const SizedBox.shrink();
@@ -226,10 +224,6 @@ class ContactDetailScreen extends StatelessWidget {
           decoration: BoxDecoration(color: AppTheme.cardBg, borderRadius: BorderRadius.circular(12)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             if (contact.hasUsedExosome) _kvRow('同类产品经验', '已使用过', const Color(0xFF00B894)),
-            if (contact.currentBrands.isNotEmpty) _kvRow('在用品牌', contact.currentBrands, AppTheme.primaryBlue),
-            if (contact.currentMonthlyVolume.isNotEmpty) _kvRow('月均采购量', contact.currentMonthlyVolume, AppTheme.warning),
-            if (contact.currentUnitPrice > 0) _kvRow('现有采购单价', Formatters.currency(contact.currentUnitPrice), AppTheme.accentGold),
-            if (contact.desiredEffects.isNotEmpty) _kvRow('期望功效', contact.desiredEffects, AppTheme.primaryPurple),
             if (contact.coopModeStr.isNotEmpty) _kvRow('意向合作模式', contact.coopModeStr, const Color(0xFFE17055)),
             if (contact.decisionFactors.isNotEmpty) ...[
               const SizedBox(height: 6),
@@ -297,8 +291,25 @@ class ContactDetailScreen extends StatelessWidget {
                 Expanded(child: Text(pi.productName, style: TextStyle(color: catColor, fontWeight: FontWeight.w600, fontSize: 13))),
               ]),
               const SizedBox(height: 6),
+              // 现状行: 在用品牌 + 现有月均量 + 现有单价
+              if (pi.currentBrand.isNotEmpty || pi.currentMonthlyVolume.isNotEmpty || pi.currentUnitPrice > 0)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Wrap(spacing: 4, runSpacing: 3, children: [
+                    if (pi.currentBrand.isNotEmpty) _piTag('现用:${pi.currentBrand}', const Color(0xFF636E72)),
+                    if (pi.currentMonthlyVolume.isNotEmpty) _piTag('月均:${pi.currentMonthlyVolume}', AppTheme.warning),
+                    if (pi.currentUnitPrice > 0) _piTag('现价:${Formatters.currency(pi.currentUnitPrice)}', AppTheme.accentGold),
+                  ]),
+                ),
+              // 期望功效
+              if (pi.desiredEffects.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: _piTag('期望:${pi.desiredEffects}', AppTheme.primaryPurple),
+                ),
+              // 目标行: 月采购量 + 目标单价 + 月预算
               Row(children: [
-                if (pi.monthlyQty > 0) _piTag('月${pi.monthlyQty}瓶', catColor),
+                if (pi.monthlyQty > 0) _piTag('目标月${pi.monthlyQty}瓶', catColor),
                 if (pi.budgetUnit > 0) _piTag('目标单价 ${Formatters.currency(pi.budgetUnit)}', AppTheme.accentGold),
                 if (pi.budgetMonthly > 0) _piTag('月预算 ${Formatters.currency(pi.budgetMonthly)}', AppTheme.warning),
               ]),

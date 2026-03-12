@@ -57,6 +57,8 @@ enum MyRelationType {
 enum EntityType {
   medAesthetic('医美机构', Icons.spa, Color(0xFFE17055)),
   clinic('诊所', Icons.local_hospital, Color(0xFF1ABC9C)),
+  tier1Agent('一级代理', Icons.star, Color(0xFFFF6348)),
+  tier2Agent('二级代理', Icons.star_half, Color(0xFFFFA502)),
   daigou('代购', Icons.shopping_bag, Color(0xFF6C5CE7)),
   distributor('经销商', Icons.store, Color(0xFF0984E3)),
   personal('个人', Icons.person, Color(0xFF74B9FF)),
@@ -81,7 +83,7 @@ enum CoopMode {
   const CoopMode(this.label, this.color);
 }
 
-// ========== 单产品兴趣 ==========
+// ========== 单产品兴趣 (含品牌/用量/单价/功效等逐产品维度) ==========
 class ProductInterest {
   String productId;    // 关联产品ID (prod-exo-001等)
   String productName;  // 产品名称 (冗余存储方便展示)
@@ -90,6 +92,11 @@ class ProductInterest {
   double budgetUnit;   // 目标单价预算(日元)
   double budgetMonthly;// 月度预算(日元)
   String notes;        // 单产品备注
+  // === v26.3: 从Contact级别合并到逐产品级别 ===
+  String currentBrand;         // 该产品目前在用品牌
+  String currentMonthlyVolume; // 该产品现有月均采购/使用量
+  double currentUnitPrice;     // 该产品现有采购单价(日元)
+  String desiredEffects;       // 该产品期望主要功效
 
   ProductInterest({
     required this.productId,
@@ -99,6 +106,10 @@ class ProductInterest {
     this.budgetUnit = 0,
     this.budgetMonthly = 0,
     this.notes = '',
+    this.currentBrand = '',
+    this.currentMonthlyVolume = '',
+    this.currentUnitPrice = 0,
+    this.desiredEffects = '',
   });
 
   Map<String, dynamic> toJson() => {
@@ -109,6 +120,10 @@ class ProductInterest {
     'budgetUnit': budgetUnit,
     'budgetMonthly': budgetMonthly,
     'notes': notes,
+    'currentBrand': currentBrand,
+    'currentMonthlyVolume': currentMonthlyVolume,
+    'currentUnitPrice': currentUnitPrice,
+    'desiredEffects': desiredEffects,
   };
 
   factory ProductInterest.fromJson(Map<String, dynamic> json) => ProductInterest(
@@ -119,6 +134,10 @@ class ProductInterest {
     budgetUnit: (json['budgetUnit'] as num?)?.toDouble() ?? 0,
     budgetMonthly: (json['budgetMonthly'] as num?)?.toDouble() ?? 0,
     notes: json['notes'] as String? ?? '',
+    currentBrand: json['currentBrand'] as String? ?? '',
+    currentMonthlyVolume: json['currentMonthlyVolume'] as String? ?? '',
+    currentUnitPrice: (json['currentUnitPrice'] as num?)?.toDouble() ?? 0,
+    desiredEffects: json['desiredEffects'] as String? ?? '',
   );
 }
 

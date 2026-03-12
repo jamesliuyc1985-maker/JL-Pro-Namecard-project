@@ -17,6 +17,7 @@ class PricingUtils {
     // 2) entityType 次之
     if (c.entityType == EntityType.clinic || c.entityType == EntityType.medAesthetic) return 'clinic';
     if (c.entityType == EntityType.distributor || c.entityType == EntityType.daigou) return 'agent';
+    if (c.entityType == EntityType.tier1Agent || c.entityType == EntityType.tier2Agent) return 'agent';
 
     // 3) coopMode 再次
     if (c.coopModeStr.contains('代理') || c.coopModeStr.contains('批发')) return 'agent';

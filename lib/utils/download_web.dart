@@ -13,3 +13,12 @@ void downloadCsvWeb(String fileName, String csvContent) {
     ..click();
   html.Url.revokeObjectUrl(url);
 }
+
+void downloadExcelWeb(String fileName, Uint8List bytes) {
+  final blob = html.Blob([bytes], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  final url = html.Url.createObjectUrlFromBlob(blob);
+  html.AnchorElement(href: url)
+    ..setAttribute('download', fileName)
+    ..click();
+  html.Url.revokeObjectUrl(url);
+}

@@ -34,10 +34,6 @@ class _AddContactScreenState extends State<AddContactScreen> {
   final _contactPersonCtrl = TextEditingController();
   final _contactPersonPhoneCtrl = TextEditingController();
   bool _hasUsedExosome = false;
-  final _currentBrandsCtrl = TextEditingController();
-  final _currentMonthlyVolumeCtrl = TextEditingController();
-  final _currentUnitPriceCtrl = TextEditingController();
-  final _desiredEffectsCtrl = TextEditingController();
 
   // === 合作意向 ===
   final _coopModeCtrl = TextEditingController();
@@ -61,8 +57,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
   void dispose() {
     for (final c in [_nameCtrl, _readingCtrl, _companyCtrl, _positionCtrl, _phoneCtrl, _emailCtrl,
         _addressCtrl, _nationalityCtrl, _coverageMarketsCtrl, _tagsCtrl, _regionCtrl, _contactPersonCtrl,
-        _contactPersonPhoneCtrl, _currentBrandsCtrl, _currentMonthlyVolumeCtrl,
-        _currentUnitPriceCtrl, _desiredEffectsCtrl, _coopModeCtrl,
+        _contactPersonPhoneCtrl, _coopModeCtrl,
         _industryResourcesCtrl, _otherNeedsCtrl, _notesCtrl, _referredByCtrl]) {
       c.dispose();
     }
@@ -186,11 +181,6 @@ class _AddContactScreenState extends State<AddContactScreen> {
         _field(_contactPersonPhoneCtrl, '负责人联系方式', Icons.phone_android, keyboard: TextInputType.phone),
         const SizedBox(height: 8),
         _switchRow('是否使用过外泌体/NAD+等同类产品', _hasUsedExosome, (v) => setState(() => _hasUsedExosome = v)),
-        const SizedBox(height: 8),
-        _field(_currentBrandsCtrl, '目前在用产品品牌', Icons.branding_watermark),
-        _field(_currentMonthlyVolumeCtrl, '现有月均采购/使用量', Icons.data_usage),
-        _field(_currentUnitPriceCtrl, '现有采购单价 (日元)', Icons.price_change, keyboard: TextInputType.number),
-        _field(_desiredEffectsCtrl, '期望外泌体主要功效', Icons.auto_awesome, maxLines: 2),
       ]),
     );
   }
@@ -275,6 +265,23 @@ class _AddContactScreenState extends State<AddContactScreen> {
         ]),
         if (pi.interested) ...[
           const SizedBox(height: 10),
+          // 行1: 现用品牌 + 现有月均量 + 现有单价
+          Row(children: [
+            Expanded(child: _miniField('现用品牌', pi.currentBrand,
+              (v) => pi.currentBrand = v, TextInputType.text)),
+            const SizedBox(width: 8),
+            Expanded(child: _miniField('现有月均量', pi.currentMonthlyVolume,
+              (v) => pi.currentMonthlyVolume = v, TextInputType.text)),
+            const SizedBox(width: 8),
+            Expanded(child: _miniField('现有单价(¥)', '${pi.currentUnitPrice > 0 ? pi.currentUnitPrice.toStringAsFixed(0) : ''}',
+              (v) => pi.currentUnitPrice = double.tryParse(v) ?? 0, TextInputType.number)),
+          ]),
+          const SizedBox(height: 6),
+          // 行2: 期望功效
+          _miniField('期望主要功效', pi.desiredEffects,
+            (v) => pi.desiredEffects = v, TextInputType.text),
+          const SizedBox(height: 6),
+          // 行3: 目标采购量 + 目标单价 + 月度预算
           Row(children: [
             Expanded(child: _miniField('月采购量(瓶)', '${pi.monthlyQty > 0 ? pi.monthlyQty : ''}',
               (v) => pi.monthlyQty = int.tryParse(v) ?? 0, TextInputType.number)),
@@ -407,10 +414,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
         contactPerson: _contactPersonCtrl.text,
         contactPersonPhone: _contactPersonPhoneCtrl.text,
         hasUsedExosome: _hasUsedExosome,
-        currentBrands: _currentBrandsCtrl.text,
-        currentMonthlyVolume: _currentMonthlyVolumeCtrl.text,
-        currentUnitPrice: double.tryParse(_currentUnitPriceCtrl.text) ?? 0,
-        desiredEffects: _desiredEffectsCtrl.text,
+
         // 合作意向
         coopModeStr: _coopModeCtrl.text,
         decisionFactors: _decisionFactors,
